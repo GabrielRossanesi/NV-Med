@@ -278,7 +278,7 @@ export default function UnitsPage() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Hospital VN Med Pinheiros"
+                  placeholder="Ex: Hospital NV Med Pinheiros"
                   className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-855 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
                 />
               </div>

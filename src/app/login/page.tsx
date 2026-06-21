@@ -9,7 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { organizations, setActiveOrganizationId } = useStore();
   const [selectedOrgId, setSelectedOrgId] = useState('org-1');
-  const [username, setUsername] = useState('admin@vnmed.com');
+  const [username, setUsername] = useState('admin@nvmed.com');
   const [password, setPassword] = useState('••••••••');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -38,7 +38,7 @@ export default function LoginPage() {
             <Activity className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xl font-bold text-white tracking-tight">VN Med</span>
+            <span className="text-xl font-bold text-white tracking-tight">NV Med</span>
             <span className="block text-[10px] text-teal-400 font-bold uppercase tracking-wider">Medical SaaS Platform</span>
           </div>
         </div>
@@ -55,7 +55,7 @@ export default function LoginPage() {
 
         {/* Footer info */}
         <div className="relative z-10 flex items-center justify-between text-xs text-slate-500">
-          <span>VN Med Operações Ltda © 2026</span>
+          <span>NV Med Operações Ltda © 2026</span>
           <span className="flex items-center gap-1">
             <ShieldCheck className="h-4 w-4 text-teal-500" />
             Conexão Criptografada SSL
@@ -71,7 +71,7 @@ export default function LoginPage() {
             <div className="bg-teal-500 text-white p-2 rounded-xl">
               <Activity className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold text-white tracking-tight">VN Med</span>
+            <span className="text-lg font-bold text-white tracking-tight">NV Med</span>
           </div>
 
           <div className="mb-8">
@@ -155,7 +155,7 @@ export default function LoginPage() {
                 <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  Entrar no VN Med Demo
+                  Entrar no NV Med Demo
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}

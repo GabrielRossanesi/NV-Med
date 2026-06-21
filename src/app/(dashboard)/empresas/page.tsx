@@ -215,7 +215,7 @@ export default function CompaniesPage() {
         <div className="text-xs space-y-1 text-slate-500 dark:text-slate-400">
           <p className="font-semibold text-slate-850 dark:text-slate-200">Garantia de Isolamento de Dados</p>
           <p>
-            O VN Med opera sob arquitetura de inquilino único virtual (multi-tenant logical separation). A troca de tenant reconfigura todos os seletores locais de consulta para aplicar a cláusula `where organizationId = activeOrganizationId`, impedindo vazamento de dados de médicos ou escalas entre diferentes clientes corporativos.
+            O NV Med opera sob arquitetura de inquilino único virtual (multi-tenant logical separation). A troca de tenant reconfigura todos os seletores locais de consulta para aplicar a cláusula `where organizationId = activeOrganizationId`, impedindo vazamento de dados de médicos ou escalas entre diferentes clientes corporativos.
           </p>
         </div>
       </div>

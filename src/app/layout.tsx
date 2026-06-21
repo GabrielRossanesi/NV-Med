@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VN Med - Gestão Médica SaaS",
+  title: "NV Med - Gestão Médica SaaS",
   description: "Plataforma multiempresas para gestão de equipes, plantões e documentos médicos.",
 };
 

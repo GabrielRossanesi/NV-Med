@@ -3,10 +3,10 @@ import { Organization, Doctor, Unit, MedicalDocument, Shift } from '../types';
 export const mockOrganizations: Organization[] = [
   {
     id: 'org-1',
-    name: 'VN Med Operadora Demo',
+    name: 'NV Med Operadora Demo',
     cnpj: '12.345.678/0001-90',
     phone: '(11) 98888-7777',
-    email: 'contato@vnmed.com.br',
+    email: 'contato@nvmed.com.br',
     address: 'Av. Paulista, 1000, Bela Vista, São Paulo - SP',
     settings: {
       specialties: [
@@ -84,7 +84,7 @@ export const mockUnits: Unit[] = [
   // Org 1 Units
   {
     id: 'unit-1',
-    name: 'Pronto Atendimento VN Med Paulista',
+    name: 'Pronto Atendimento NV Med Paulista',
     cnpj: '12.345.678/0001-90',
     address: 'Av. Paulista, 1000',
     city: 'São Paulo',
@@ -98,7 +98,7 @@ export const mockUnits: Unit[] = [
   },
   {
     id: 'unit-2',
-    name: 'Hospital VN Med Pinheiros',
+    name: 'Hospital NV Med Pinheiros',
     cnpj: '12.345.678/0002-88',
     address: 'Rua dos Pinheiros, 500',
     city: 'São Paulo',
@@ -179,7 +179,7 @@ export const mockDoctors: Doctor[] = [
     crmUf: 'SP',
     cpf: '123.456.789-00',
     phone: '(11) 99123-4567',
-    email: 'carlos.silva@vnmed.com.br',
+    email: 'carlos.silva@nvmed.com.br',
     specialty: 'Cardiologia',
     address: 'Av. Rebouças, 1200, Ap 52 - Pinheiros, São Paulo - SP',
     status: 'active',
@@ -193,7 +193,7 @@ export const mockDoctors: Doctor[] = [
     crmUf: 'SP',
     cpf: '987.654.321-11',
     phone: '(11) 99876-5432',
-    email: 'mariana.costa@vnmed.com.br',
+    email: 'mariana.costa@nvmed.com.br',
     specialty: 'Pediatria',
     address: 'Rua Pamplona, 800 - Jardim Paulista, São Paulo - SP',
     status: 'pending',
@@ -207,7 +207,7 @@ export const mockDoctors: Doctor[] = [
     crmUf: 'SP',
     cpf: '456.789.123-22',
     phone: '(11) 99456-7890',
-    email: 'roberto.alencar@vnmed.com.br',
+    email: 'roberto.alencar@nvmed.com.br',
     specialty: 'Clínico Geral',
     address: 'Rua Bela Cintra, 2300 - Consolação, São Paulo - SP',
     status: 'active',
@@ -351,7 +351,7 @@ export const mockDocuments: MedicalDocument[] = [
 ];
 
 export const mockShifts: Shift[] = [
-  // ORG 1 SHIFTS (VN Med Operadora Demo)
+  // ORG 1 SHIFTS (NV Med Operadora Demo)
   // Shifts for June 2026
   { id: 'shift-1-1', doctorId: 'doc-1', unitId: 'unit-2', date: '2026-06-21', startTime: '08:00', endTime: '18:00', type: 'onsite', status: 'completed', notes: 'Plantão diurno UTI Geral', organizationId: 'org-1' },
   { id: 'shift-1-2', doctorId: 'doc-3', unitId: 'unit-1', date: '2026-06-21', startTime: '19:00', endTime: '07:00', type: 'onsite', status: 'confirmed', notes: 'Plantão noturno Pronto Atendimento', organizationId: 'org-1' },

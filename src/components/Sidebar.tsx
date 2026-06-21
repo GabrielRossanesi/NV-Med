@@ -63,7 +63,7 @@ export default function Sidebar() {
               <Activity className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">VN Med</h1>
+              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">NV Med</h1>
               <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold tracking-wider uppercase">SaaS Gestão</span>
             </div>
           </div>

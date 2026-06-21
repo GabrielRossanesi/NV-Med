@@ -251,7 +251,7 @@ export default function SettingsPage() {
               Ambiente de Demonstração
             </h3>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Utilitários para reconfigurar a demonstração comercial do VN Med de volta ao estado inicial.
+              Utilitários para reconfigurar a demonstração comercial do NV Med de volta ao estado inicial.
             </p>
 
             <button
