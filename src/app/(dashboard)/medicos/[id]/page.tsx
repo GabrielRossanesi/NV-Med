@@ -46,9 +46,9 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     return (
       <div className="text-center py-12">
         <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Médico não encontrado</h3>
-        <p className="text-sm text-slate-400 mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
-        <Link href="/medicos" className="mt-4 inline-flex items-center gap-1 text-teal-500 hover:underline text-xs font-semibold">
+        <h3 className="text-lg font-bold text-text-secondary">Médico não encontrado</h3>
+        <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
+        <Link href="/medicos" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
           <ArrowLeft className="h-4 w-4" />
           Voltar para listagem
         </Link>
@@ -88,7 +88,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     expired: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/20',
     rejected: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/20',
     sent: 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/20',
-    not_sent: 'bg-slate-50 dark:bg-slate-950 text-slate-400 border border-slate-200 dark:border-slate-800',
+    not_sent: 'bg-background text-text-muted border border-card-border',
   };
 
   const docStatusLabels: Record<DocumentStatus, string> = {
@@ -107,7 +107,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       pending: 'bg-amber-500 text-white shadow-md border-amber-500',
       inactive: 'bg-slate-600 text-white shadow-md border-slate-600'
     };
-    const inactiveColors = 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900';
+    const inactiveColors = 'bg-background text-text-muted border-border hover:bg-slate-100 dark:hover:bg-slate-900';
     return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all ${doctor.status === s ? activeColors[s] : inactiveColors}`;
   };
 
@@ -124,19 +124,19 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Back navigation */}
       <div>
-        <Link href="/medicos" className="inline-flex items-center gap-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold mb-2">
+        <Link href="/medicos" className="inline-flex items-center gap-1 text-text-muted hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold mb-2">
           <ArrowLeft className="h-4 w-4" />
           Voltar para listagem
         </Link>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{doctor.name}</h2>
-            <p className="text-xs text-slate-400 mt-1">CRM: {doctor.crm}-{doctor.crmUf} • Cadastro: {doctor.status.toUpperCase()}</p>
+            <h2 className="text-2xl font-bold text-text-primary tracking-tight">{doctor.name}</h2>
+            <p className="text-xs text-text-muted mt-1">CRM: {doctor.crm}-{doctor.crmUf} • Cadastro: {doctor.status.toUpperCase()}</p>
           </div>
           
           {/* Quick status admin toggler */}
-          <div className="flex flex-wrap gap-2 items-center bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-400 mr-1.5 block">Status Geral:</span>
+          <div className="flex flex-wrap gap-2 items-center bg-card-bg p-2.5 rounded-xl border border-card-border">
+            <span className="text-[10px] uppercase font-bold text-text-muted mr-1.5 block">Status Geral:</span>
             <button onClick={() => handleDoctorStatusChange('active')} className={getBtnClass('active')}>
               <CheckCircle2 className="h-3.5 w-3.5" />
               Ativo
@@ -159,47 +159,47 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         {/* Left Columns (Profile + Units + Shifts) */}
         <div className="lg:col-span-1 space-y-6">
           {/* Profile details */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <div className="bg-card-bg rounded-xl border border-card-border p-6 space-y-4">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="h-10 w-10 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-lg">
+              <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
                 {doctor.name.charAt(4)}
               </div>
               <div>
                 <p className="font-bold text-slate-950 dark:text-white leading-tight">{doctor.name}</p>
-                <p className="text-xs text-teal-600 dark:text-teal-400 font-semibold mt-0.5">{doctor.specialty}</p>
+                <p className="text-xs text-primary font-semibold mt-0.5">{doctor.specialty}</p>
               </div>
             </div>
 
             <div className="space-y-3.5 text-xs text-slate-600 dark:text-slate-350">
               <div className="flex items-start gap-2.5">
-                <ShieldCheck className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <ShieldCheck className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Documentos Pessoais</span>
+                  <span className="block text-[10px] text-text-muted uppercase font-bold">Documentos Pessoais</span>
                   <span className="font-mono">CRM: {doctor.crm}-{doctor.crmUf}</span>
                   <span className="block font-mono mt-0.5">CPF: {doctor.cpf}</span>
                 </div>
               </div>
 
               <div className="flex items-start gap-2.5">
-                <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <Mail className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">E-mail</span>
+                  <span className="block text-[10px] text-text-muted uppercase font-bold">E-mail</span>
                   <span className="break-all">{doctor.email}</span>
                 </div>
               </div>
 
               <div className="flex items-start gap-2.5">
-                <Phone className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <Phone className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Telefone</span>
+                  <span className="block text-[10px] text-text-muted uppercase font-bold">Telefone</span>
                   <span>{doctor.phone}</span>
                 </div>
               </div>
 
               <div className="flex items-start gap-2.5">
-                <MapPin className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <MapPin className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Endereço Residencial</span>
+                  <span className="block text-[10px] text-text-muted uppercase font-bold">Endereço Residencial</span>
                   <span>{doctor.address}</span>
                 </div>
               </div>
@@ -207,30 +207,30 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
           </div>
 
           {/* Linked units list */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+          <div className="bg-card-bg rounded-xl border border-card-border p-5">
             <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Building className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              <Building className="h-4 w-4 text-primary" />
               Unidades Vinculadas
             </h3>
             <div className="space-y-2">
               {linkedUnitsList.map((u) => (
-                <div key={u.id} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs">
+                <div key={u.id} className="p-3 rounded-lg bg-background border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs">
                   <div className="min-w-0">
-                    <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{u.name}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{u.city} - {u.state} • {u.type.toUpperCase()}</p>
+                    <p className="font-semibold text-text-secondary truncate">{u.name}</p>
+                    <p className="text-[10px] text-text-muted mt-0.5">{u.city} - {u.state} • {u.type.toUpperCase()}</p>
                   </div>
                 </div>
               ))}
               {linkedUnitsList.length === 0 && (
-                <p className="text-xs text-slate-450 italic text-center py-4">Sem vínculos cadastrados.</p>
+                <p className="text-xs text-text-muted italic text-center py-4">Sem vínculos cadastrados.</p>
               )}
             </div>
           </div>
 
           {/* Doctor plantões */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+          <div className="bg-card-bg rounded-xl border border-card-border p-5">
             <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              <Calendar className="h-4 w-4 text-primary" />
               Plantões Recentes
             </h3>
             <div className="space-y-3">
@@ -241,7 +241,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                     <div key={shift.id} className="flex justify-between items-center text-xs pb-3 last:pb-0 last:border-b-0 border-b border-slate-100 dark:border-slate-800">
                       <div>
                         <p className="font-semibold text-slate-850 dark:text-slate-200">{unit?.name}</p>
-                        <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <p className="text-[10px] text-text-muted flex items-center gap-1 mt-0.5">
                           <span>{new Date(shift.date).toLocaleDateString('pt-BR')}</span>
                           <span>•</span>
                           <span>{shift.startTime} - {shift.endTime}</span>
@@ -260,7 +260,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                   );
                 })
               ) : (
-                <p className="text-xs text-slate-450 italic text-center py-4">Nenhum plantão recente registrado.</p>
+                <p className="text-xs text-text-muted italic text-center py-4">Nenhum plantão recente registrado.</p>
               )}
             </div>
           </div>
@@ -268,14 +268,14 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
         {/* Right Columns (Required Document Checklist) */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <div className="pb-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+          <div className="bg-card-bg rounded-xl border border-card-border p-6">
+            <div className="pb-4 border-b border-border flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <FileCheck className="h-4.5 w-4.5 text-teal-600 dark:text-teal-400" />
+                  <FileCheck className="h-4.5 w-4.5 text-primary" />
                   Pasta de Documentos Obrigatórios
                 </h3>
-                <p className="text-[11px] text-slate-400">Verifique a validade e gerencie a documentação do CRM do médico.</p>
+                <p className="text-[11px] text-text-muted">Verifique a validade e gerencie a documentação do CRM do médico.</p>
               </div>
             </div>
 
@@ -289,12 +289,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                   <div key={doc.id} className="py-5 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1.5 md:max-w-md">
                       <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-slate-450 flex-shrink-0" />
-                        <h4 className="font-semibold text-xs text-slate-900 dark:text-white leading-snug">{doc.name}</h4>
+                        <FileText className="h-4 w-4 text-text-muted flex-shrink-0" />
+                        <h4 className="font-semibold text-xs text-text-primary leading-snug">{doc.name}</h4>
                       </div>
                       
                       {doc.fileName && (
-                        <div className="text-[10px] text-slate-500 flex flex-col sm:flex-row sm:gap-4 gap-1 pl-6">
+                        <div className="text-[10px] text-text-muted flex flex-col sm:flex-row sm:gap-4 gap-1 pl-6">
                           <span className="truncate max-w-[200px] font-mono">Arquivo: {doc.fileName}</span>
                           {doc.uploadDate && <span>Envio: {new Date(doc.uploadDate).toLocaleDateString('pt-BR')}</span>}
                           {doc.expiryDate && <span>Validade: {new Date(doc.expiryDate).toLocaleDateString('pt-BR')}</span>}
@@ -309,11 +309,11 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                       </span>
 
                       {/* Document Action Simulator */}
-                      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center gap-1 bg-background p-1.5 rounded-lg border border-card-border">
                         {/* If not sent, let them simulate mock select and upload */}
                         {doc.status === 'not_sent' || doc.status === 'expired' || doc.status === 'rejected' ? (
                           <div className="flex items-center gap-1.5">
-                            <label className="cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-350 dark:border-slate-800 rounded px-2.5 py-1 text-[10px] font-bold flex items-center gap-1">
+                            <label className="cursor-pointer bg-card-bg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-350 dark:border-slate-800 rounded px-2.5 py-1 text-[10px] font-bold flex items-center gap-1">
                               <Upload className="h-3 w-3" />
                               Selecionar
                               <input
@@ -327,7 +327,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                             {isSelected && (
                               <button
                                 onClick={() => handleUpload(doc.type)}
-                                className="bg-teal-500 hover:bg-teal-600 text-white rounded px-2.5 py-1 text-[10px] font-bold"
+                                className="bg-primary hover:bg-primary-hover text-white rounded px-2.5 py-1 text-[10px] font-bold"
                               >
                                 Enviar
                               </button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
+import { Organization } from '@/types';
 import {
   Building,
   Wrench,
@@ -8,19 +9,25 @@ import {
   ShieldCheck,
   CheckCircle,
   Plus,
-  Briefcase
+  Briefcase,
+  Sun
 } from 'lucide-react';
 import { useState } from 'react';
 
-export default function SettingsPage() {
-  const {
-    activeOrganizationId,
-    organizations,
-    updateOrganizationSettings,
-    resetToMockData
-  } = useStore();
+interface SettingsFormProps {
+  activeOrg: Organization;
+  activeOrganizationId: string;
+  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => void;
+  resetToMockData: () => void;
+}
 
-  const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
+function SettingsForm({
+  activeOrg,
+  activeOrganizationId,
+  updateOrganizationSettings,
+  resetToMockData
+}: SettingsFormProps) {
+  const { theme, setTheme } = useStore();
 
   // Form editing state
   const [name, setName] = useState(activeOrg?.name || '');
@@ -81,190 +88,266 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Page Heading */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Configurações Gerais</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Ajustes cadastrais, regras de compliance e utilitários da empresa ativa.
-        </p>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Left Column (Org General Details Form & Specialties) */}
+      <div className="lg:col-span-2 space-y-6">
+        {/* Org details form */}
+        <div className="bg-card-bg rounded-xl border border-card-border p-6">
+          <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <Building className="h-4 w-4 text-primary" />
+            Perfil da Organização
+          </h3>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column (Org General Details Form) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Org details form */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Building className="h-4 w-4 text-teal-650 dark:text-teal-400" />
-              Perfil da Organização
-            </h3>
-
-            <form onSubmit={handleSaveOrgInfo} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Razão Social</label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">CNPJ da Empresa</label>
-                  <input
-                    type="text"
-                    required
-                    value={cnpj}
-                    onChange={(e) => setCnpj(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Telefone Comercial</label>
-                  <input
-                    type="text"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">E-mail Administrativo</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
-                  />
-                </div>
-              </div>
-
+          <form onSubmit={handleSaveOrgInfo} className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Endereço de Faturamento</label>
+                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Razão Social</label>
                 <input
                   type="text"
                   required
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                 />
               </div>
-
-              <div className="pt-2 flex items-center justify-between">
-                {isSaved ? (
-                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <CheckCircle className="h-4 w-4" />
-                    Alterações salvas com sucesso!
-                  </span>
-                ) : (
-                  <div />
-                )}
-                <button
-                  type="submit"
-                  className="bg-teal-500 hover:bg-teal-600 text-white rounded-lg py-2 px-4 font-semibold text-xs transition duration-200"
-                >
-                  Salvar Alterações
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Specialties Setup */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Briefcase className="h-4 w-4 text-teal-655 dark:text-teal-400" />
-              Especialidades Clínicas Permitidas
-            </h3>
-
-            <div className="space-y-4">
-              <form onSubmit={handleAddSpecialty} className="flex gap-2 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">CNPJ da Empresa</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Neurologia, Ortopedia..."
-                  value={newSpec}
-                  onChange={(e) => setNewSpec(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 transition"
+                  value={cnpj}
+                  onChange={(e) => setCnpj(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                 />
-                <button
-                  type="submit"
-                  className="bg-slate-800 hover:bg-slate-950 dark:bg-slate-950 dark:hover:bg-slate-900 border border-slate-350 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-semibold px-4 rounded-lg flex items-center gap-1"
-                >
-                  <Plus className="h-4.5 w-4.5" />
-                  Adicionar
-                </button>
-              </form>
-
-              {/* Badges list */}
-              <div className="flex flex-wrap gap-1.5">
-                {activeOrg.settings.specialties.map((spec) => (
-                  <span
-                    key={spec}
-                    className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-650 dark:text-slate-300 px-3 py-1 rounded-lg"
-                  >
-                    {spec}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSpecialty(spec)}
-                      className="text-red-500 hover:text-red-700 font-bold ml-1"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Telefone Comercial</label>
+                <input
+                  type="text"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">E-mail Administrativo</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                />
               </div>
             </div>
-          </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Endereço de Faturamento</label>
+              <input
+                type="text"
+                required
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="w-full px-3 py-2 bg-background border border-card-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+              />
+            </div>
+
+            <div className="pt-2 flex items-center justify-between">
+              {isSaved ? (
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4" />
+                  Alterações salvas com sucesso!
+                </span>
+              ) : (
+                <div />
+              )}
+              <button
+                type="submit"
+                className="bg-primary hover:bg-primary-hover text-white rounded-lg py-2 px-4 font-semibold text-xs transition duration-200 cursor-pointer"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </form>
         </div>
 
-        {/* Right Column (Mandatory checklist items & Demo tools) */}
-        <div className="space-y-6">
-          {/* Document list audit rules */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
-            <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-teal-650 dark:text-teal-400" />
-              Documentação de Regulação (Compliance)
-            </h3>
-            
-            <div className="space-y-3.5">
-              {activeOrg.settings.requiredDocuments.map((doc, idx) => (
-                <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-slate-100 dark:border-slate-850 last:pb-0 last:border-b-0">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">{doc.name}</span>
-                  <span className="text-[9px] bg-teal-500/10 text-teal-600 dark:text-teal-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                    Obrigatório
-                  </span>
-                </div>
+        {/* Specialties Setup */}
+        <div className="bg-card-bg rounded-xl border border-card-border p-6">
+          <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <Briefcase className="h-4 w-4 text-primary" />
+            Especialidades Clínicas Permitidas
+          </h3>
+
+          <div className="space-y-4">
+            <form onSubmit={handleAddSpecialty} className="flex gap-2 text-xs">
+              <input
+                type="text"
+                required
+                placeholder="Ex: Neurologia, Ortopedia..."
+                value={newSpec}
+                onChange={(e) => setNewSpec(e.target.value)}
+                className="flex-1 px-3 py-2 bg-background border border-card-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+              />
+              <button
+                type="submit"
+                className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-950 dark:hover:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-200 font-semibold px-4 rounded-lg flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                Adicionar
+              </button>
+            </form>
+
+            {/* Badges list */}
+            <div className="flex flex-wrap gap-1.5">
+              {activeOrg.settings.specialties.map((spec: string) => (
+                <span
+                  key={spec}
+                  className="inline-flex items-center gap-1 bg-background border border-card-border text-xs text-slate-600 dark:text-slate-300 px-3 py-1 rounded-lg"
+                >
+                  {spec}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveSpecialty(spec)}
+                    className="text-red-500 hover:text-red-700 font-bold ml-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </span>
               ))}
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Demonstration utilities */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
-            <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Wrench className="h-4 w-4 text-slate-500" />
-              Ambiente de Demonstração
-            </h3>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Utilitários para reconfigurar a demonstração comercial do NV Med de volta ao estado inicial.
-            </p>
+      {/* Right Column (Theme, Compliance & Demo tools) */}
+      <div className="space-y-6">
+        {/* Appearance Settings */}
+        <div className="bg-card-bg rounded-xl border border-card-border p-5 space-y-4">
+          <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Sun className="h-4 w-4 text-primary" />
+            Aparência do sistema
+          </h3>
+          <p className="text-[11px] text-text-muted leading-relaxed">
+            Escolha o tema visual de sua preferência para a interface do NV Med.
+          </p>
 
+          <div className="grid grid-cols-2 gap-3">
+            {/* Light Theme Card */}
             <button
-              onClick={handleResetDemo}
-              className="w-full bg-slate-900 hover:bg-slate-950 border border-slate-855 text-white py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition"
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`flex flex-col items-center gap-2 p-3 rounded-lg border text-left transition cursor-pointer ${
+                theme === 'light'
+                  ? 'border-primary bg-primary/10/30 dark:bg-teal-950/10'
+                  : 'border-border hover:bg-slate-50 dark:hover:bg-slate-950'
+              }`}
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Restaurar Dados Originais
+              {/* Mini preview */}
+              <div className="w-full h-12 bg-[#F7F9FB] rounded border border-slate-200 p-1 flex gap-1 select-none pointer-events-none">
+                <div className="w-2.5 h-full bg-white border-r border-slate-200" />
+                <div className="flex-1 flex flex-col gap-1">
+                  <div className="h-1.5 w-6 bg-teal-700 rounded-sm" />
+                  <div className="h-1 w-full bg-slate-200 rounded-sm" />
+                  <div className="h-2 w-full bg-white rounded border border-slate-100" />
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-350">Claro</span>
+            </button>
+
+            {/* Dark Theme Card */}
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`flex flex-col items-center gap-2 p-3 rounded-lg border text-left transition cursor-pointer ${
+                theme === 'dark'
+                  ? 'border-teal-400 bg-primary/10'
+                  : 'border-border hover:bg-slate-50 dark:hover:bg-slate-950'
+              }`}
+            >
+              {/* Mini preview */}
+              <div className="w-full h-12 bg-[#050607] rounded border border-slate-800 p-1 flex gap-1 select-none pointer-events-none">
+                <div className="w-2.5 h-full bg-[#0A0C0F] border-r border-slate-800" />
+                <div className="flex-1 flex flex-col gap-1">
+                  <div className="h-1.5 w-6 bg-teal-450 rounded-sm" />
+                  <div className="h-1 w-full bg-slate-800 rounded-sm" />
+                  <div className="h-2 w-full bg-[#101418] rounded border border-slate-800" />
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">Escuro (Dark)</span>
             </button>
           </div>
         </div>
 
+        {/* Document list audit rules */}
+        <div className="bg-card-bg rounded-xl border border-card-border p-5">
+          <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-primary dark:text-teal-455" />
+            Documentação de Regulação (Compliance)
+          </h3>
+          
+          <div className="space-y-3.5">
+            {activeOrg.settings.requiredDocuments.map((doc, idx: number) => (
+              <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-border last:pb-0 last:border-b-0">
+                <span className="font-medium text-text-secondary">{doc.name}</span>
+                <span className="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                  Obrigatório
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Demonstration utilities */}
+        <div className="bg-card-bg rounded-xl border border-card-border p-5 space-y-4">
+          <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Wrench className="h-4 w-4 text-text-muted" />
+            Ambiente de Demonstração
+          </h3>
+          <p className="text-[11px] text-text-muted leading-relaxed">
+            Utilitários para reconfigurar a demonstração comercial do NV Med de volta ao estado inicial.
+          </p>
+
+          <button
+            onClick={handleResetDemo}
+            className="w-full bg-slate-900 hover:bg-slate-950 border border-slate-800 text-white py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Restaurar Dados Originais
+          </button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+export default function SettingsPage() {
+  const {
+    activeOrganizationId,
+    organizations,
+    updateOrganizationSettings,
+    resetToMockData
+  } = useStore();
+
+  const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Page Heading */}
+      <div>
+        <h2 className="text-2xl font-bold text-text-primary tracking-tight">Configurações Gerais</h2>
+        <p className="text-sm text-text-muted mt-1">
+          Ajustes cadastrais, regras de compliance, aparência e utilitários da empresa ativa.
+        </p>
+      </div>
+
+      <SettingsForm
+        key={activeOrganizationId}
+        activeOrg={activeOrg}
+        activeOrganizationId={activeOrganizationId}
+        updateOrganizationSettings={updateOrganizationSettings}
+        resetToMockData={resetToMockData}
+      />
     </div>
   );
 }

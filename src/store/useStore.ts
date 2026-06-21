@@ -43,6 +43,10 @@ interface NVMedState {
   // Org actions
   updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => void;
   resetToMockData: () => void;
+  
+  // Theme state
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
 }
 
 export const useStore = create<NVMedState>()(
@@ -206,10 +210,15 @@ export const useStore = create<NVMedState>()(
         units: mockUnits,
         documents: mockDocuments,
         shifts: mockShifts,
-      })
+        theme: 'dark',
+      }),
+
+      // Theme implementation
+      theme: 'dark',
+      setTheme: (theme) => set({ theme }),
     }),
     {
-      name: 'vn-med-storage', // name of the item in the local storage
+      name: 'nv-med-storage', // name of the item in the local storage
       skipHydration: true, // we will hydrate manually in a provider to avoid SSR mismatch
     }
   )

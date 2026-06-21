@@ -1,6 +1,7 @@
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import StoreHydrator from '@/components/StoreHydrator';
+import AppBackground from '@/components/AppBackground';
 
 export default function DashboardLayout({
   children,
@@ -9,7 +10,8 @@ export default function DashboardLayout({
 }) {
   return (
     <StoreHydrator>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
+      <AppBackground />
+      <div className="min-h-screen text-text-primary">
         {/* Navigation Sidebar */}
         <Sidebar />
 

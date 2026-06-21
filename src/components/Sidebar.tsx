@@ -55,52 +55,52 @@ export default function Sidebar() {
   return (
     <>
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 h-screen fixed left-0 top-0 z-20">
+      <aside className="hidden md:flex flex-col w-64 border-r border-sidebar-border bg-sidebar-bg/95 backdrop-blur-md h-screen fixed left-0 top-0 z-20 shadow-soft">
         {/* Brand / Logo + Org Selector */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 relative">
+        <div className="p-4 border-b border-sidebar-border relative">
           <div className="flex items-center gap-2 mb-3">
-            <div className="bg-teal-500 text-white p-1.5 rounded-lg flex items-center justify-center">
+            <div className="bg-primary text-text-inverse p-1.5 rounded-lg flex items-center justify-center shadow-glow-primary">
               <Activity className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">NV Med</h1>
-              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold tracking-wider uppercase">SaaS Gestão</span>
+              <h1 className="text-base font-bold text-text-primary tracking-tight">NV Med</h1>
+              <span className="text-[10px] text-primary font-semibold tracking-wider uppercase">SaaS Gestão</span>
             </div>
           </div>
 
           {/* Org Selector Button */}
           <button
             onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
-            className="w-full flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-left hover:border-slate-300 dark:hover:border-slate-700 transition duration-150"
+            className="w-full flex items-center justify-between gap-2 p-2 rounded-lg bg-input-bg border border-input-border text-left hover:border-border-strong transition duration-150 cursor-pointer"
           >
             <div className="min-w-0">
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Empresa Ativa</p>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{activeOrg?.name}</p>
+              <p className="text-[10px] text-text-muted font-medium uppercase tracking-wider">Empresa Ativa</p>
+              <p className="text-xs font-semibold text-text-secondary truncate">{activeOrg?.name}</p>
             </div>
-            <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+            <ChevronDown className="h-4 w-4 text-text-muted flex-shrink-0" />
           </button>
 
           {/* Org Dropdown */}
           {isOrgDropdownOpen && (
-            <div className="absolute left-4 right-4 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl z-30 p-1">
-              <p className="text-[10px] text-slate-400 font-semibold uppercase p-2 tracking-wider">Alternar Empresa</p>
+            <div className="absolute left-4 right-4 mt-1 bg-surface-elevated border border-border rounded-lg shadow-medium z-30 p-1">
+              <p className="text-[10px] text-text-muted font-semibold uppercase p-2 tracking-wider">Alternar Empresa</p>
               {otherOrgs.map((org) => (
                 <button
                   key={org.id}
                   onClick={() => handleOrgSwitch(org.id)}
-                  className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-950 text-left transition duration-150"
+                  className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-state-hover text-left transition duration-150 cursor-pointer"
                 >
-                  <Building className="h-4 w-4 text-teal-600 dark:text-teal-400 flex-shrink-0" />
+                  <Building className="h-4 w-4 text-primary flex-shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{org.name}</p>
+                    <p className="text-xs font-medium text-text-secondary truncate">{org.name}</p>
                   </div>
                 </button>
               ))}
-              <div className="border-t border-slate-100 dark:border-slate-800 my-1"></div>
+              <div className="border-t border-border my-1"></div>
               <Link
                 href="/empresas"
                 onClick={() => setIsOrgDropdownOpen(false)}
-                className="flex items-center gap-2 p-2 text-xs text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/20 rounded-md font-semibold transition"
+                className="flex items-center gap-2 p-2 text-xs text-primary hover:bg-primary/10 rounded-md font-semibold transition"
               >
                 <Building className="h-4 w-4" />
                 Painel Multiempresas
@@ -120,11 +120,11 @@ export default function Sidebar() {
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition duration-150 ${
                   isActive
-                    ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950 hover:text-slate-900 dark:hover:text-slate-100'
+                    ? 'bg-primary/10 text-primary font-semibold'
+                    : 'text-text-secondary hover:bg-state-hover hover:text-text-primary'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 group-hover:text-slate-500'}`} />
+                <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-text-muted'}`} />
                 {item.name}
               </Link>
             );
@@ -132,19 +132,19 @@ export default function Sidebar() {
         </nav>
 
         {/* Footer Info / Operator */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
+        <div className="p-3 border-t border-sidebar-border bg-surface-muted/20">
           <div className="flex items-center gap-3 mb-3">
-            <div className="h-8 w-8 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-sm">
+            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
               GM
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{currentUser.name}</p>
-              <p className="text-[10px] text-slate-400 truncate">{currentUser.role}</p>
+              <p className="text-xs font-semibold text-text-secondary truncate">{currentUser.name}</p>
+              <p className="text-[10px] text-text-muted truncate">{currentUser.role}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 border border-transparent hover:border-red-100 dark:hover:border-red-900/30 transition duration-150"
+            className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-semibold text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 transition duration-150 cursor-pointer"
           >
             <LogOut className="h-3.5 w-3.5" />
             Sair do Painel
@@ -153,7 +153,7 @@ export default function Sidebar() {
       </aside>
 
       {/* Mobile Header / Bottom Nav or Drawer */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-2 flex justify-around items-center">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar-bg/95 border-t border-sidebar-border backdrop-blur-md p-2 flex justify-around items-center shadow-soft">
         {menuItems.slice(0, 5).map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
@@ -163,8 +163,8 @@ export default function Sidebar() {
               href={item.href}
               className={`flex flex-col items-center gap-1 p-1 text-[10px] font-medium ${
                 isActive
-                  ? 'text-teal-500'
-                  : 'text-slate-500 dark:text-slate-400'
+                  ? 'text-primary'
+                  : 'text-text-secondary'
               }`}
             >
               <Icon className="h-5 w-5" />
@@ -176,8 +176,8 @@ export default function Sidebar() {
           href="/empresas"
           className={`flex flex-col items-center gap-1 p-1 text-[10px] font-medium ${
             pathname === '/empresas'
-              ? 'text-teal-500'
-              : 'text-slate-500 dark:text-slate-400'
+              ? 'text-primary'
+              : 'text-text-secondary'
           }`}
         >
           <Building className="h-5 w-5" />

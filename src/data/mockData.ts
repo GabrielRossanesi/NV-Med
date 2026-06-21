@@ -352,7 +352,12 @@ export const mockDocuments: MedicalDocument[] = [
 
 export const mockShifts: Shift[] = [
   // ORG 1 SHIFTS (NV Med Operadora Demo)
-  // Shifts for June 2026
+  // Historical Shifts (June 2026)
+  { id: 'shift-1-h1', doctorId: 'doc-1', unitId: 'unit-1', date: '2026-06-15', startTime: '08:00', endTime: '20:00', type: 'onsite', status: 'completed', notes: 'Plantão histórico Pronto Atendimento', organizationId: 'org-1' },
+  { id: 'shift-1-h2', doctorId: 'doc-3', unitId: 'unit-2', date: '2026-06-16', startTime: '19:00', endTime: '07:00', type: 'onsite', status: 'completed', notes: 'Plantão histórico Noturno UTI', organizationId: 'org-1' },
+  { id: 'shift-1-h3', doctorId: 'doc-1', unitId: 'unit-2', date: '2026-06-18', startTime: '08:00', endTime: '18:00', type: 'onsite', status: 'completed', notes: 'Plantão histórico UTI Coronária', organizationId: 'org-1' },
+  { id: 'shift-1-h4', doctorId: 'doc-3', unitId: 'unit-1', date: '2026-06-20', startTime: '07:00', endTime: '19:00', type: 'onsite', status: 'completed', notes: 'Plantão histórico Clínico Geral', organizationId: 'org-1' },
+  // Shifts for June 2026 (Active)
   { id: 'shift-1-1', doctorId: 'doc-1', unitId: 'unit-2', date: '2026-06-21', startTime: '08:00', endTime: '18:00', type: 'onsite', status: 'completed', notes: 'Plantão diurno UTI Geral', organizationId: 'org-1' },
   { id: 'shift-1-2', doctorId: 'doc-3', unitId: 'unit-1', date: '2026-06-21', startTime: '19:00', endTime: '07:00', type: 'onsite', status: 'confirmed', notes: 'Plantão noturno Pronto Atendimento', organizationId: 'org-1' },
   { id: 'shift-1-3', doctorId: 'doc-1', unitId: 'unit-1', date: '2026-06-22', startTime: '08:00', endTime: '14:00', type: 'telemedicine', status: 'pending', notes: 'Telemedicina Cardiologia', organizationId: 'org-1' },
@@ -371,6 +376,8 @@ export const mockShifts: Shift[] = [
   { id: 'shift-1-14', doctorId: 'doc-3', unitId: 'unit-2', date: '2026-07-10', startTime: '07:00', endTime: '19:00', type: 'onsite', status: 'confirmed', organizationId: 'org-1' },
 
   // ORG 2 SHIFTS (Clínica Norte Saúde)
+  { id: 'shift-2-h1', doctorId: 'doc-4', unitId: 'unit-3', date: '2026-06-16', startTime: '08:00', endTime: '17:00', type: 'onsite', status: 'completed', notes: 'Atendimento histórico Ortopedia', organizationId: 'org-2' },
+  { id: 'shift-2-h2', doctorId: 'doc-4', unitId: 'unit-3', date: '2026-06-18', startTime: '08:00', endTime: '17:00', type: 'onsite', status: 'completed', notes: 'Atendimento histórico Ortopedia', organizationId: 'org-2' },
   { id: 'shift-2-1', doctorId: 'doc-4', unitId: 'unit-3', date: '2026-06-21', startTime: '08:00', endTime: '17:00', type: 'onsite', status: 'completed', notes: 'Consulta Ortopedia Especializada', organizationId: 'org-2' },
   { id: 'shift-2-2', doctorId: 'doc-5', unitId: 'unit-4', date: '2026-06-22', startTime: '09:00', endTime: '13:00', type: 'onsite', status: 'cancelled', notes: 'Atendimento Dermatológico suspenso', organizationId: 'org-2' },
   { id: 'shift-2-3', doctorId: 'doc-4', unitId: 'unit-3', date: '2026-06-23', startTime: '08:00', endTime: '17:00', type: 'onsite', status: 'confirmed', notes: 'Atendimentos Ortopedia', organizationId: 'org-2' },
@@ -380,6 +387,9 @@ export const mockShifts: Shift[] = [
   { id: 'shift-2-7', doctorId: 'doc-5', unitId: 'unit-4', date: '2026-07-03', startTime: '09:00', endTime: '16:00', type: 'onsite', status: 'confirmed', organizationId: 'org-2' },
 
   // ORG 3 SHIFTS (Hospital São Lucas)
+  { id: 'shift-3-h1', doctorId: 'doc-7', unitId: 'unit-5', date: '2026-06-15', startTime: '07:00', endTime: '19:00', type: 'onsite', status: 'completed', notes: 'Cirurgias agendadas Bloco B', organizationId: 'org-3' },
+  { id: 'shift-3-h2', doctorId: 'doc-6', unitId: 'unit-5', date: '2026-06-17', startTime: '08:00', endTime: '20:00', type: 'onsite', status: 'completed', notes: 'Plantão Neurologia Geral', organizationId: 'org-3' },
+  { id: 'shift-3-h3', doctorId: 'doc-7', unitId: 'unit-6', date: '2026-06-19', startTime: '19:00', endTime: '07:00', type: 'onsite', status: 'completed', notes: 'Plantão Noturno Geral UPA', organizationId: 'org-3' },
   { id: 'shift-3-1', doctorId: 'doc-7', unitId: 'unit-5', date: '2026-06-21', startTime: '07:00', endTime: '19:00', type: 'onsite', status: 'completed', notes: 'Anestesia Centro Cirúrgico Bloco A', organizationId: 'org-3' },
   { id: 'shift-3-2', doctorId: 'doc-6', unitId: 'unit-5', date: '2026-06-21', startTime: '08:00', endTime: '20:00', type: 'oncall', status: 'confirmed', notes: 'Sobreaviso Neurologia AVC', organizationId: 'org-3' },
   { id: 'shift-3-3', doctorId: 'doc-7', unitId: 'unit-6', date: '2026-06-22', startTime: '19:00', endTime: '07:00', type: 'onsite', status: 'confirmed', notes: 'Plantão Noturno Geral', organizationId: 'org-3' },

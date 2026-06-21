@@ -65,10 +65,10 @@ export default function DashboardPage() {
     })
     .sort((a, b) => b.count - a.count) || [];
 
-  // Units breakdown (shifts per unit)
+  // Units breakdown (shifts per unit for the current month)
   const unitsBreakdown = orgUnits
     .map((unit) => {
-      const count = orgShifts.filter((s) => s.unitId === unit.id).length;
+      const count = orgShifts.filter((s) => s.unitId === unit.id && s.date.includes('2026-06')).length;
       return { name: unit.name, count };
     })
     .sort((a, b) => b.count - a.count) || [];
@@ -77,72 +77,72 @@ export default function DashboardPage() {
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Welcome Heading */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+        <h2 className="text-2xl font-bold text-text-primary tracking-tight">
           Painel de Controle
         </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Balanço geral da operação médica para <span className="font-semibold text-slate-800 dark:text-slate-200">{activeOrg?.name}</span>.
+        <p className="text-sm text-text-muted mt-1">
+          Balanço geral da operação médica para <span className="font-semibold text-text-secondary">{activeOrg?.name}</span>.
         </p>
       </div>
 
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Doctors */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between transition-glow">
+        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Médicos Cadastrados</span>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalDoctors}</h3>
-            <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Médicos Cadastrados</span>
+            <h3 className="text-2xl font-bold text-text-primary mt-1">{totalDoctors}</h3>
+            <span className="text-[10px] text-primary font-medium flex items-center gap-1 mt-1.5">
               <UserCheck className="h-3 w-3" />
               {activeDoctors} ativos no momento
             </span>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
             <Users className="h-5 w-5" />
           </div>
         </div>
 
         {/* Pending Docs */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between transition-glow">
+        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Alertas de Documento</span>
-            <h3 className={`text-2xl font-bold mt-1 ${pendingDocsCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>{pendingDocsCount}</h3>
-            <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Alertas de Documento</span>
+            <h3 className={`text-2xl font-bold mt-1 ${pendingDocsCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-text-primary'}`}>{pendingDocsCount}</h3>
+            <span className="text-[10px] text-text-muted flex items-center gap-1 mt-1.5">
               <FileCheck2 className="h-3 w-3" />
               Exige verificação e CRM
             </span>
           </div>
-          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${pendingDocsCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${pendingDocsCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-surface-muted text-text-muted'}`}>
             <AlertTriangle className="h-5 w-5" />
           </div>
         </div>
 
         {/* Units */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between transition-glow">
+        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Unidades Ativas</span>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalUnits}</h3>
-            <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Unidades Ativas</span>
+            <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits}</h3>
+            <span className="text-[10px] text-text-muted flex items-center gap-1 mt-1.5">
               <Building2 className="h-3 w-3" />
               Hospitais, UPA e Clínicas
             </span>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
             <Building2 className="h-5 w-5" />
           </div>
         </div>
 
         {/* Monthly Shifts */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between transition-glow">
+        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Plantões do Mês</span>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{shiftsThisMonth}</h3>
-            <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Plantões do Mês</span>
+            <h3 className="text-2xl font-bold text-text-primary mt-1">{shiftsThisMonth}</h3>
+            <span className="text-[10px] text-primary font-medium flex items-center gap-1 mt-1.5">
               <TrendingUp className="h-3 w-3" />
               {shiftsToday} agendados para hoje
             </span>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
             <Calendar className="h-5 w-5" />
           </div>
         </div>
@@ -154,13 +154,13 @@ export default function DashboardPage() {
         {/* Left Columns (Upcoming Shifts + Unit summary) */}
         <div className="lg:col-span-2 space-y-8">
           {/* Upcoming Shifts */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden">
+            <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider">Próximos Plantões</h3>
-                <p className="text-[11px] text-slate-400">Plantões agendados a partir de hoje</p>
+                <p className="text-[11px] text-text-muted">Plantões agendados a partir de hoje</p>
               </div>
-              <Link href="/escala" className="text-xs font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-0.5 hover:underline">
+              <Link href="/escala" className="text-xs font-semibold text-primary flex items-center gap-0.5 hover:underline">
                 Escala completa
                 <ChevronRight className="h-3 w-3" />
               </Link>
@@ -183,21 +183,21 @@ export default function DashboardPage() {
                   return (
                     <div key={shift.id} className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
                           {doctor?.name.charAt(4) || 'D'}
                         </div>
                         <div>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200">{doctor?.name}</p>
-                          <p className="text-[10px] text-slate-400">{doctor?.specialty} • {unit?.name}</p>
+                          <p className="font-semibold text-text-secondary">{doctor?.name}</p>
+                          <p className="text-[10px] text-text-muted">{doctor?.specialty} • {unit?.name}</p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="font-semibold text-slate-700 dark:text-slate-300">
+                          <p className="font-semibold text-text-secondary">
                             {new Date(shift.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                           </p>
-                          <p className="text-[10px] text-slate-400 flex items-center gap-0.5 justify-end">
+                          <p className="text-[10px] text-text-muted flex items-center gap-0.5 justify-end">
                             <Clock className="h-2.5 w-2.5" />
                             {shift.startTime} - {shift.endTime}
                           </p>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                   );
                 })
               ) : (
-                <div className="p-8 text-center text-slate-400">
+                <div className="p-8 text-center text-text-muted">
                   Nenhum plantão agendado nos próximos dias.
                 </div>
               )}
@@ -219,21 +219,21 @@ export default function DashboardPage() {
           </div>
 
           {/* Unit Breakdown */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4">Plantões por Unidade</h3>
+          <div className="bg-card-bg rounded-xl border border-card-border p-5">
+            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4">Plantões por Unidade no Mês</h3>
             <div className="space-y-3.5">
               {unitsBreakdown.map((ub) => {
-                const total = orgShifts.length || 1;
+                const total = shiftsThisMonth || 1;
                 const percentage = Math.round((ub.count / total) * 100);
                 return (
                   <div key={ub.name} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-slate-700 dark:text-slate-300 truncate pr-4">{ub.name}</span>
+                      <span className="font-medium text-text-secondary truncate pr-4">{ub.name}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-200 flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
                     </div>
-                    <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                        className="h-full bg-primary rounded-full transition-all duration-500"
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
@@ -241,7 +241,7 @@ export default function DashboardPage() {
                 );
               })}
               {unitsBreakdown.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-4">Nenhuma unidade com plantão agendado.</p>
+                <p className="text-xs text-text-muted text-center py-4">Nenhuma unidade com plantão agendado.</p>
               )}
             </div>
           </div>
@@ -250,9 +250,9 @@ export default function DashboardPage() {
         {/* Right Column (Alerts + Specialties) */}
         <div className="space-y-8">
           {/* Compliance Alerts */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+          <div className="bg-card-bg rounded-xl border border-card-border p-5">
             <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-3">Pendências Críticas</h3>
-            <p className="text-[11px] text-slate-400 mb-4">Médicos com documentação irregular</p>
+            <p className="text-[11px] text-text-muted mb-4">Médicos com documentação irregular</p>
 
             <div className="space-y-3">
               {doctorsWithAlerts.length > 0 ? (
@@ -262,12 +262,12 @@ export default function DashboardPage() {
                     <Link
                       key={doc.id}
                       href={`/medicos/${doc.id}`}
-                      className="block p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-400/50 dark:hover:border-amber-400/30 transition duration-150"
+                      className="block p-3 rounded-xl bg-background border border-slate-205 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all duration-150 cursor-pointer shadow-sm hover:shadow-md"
                     >
                       <div className="flex items-start justify-between">
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{doc.name}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">CRM {doc.crm}-{doc.crmUf} • {doc.specialty}</p>
+                          <p className="text-xs font-bold text-text-secondary truncate">{doc.name}</p>
+                          <p className="text-[10px] text-text-muted mt-0.5">CRM {doc.crm}-{doc.crmUf} • {doc.specialty}</p>
                         </div>
                         {urgentCount > 0 ? (
                           <span className="flex-shrink-0 text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
@@ -295,7 +295,7 @@ export default function DashboardPage() {
                   );
                 })
               ) : (
-                <div className="py-6 text-center text-slate-400 text-xs">
+                <div className="py-6 text-center text-text-muted text-xs">
                   Sem irregularidades críticas de documentação.
                 </div>
               )}
@@ -303,22 +303,26 @@ export default function DashboardPage() {
           </div>
 
           {/* Specialties Summary */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4">Corpo Clínico</h3>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="bg-card-bg rounded-xl border border-card-border p-5">
+            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4">Corpo Clínico por Especialidade</h3>
+            <div className="divide-y divide-slate-100 dark:divide-slate-850">
               {specialtiesBreakdown.map((sb) => (
-                <div key={sb.name} className="py-2.5 flex items-center justify-between text-xs first:pt-0 last:pb-0">
+                <Link
+                  key={sb.name}
+                  href={`/medicos?especialidade=${encodeURIComponent(sb.name)}`}
+                  className="py-2.5 flex items-center justify-between text-xs first:pt-0 last:pb-0 group/spec hover:bg-slate-50 dark:hover:bg-slate-800/20 px-1 rounded transition cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-teal-500" />
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{sb.name}</span>
+                    <div className="h-2 w-2 rounded-full bg-primary group-hover/spec:scale-125 transition-transform" />
+                    <span className="font-medium text-text-secondary group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">{sb.name}</span>
                   </div>
-                  <span className="font-bold text-slate-950 dark:text-slate-200 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded">
+                  <span className="font-bold text-slate-950 dark:text-slate-200 bg-surface-muted px-2 py-0.5 rounded group-hover/spec:bg-primary/10 group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">
                     {sb.count}
                   </span>
-                </div>
+                </Link>
               ))}
               {specialtiesBreakdown.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-4">Nenhuma especialidade registrada.</p>
+                <p className="text-xs text-text-muted text-center py-4">Nenhuma especialidade registrada.</p>
               )}
             </div>
           </div>
