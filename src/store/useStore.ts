@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType } from '../types';
 import { mockOrganizations, mockDoctors, mockUnits, mockDocuments, mockShifts } from '../data/mockData';
 
-interface VNMedState {
+interface NVMedState {
   activeOrganizationId: string;
   organizations: Organization[];
   doctors: Doctor[];
@@ -45,7 +45,7 @@ interface VNMedState {
   resetToMockData: () => void;
 }
 
-export const useStore = create<VNMedState>()(
+export const useStore = create<NVMedState>()(
   persist(
     (set, get) => ({
       activeOrganizationId: 'org-1',
