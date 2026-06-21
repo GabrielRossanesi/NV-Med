@@ -210,7 +210,6 @@ export const useStore = create<NVMedState>()(
         units: mockUnits,
         documents: mockDocuments,
         shifts: mockShifts,
-        theme: 'dark',
       }),
 
       // Theme implementation

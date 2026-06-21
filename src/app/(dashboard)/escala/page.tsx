@@ -9,7 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Stethoscope
+  Stethoscope,
+  Trash2
 } from 'lucide-react';
 
 export default function EscalaPage() {
@@ -40,6 +41,7 @@ export default function EscalaPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mobileViewMode, setMobileViewMode] = useState<'month' | 'list'>('list');
   
   // Booking Form State
   const [bookingDocId, setBookingDocId] = useState('');
@@ -98,6 +100,16 @@ export default function EscalaPage() {
   
   const totalMonthShifts = filteredShifts.filter((s) => s.date.startsWith(monthPrefix)).length;
   const shiftsToday = orgShifts.filter((s) => s.date === todayStr);
+
+  // Group filtered shifts by date for mobile list view
+  const sortedFilteredShifts = [...filteredShifts].sort((a, b) => a.date.localeCompare(b.date));
+  const shiftsByDate: Record<string, typeof shifts> = {};
+  sortedFilteredShifts.forEach((s) => {
+    if (!shiftsByDate[s.date]) {
+      shiftsByDate[s.date] = [];
+    }
+    shiftsByDate[s.date].push(s);
+  });
 
   // Trigger booking creation
   const handleOpenBookingModal = (day?: number) => {
@@ -325,17 +337,43 @@ export default function EscalaPage() {
           {/* Calendar Box */}
           <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden shadow-sm">
             {/* Calendar Controls */}
-            <div className="p-4 border-b border-border flex items-center justify-between bg-slate-50/40 dark:bg-slate-950/20">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-slate-50/40 dark:bg-slate-950/20 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
                 <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">
                   {monthNames[currentMonth]} {currentYear}
                 </h3>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Mobile view toggle */}
+                <div className="md:hidden flex items-center bg-surface-muted p-0.5 rounded-lg border border-border mr-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMobileViewMode('month')}
+                    className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition cursor-pointer ${
+                      mobileViewMode === 'month'
+                        ? 'bg-primary text-text-inverse shadow-sm'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Mês
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileViewMode('list')}
+                    className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition cursor-pointer ${
+                      mobileViewMode === 'list'
+                        ? 'bg-primary text-text-inverse shadow-sm'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Lista
+                  </button>
+                </div>
+
                 <button
                   onClick={handlePrevMonth}
-                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 transition"
+                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 transition cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -344,13 +382,13 @@ export default function EscalaPage() {
                     setCurrentYear(2026);
                     setCurrentMonth(5); // June
                   }}
-                  className="px-2.5 py-1 text-[10px] rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold"
+                  className="px-2.5 py-1 text-[10px] rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
                 >
                   Hoje (Jun 2026)
                 </button>
                 <button
                   onClick={handleNextMonth}
-                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 transition"
+                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 transition cursor-pointer"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -358,16 +396,97 @@ export default function EscalaPage() {
             </div>
 
             {/* Weekdays Row */}
-            <div className="grid grid-cols-7 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-950/10 text-center py-2 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+            <div className={`grid grid-cols-7 border-b border-border bg-surface-muted/20 text-center py-2 text-[10px] font-bold text-text-muted uppercase tracking-wider ${
+              mobileViewMode === 'list' ? 'hidden md:grid' : 'grid'
+            }`}>
               {weekdays.map((day) => (
                 <div key={day}>{day}</div>
               ))}
             </div>
 
             {/* Calendar Grid Cells */}
-            <div className="grid grid-cols-7 bg-slate-100/10 dark:bg-slate-950/5">
+            <div className={`grid grid-cols-7 bg-surface-muted/5 ${
+              mobileViewMode === 'list' ? 'hidden md:grid' : 'grid'
+            }`}>
               {renderCalendarCells()}
             </div>
+
+            {/* Mobile list view */}
+            {mobileViewMode === 'list' && (
+              <div className="space-y-4 p-4 md:hidden">
+                {Object.keys(shiftsByDate).length > 0 ? (
+                  Object.entries(shiftsByDate).map(([date, dateShifts]) => {
+                    const [yr, mo, dy] = date.split('-');
+                    const dateObj = new Date(Number(yr), Number(mo) - 1, Number(dy));
+                    const weekdayStr = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' });
+                    
+                    return (
+                      <div key={date} className="space-y-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-primary border-b border-border pb-1 mt-2">
+                          {`${dy}/${mo}/${yr} — ${weekdayStr}`}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {dateShifts.map((shift) => {
+                            const doc = doctors.find((d) => d.id === shift.doctorId);
+                            const unit = orgUnits.find((u) => u.id === shift.unitId);
+                            
+                            const statusBadgeColors = {
+                              confirmed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20',
+                              pending: 'bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/20',
+                              completed: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
+                              cancelled: 'bg-red-500/10 text-red-650 dark:text-red-400 border border-red-500/20',
+                            };
+                            
+                            const statusLabel = {
+                              confirmed: 'Confirmado',
+                              pending: 'Pendente',
+                              completed: 'Concluído',
+                              cancelled: 'Cancelado',
+                            };
+
+                            return (
+                              <div
+                                key={shift.id}
+                                className="bg-surface border border-card-border p-3 rounded-lg flex items-center justify-between text-xs transition hover:bg-state-hover"
+                              >
+                                <div className="space-y-1">
+                                  <div className="font-bold text-text-primary">{doc?.name}</div>
+                                  <div className="text-[10px] text-text-muted">
+                                    {doc?.specialty} • {unit?.name}
+                                  </div>
+                                  <div className="text-[10px] text-text-secondary flex items-center gap-1">
+                                    <Clock className="h-3.5 w-3.5 text-primary" />
+                                    {shift.startTime} - {shift.endTime}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusBadgeColors[shift.status]}`}>
+                                    {statusLabel[shift.status]}
+                                  </span>
+                                  
+                                  <button
+                                    onClick={() => handleDeleteShift(shift.id)}
+                                    className="text-danger hover:bg-danger/10 p-1.5 rounded cursor-pointer transition"
+                                    title="Excluir"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-12 text-center text-text-muted text-xs italic">
+                    Nenhum plantão correspondente para os filtros selecionados.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

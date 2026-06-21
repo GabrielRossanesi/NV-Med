@@ -229,6 +229,19 @@ body {
   min-height: 100vh;
 }
 
+/* Smooth transitions for theme toggle */
+body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-border, .border-card-border, button, input, select {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-border, .border-card-border, button, input, select {
+    transition-duration: 0ms !important;
+  }
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
