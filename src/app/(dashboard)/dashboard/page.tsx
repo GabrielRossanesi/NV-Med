@@ -88,64 +88,76 @@ export default function DashboardPage() {
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Doctors */}
-        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
+        <Link
+          href="/medicos"
+          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+        >
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Médicos Cadastrados</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Corpo Clínico</span>
             <h3 className="text-2xl font-bold text-text-primary mt-1">{totalDoctors}</h3>
-            <span className="text-[10px] text-primary font-medium flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
               <UserCheck className="h-3 w-3" />
-              {activeDoctors} ativos no momento
+              {activeDoctors} ativos • Ver médicos
             </span>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-200">
             <Users className="h-5 w-5" />
           </div>
-        </div>
+        </Link>
 
         {/* Pending Docs */}
-        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
+        <Link
+          href="/documentos?status=critical"
+          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-medium group"
+        >
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Alertas de Documento</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pendências Documentais</span>
             <h3 className={`text-2xl font-bold mt-1 ${pendingDocsCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-text-primary'}`}>{pendingDocsCount}</h3>
-            <span className="text-[10px] text-text-muted flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
               <FileCheck2 className="h-3 w-3" />
-              Exige verificação e CRM
+              {pendingDocsCount > 0 ? 'Resolver pendências' : 'Tudo regularizado'}
             </span>
           </div>
-          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${pendingDocsCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-surface-muted text-text-muted'}`}>
+          <div className={`h-10 w-10 rounded-lg flex items-center justify-center transition-colors duration-200 ${pendingDocsCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-text-inverse' : 'bg-surface-muted text-text-muted group-hover:bg-text-muted group-hover:text-text-inverse'}`}>
             <AlertTriangle className="h-5 w-5" />
           </div>
-        </div>
+        </Link>
 
         {/* Units */}
-        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
+        <Link
+          href="/unidades?status=active"
+          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+        >
           <div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Unidades Ativas</span>
             <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits}</h3>
-            <span className="text-[10px] text-text-muted flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] text-text-muted font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
               <Building2 className="h-3 w-3" />
-              Hospitais, UPA e Clínicas
+              Gerenciar unidades
             </span>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-200">
             <Building2 className="h-5 w-5" />
           </div>
-        </div>
+        </Link>
 
         {/* Monthly Shifts */}
-        <div className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-glow">
+        <Link
+          href="/escala"
+          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+        >
           <div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Plantões do Mês</span>
             <h3 className="text-2xl font-bold text-text-primary mt-1">{shiftsThisMonth}</h3>
-            <span className="text-[10px] text-primary font-medium flex items-center gap-1 mt-1.5">
+            <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
               <TrendingUp className="h-3 w-3" />
-              {shiftsToday} agendados para hoje
+              {shiftsToday} hoje • Abrir escala
             </span>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-200">
             <Calendar className="h-5 w-5" />
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Main Section Grid */}
@@ -157,7 +169,7 @@ export default function DashboardPage() {
           <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden">
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider">Próximos Plantões</h3>
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Próximos Plantões</h3>
                 <p className="text-[11px] text-text-muted">Plantões agendados a partir de hoje</p>
               </div>
               <Link href="/escala" className="text-xs font-semibold text-primary flex items-center gap-0.5 hover:underline">
@@ -166,7 +178,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-border">
               {upcomingShifts.length > 0 ? (
                 upcomingShifts.map((shift) => {
                   const doctor = orgDoctors.find((d) => d.id === shift.doctorId);
@@ -181,13 +193,17 @@ export default function DashboardPage() {
                   };
 
                   return (
-                    <div key={shift.id} className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition">
+                    <Link
+                      key={shift.id}
+                      href={`/escala?date=${shift.date}&doctorId=${shift.doctorId}`}
+                      className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition cursor-pointer group"
+                    >
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
                           {doctor?.name.charAt(4) || 'D'}
                         </div>
                         <div>
-                          <p className="font-semibold text-text-secondary">{doctor?.name}</p>
+                          <p className="font-semibold text-text-secondary group-hover:text-primary transition-colors">{doctor?.name}</p>
                           <p className="text-[10px] text-text-muted">{doctor?.specialty} • {unit?.name}</p>
                         </div>
                       </div>
@@ -207,7 +223,7 @@ export default function DashboardPage() {
                           {shift.status === 'confirmed' ? 'Confirmado' : shift.status === 'pending' ? 'Pendente' : 'Concluído'}
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   );
                 })
               ) : (
@@ -220,16 +236,21 @@ export default function DashboardPage() {
 
           {/* Unit Breakdown */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4">Plantões por Unidade no Mês</h3>
-            <div className="space-y-3.5">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Plantões por Unidade no Mês</h3>
+            <div className="space-y-2">
               {unitsBreakdown.map((ub) => {
                 const total = shiftsThisMonth || 1;
                 const percentage = Math.round((ub.count / total) * 100);
+                const unit = orgUnits.find((u) => u.name === ub.name);
                 return (
-                  <div key={ub.name} className="space-y-1">
+                  <Link
+                    key={ub.name}
+                    href={unit ? `/escala?unitId=${unit.id}` : '/escala'}
+                    className="block space-y-1 p-2.5 rounded-xl hover:bg-slate-50/50 dark:hover:bg-slate-800/10 border border-transparent hover:border-border transition-all cursor-pointer group"
+                  >
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-text-secondary truncate pr-4">{ub.name}</span>
-                      <span className="font-bold text-slate-900 dark:text-slate-200 flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
+                      <span className="font-medium text-text-secondary truncate pr-4 group-hover:text-primary transition-colors">{ub.name}</span>
+                      <span className="font-bold text-text-primary flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
                     </div>
                     <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
                       <div
@@ -237,7 +258,7 @@ export default function DashboardPage() {
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
               {unitsBreakdown.length === 0 && (
@@ -251,7 +272,7 @@ export default function DashboardPage() {
         <div className="space-y-8">
           {/* Compliance Alerts */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-3">Pendências Críticas</h3>
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-3">Pendências Críticas</h3>
             <p className="text-[11px] text-text-muted mb-4">Médicos com documentação irregular</p>
 
             <div className="space-y-3">
@@ -261,12 +282,12 @@ export default function DashboardPage() {
                   return (
                     <Link
                       key={doc.id}
-                      href={`/medicos/${doc.id}`}
-                      className="block p-3 rounded-xl bg-background border border-slate-205 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all duration-150 cursor-pointer shadow-sm hover:shadow-md"
+                      href={`/documentos?doctorId=${doc.id}`}
+                      className="block p-3 rounded-xl bg-background border border-border hover:border-amber-400 dark:hover:border-amber-450 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all duration-150 cursor-pointer shadow-sm hover:shadow-md group"
                     >
                       <div className="flex items-start justify-between">
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-text-secondary truncate">{doc.name}</p>
+                          <p className="text-xs font-bold text-text-secondary truncate group-hover:text-primary transition-colors">{doc.name}</p>
                           <p className="text-[10px] text-text-muted mt-0.5">CRM {doc.crm}-{doc.crmUf} • {doc.specialty}</p>
                         </div>
                         {urgentCount > 0 ? (
@@ -274,7 +295,7 @@ export default function DashboardPage() {
                             Crítico
                           </span>
                         ) : (
-                          <span className="flex-shrink-0 text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                          <span className="flex-shrink-0 text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-450 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                             Análise
                           </span>
                         )}
@@ -304,19 +325,19 @@ export default function DashboardPage() {
 
           {/* Specialties Summary */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4">Corpo Clínico por Especialidade</h3>
-            <div className="divide-y divide-slate-100 dark:divide-slate-850">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Corpo Clínico por Especialidade</h3>
+            <div className="divide-y divide-border">
               {specialtiesBreakdown.map((sb) => (
                 <Link
                   key={sb.name}
-                  href={`/medicos?especialidade=${encodeURIComponent(sb.name)}`}
+                  href={`/medicos?specialty=${encodeURIComponent(sb.name)}`}
                   className="py-2.5 flex items-center justify-between text-xs first:pt-0 last:pb-0 group/spec hover:bg-slate-50 dark:hover:bg-slate-800/20 px-1 rounded transition cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-primary group-hover/spec:scale-125 transition-transform" />
                     <span className="font-medium text-text-secondary group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">{sb.name}</span>
                   </div>
-                  <span className="font-bold text-slate-950 dark:text-slate-200 bg-surface-muted px-2 py-0.5 rounded group-hover/spec:bg-primary/10 group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">
+                  <span className="font-bold text-text-primary bg-surface-muted px-2 py-0.5 rounded group-hover/spec:bg-primary/10 group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">
                     {sb.count}
                   </span>
                 </Link>

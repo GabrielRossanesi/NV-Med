@@ -51,35 +51,35 @@ export default function CompaniesPage() {
       </div>
 
       {/* Global SaaS Platform Summary */}
-      <div className="bg-slate-950 text-slate-200 p-6 rounded-xl border border-slate-800 relative overflow-hidden">
+      <div className="bg-surface-muted p-6 rounded-xl border border-border relative overflow-hidden">
         {/* Decorative Grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <span className="text-[10px] bg-primary/10 text-primary border border-teal-900/30 px-2 py-0.5 rounded font-semibold uppercase tracking-wider">
+            <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
               Painel de Operador Geral
             </span>
-            <h3 className="text-xl font-bold text-white mt-2">Visão Consolidada do SaaS</h3>
+            <h3 className="text-xl font-bold text-text-primary mt-2">Visão Consolidada do SaaS</h3>
             <p className="text-xs text-text-muted mt-1">Dados acumulados em todas as instâncias de clínicas e hospitais.</p>
           </div>
 
-          <div className="grid grid-cols-4 gap-4 md:gap-8 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+          <div className="grid grid-cols-4 gap-4 md:gap-8 bg-card-bg p-4 rounded-xl border border-border">
             <div className="text-center px-2">
               <span className="text-[10px] uppercase font-bold text-text-muted block">Clientes</span>
               <span className="text-lg font-bold text-primary mt-1 block">{totalOrgs}</span>
             </div>
-            <div className="text-center px-2 border-l border-slate-800">
+            <div className="text-center px-2 border-l border-border">
               <span className="text-[10px] uppercase font-bold text-text-muted block">Médicos</span>
-              <span className="text-lg font-bold text-white mt-1 block">{grandTotalDocs}</span>
+              <span className="text-lg font-bold text-text-primary mt-1 block">{grandTotalDocs}</span>
             </div>
-            <div className="text-center px-2 border-l border-slate-800">
+            <div className="text-center px-2 border-l border-border">
               <span className="text-[10px] uppercase font-bold text-text-muted block">Unidades</span>
-              <span className="text-lg font-bold text-white mt-1 block">{grandTotalUnits}</span>
+              <span className="text-lg font-bold text-text-primary mt-1 block">{grandTotalUnits}</span>
             </div>
-            <div className="text-center px-2 border-l border-slate-800">
+            <div className="text-center px-2 border-l border-border">
               <span className="text-[10px] uppercase font-bold text-text-muted block">Plantões</span>
-              <span className="text-lg font-bold text-white mt-1 block">{grandTotalShifts}</span>
+              <span className="text-lg font-bold text-text-primary mt-1 block">{grandTotalShifts}</span>
             </div>
           </div>
         </div>
@@ -104,15 +104,15 @@ export default function CompaniesPage() {
               className={`bg-card-bg rounded-xl border flex flex-col justify-between overflow-hidden transition-all duration-300 ${
                 isActive
                   ? 'border-primary shadow-lg ring-1 ring-teal-500/20'
-                  : 'border-border hover:border-slate-350 dark:hover:border-slate-700'
+                  : 'border-border hover:border-primary/30 dark:hover:border-teal-555/20'
               }`}
             >
               {/* Card Header */}
-              <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
+              <div className="p-6 border-b border-border bg-surface-muted/30">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl flex items-center justify-center ${
-                      isActive ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-800 text-text-secondary'
+                      isActive ? 'bg-primary text-text-inverse shadow-glow-primary' : 'bg-surface-muted text-text-secondary'
                     }`}>
                       <Building className="h-5 w-5" />
                     </div>
@@ -122,7 +122,7 @@ export default function CompaniesPage() {
                     </div>
                   </div>
                   {isActive && (
-                    <span className="text-[9px] bg-primary text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                    <span className="text-[9px] bg-primary text-text-inverse px-2 py-0.5 rounded font-bold uppercase tracking-wider">
                       Ativa
                     </span>
                   )}
@@ -146,12 +146,12 @@ export default function CompaniesPage() {
                   </p>
                 </div>
 
-                <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
+                <div className="border-t border-border pt-4">
                   <p className="text-[10px] uppercase font-bold text-text-muted tracking-wider mb-2.5">
                     Resumo de Instância
                   </p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-background p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/50 flex items-center gap-2">
+                    <div className="bg-background p-2.5 rounded-lg border border-border flex items-center gap-2">
                       <Users className="h-4 w-4 text-primary" />
                       <div>
                         <span className="block text-[10px] text-text-muted">Médicos</span>
@@ -159,7 +159,7 @@ export default function CompaniesPage() {
                       </div>
                     </div>
 
-                    <div className="bg-background p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/50 flex items-center gap-2">
+                    <div className="bg-background p-2.5 rounded-lg border border-border flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-primary" />
                       <div>
                         <span className="block text-[10px] text-text-muted">Unidades</span>
@@ -167,7 +167,7 @@ export default function CompaniesPage() {
                       </div>
                     </div>
 
-                    <div className="bg-background p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/50 flex items-center gap-2">
+                    <div className="bg-background p-2.5 rounded-lg border border-border flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-primary" />
                       <div>
                         <span className="block text-[10px] text-text-muted">Plantões</span>
@@ -178,7 +178,7 @@ export default function CompaniesPage() {
                     <div className={`p-2.5 rounded-lg border flex items-center gap-2 ${
                       pendingDocs > 0
                         ? 'bg-amber-500/5 border-amber-500/10 text-amber-600'
-                        : 'bg-background border-slate-100 dark:border-slate-800/50 text-text-muted'
+                        : 'bg-background border-border text-text-muted'
                     }`}>
                       <AlertTriangle className={`h-4 w-4 ${pendingDocs > 0 ? 'text-amber-500' : 'text-text-muted'}`} />
                       <div>
@@ -191,13 +191,13 @@ export default function CompaniesPage() {
               </div>
 
               {/* Action Button */}
-              <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-950/10">
+              <div className="p-6 border-t border-border bg-surface-muted/20">
                 <button
                   onClick={() => handleAccessCompany(org.id)}
-                  className={`w-full py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition duration-200 ${
+                  className={`w-full py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition duration-200 cursor-pointer ${
                     isActive
-                      ? 'bg-primary hover:bg-primary-hover text-white shadow-md'
-                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
+                      ? 'bg-primary hover:bg-primary-hover text-text-inverse shadow-medium'
+                      : 'bg-surface-muted hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text-secondary'
                   }`}
                 >
                   {isActive ? 'Painel já Ativo' : 'Acessar Instância'}
@@ -210,10 +210,10 @@ export default function CompaniesPage() {
       </div>
       
       {/* Help Banner */}
-      <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-card-border flex items-start gap-3">
+      <div className="p-4 rounded-xl bg-surface-muted border border-border flex items-start gap-3">
         <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
         <div className="text-xs space-y-1 text-text-muted">
-          <p className="font-semibold text-slate-850 dark:text-slate-200">Garantia de Isolamento de Dados</p>
+          <p className="font-semibold text-text-primary">Garantia de Isolamento de Dados</p>
           <p>
             O NV Med opera sob arquitetura de inquilino único virtual (multi-tenant logical separation). A troca de tenant reconfigura todos os seletores locais de consulta para aplicar a cláusula `where organizationId = activeOrganizationId`, impedindo vazamento de dados de médicos ou escalas entre diferentes clientes corporativos.
           </p>

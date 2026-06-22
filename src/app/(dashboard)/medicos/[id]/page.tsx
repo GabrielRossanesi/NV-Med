@@ -85,8 +85,8 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const docStatusColors: Record<DocumentStatus, string> = {
     approved: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/20',
     analyzing: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/20',
-    expired: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/20',
-    rejected: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/20',
+    expired: 'bg-red-50 dark:bg-red-950/30 text-red-650 dark:text-red-400 border border-red-100 dark:border-red-900/20',
+    rejected: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-450 border border-amber-100 dark:border-amber-900/20',
     sent: 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/20',
     not_sent: 'bg-background text-text-muted border border-card-border',
   };
@@ -108,7 +108,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       inactive: 'bg-slate-600 text-white shadow-md border-slate-600'
     };
     const inactiveColors = 'bg-background text-text-muted border-border hover:bg-slate-100 dark:hover:bg-slate-900';
-    return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all ${doctor.status === s ? activeColors[s] : inactiveColors}`;
+    return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
   };
 
   // Find linked units
@@ -124,7 +124,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Back navigation */}
       <div>
-        <Link href="/medicos" className="inline-flex items-center gap-1 text-text-muted hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold mb-2">
+        <Link href="/medicos" className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
           <ArrowLeft className="h-4 w-4" />
           Voltar para listagem
         </Link>
@@ -160,17 +160,17 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         <div className="lg:col-span-1 space-y-6">
           {/* Profile details */}
           <div className="bg-card-bg rounded-xl border border-card-border p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3 pb-4 border-b border-border">
               <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
                 {doctor.name.charAt(4)}
               </div>
               <div>
-                <p className="font-bold text-slate-950 dark:text-white leading-tight">{doctor.name}</p>
+                <p className="font-bold text-text-primary leading-tight">{doctor.name}</p>
                 <p className="text-xs text-primary font-semibold mt-0.5">{doctor.specialty}</p>
               </div>
             </div>
 
-            <div className="space-y-3.5 text-xs text-slate-600 dark:text-slate-350">
+            <div className="space-y-3.5 text-xs text-text-secondary">
               <div className="flex items-start gap-2.5">
                 <ShieldCheck className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
@@ -208,13 +208,13 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
           {/* Linked units list */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Building className="h-4 w-4 text-primary" />
               Unidades Vinculadas
             </h3>
             <div className="space-y-2">
               {linkedUnitsList.map((u) => (
-                <div key={u.id} className="p-3 rounded-lg bg-background border border-slate-150 dark:border-slate-800 flex items-center justify-between text-xs">
+                <div key={u.id} className="p-3 rounded-lg bg-background border border-border flex items-center justify-between text-xs animate-in fade-in duration-200">
                   <div className="min-w-0">
                     <p className="font-semibold text-text-secondary truncate">{u.name}</p>
                     <p className="text-[10px] text-text-muted mt-0.5">{u.city} - {u.state} • {u.type.toUpperCase()}</p>
@@ -229,7 +229,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
           {/* Doctor plantões */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Calendar className="h-4 w-4 text-primary" />
               Plantões Recentes
             </h3>
@@ -238,9 +238,9 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                 sortedShifts.map((shift) => {
                   const unit = orgUnits.find((u) => u.id === shift.unitId);
                   return (
-                    <div key={shift.id} className="flex justify-between items-center text-xs pb-3 last:pb-0 last:border-b-0 border-b border-slate-100 dark:border-slate-800">
+                    <div key={shift.id} className="flex justify-between items-center text-xs pb-3 last:pb-0 last:border-b-0 border-b border-border">
                       <div>
-                        <p className="font-semibold text-slate-850 dark:text-slate-200">{unit?.name}</p>
+                        <p className="font-semibold text-text-primary">{unit?.name}</p>
                         <p className="text-[10px] text-text-muted flex items-center gap-1 mt-0.5">
                           <span>{new Date(shift.date).toLocaleDateString('pt-BR')}</span>
                           <span>•</span>
@@ -271,7 +271,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
           <div className="bg-card-bg rounded-xl border border-card-border p-6">
             <div className="pb-4 border-b border-border flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
                   <FileCheck className="h-4.5 w-4.5 text-primary" />
                   Pasta de Documentos Obrigatórios
                 </h3>
@@ -280,7 +280,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
             </div>
 
             {/* Checklist items */}
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 mt-4">
+            <div className="divide-y divide-border mt-4">
               {docDocs.map((doc) => {
                 const fileNameInputKey = doc.type;
                 const isSelected = !!selectedFileNames[fileNameInputKey];
@@ -313,7 +313,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                         {/* If not sent, let them simulate mock select and upload */}
                         {doc.status === 'not_sent' || doc.status === 'expired' || doc.status === 'rejected' ? (
                           <div className="flex items-center gap-1.5">
-                            <label className="cursor-pointer bg-card-bg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-350 dark:border-slate-800 rounded px-2.5 py-1 text-[10px] font-bold flex items-center gap-1">
+                            <label className="cursor-pointer bg-card-bg hover:bg-slate-100 dark:hover:bg-slate-800 text-text-secondary border border-border rounded px-2.5 py-1 text-[10px] font-bold flex items-center gap-1">
                               <Upload className="h-3 w-3" />
                               Selecionar
                               <input
@@ -327,7 +327,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                             {isSelected && (
                               <button
                                 onClick={() => handleUpload(doc.type)}
-                                className="bg-primary hover:bg-primary-hover text-white rounded px-2.5 py-1 text-[10px] font-bold"
+                                className="bg-primary hover:bg-primary-hover text-white rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
                               >
                                 Enviar
                               </button>
@@ -338,19 +338,19 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => updateDocumentStatus(doc.id, 'approved')}
-                              className="text-[9px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-1 rounded"
+                              className="text-[9px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-1 rounded cursor-pointer"
                             >
                               Aprovar
                             </button>
                             <button
                               onClick={() => updateDocumentStatus(doc.id, 'rejected')}
-                              className="text-[9px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-500 font-bold px-2 py-1 rounded"
+                              className="text-[9px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-500 font-bold px-2 py-1 rounded cursor-pointer"
                             >
                               Reprovar
                             </button>
                             <button
                               onClick={() => updateDocumentStatus(doc.id, 'expired')}
-                              className="text-[9px] bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold px-2 py-1 rounded"
+                              className="text-[9px] bg-red-500/10 hover:bg-red-500/20 text-red-655 dark:text-red-400 font-bold px-2 py-1 rounded cursor-pointer"
                             >
                               Expirar
                             </button>

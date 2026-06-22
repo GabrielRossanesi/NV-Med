@@ -61,7 +61,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Back Navigation & Title */}
       <div>
-        <Link href="/unidades" className="inline-flex items-center gap-1 text-text-muted hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold mb-2">
+        <Link href="/unidades" className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
           <ArrowLeft className="h-4 w-4" />
           Voltar para listagem
         </Link>
@@ -92,7 +92,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
         {/* Left Column (Metadata details & Specialties) */}
         <div className="space-y-6">
           <div className="bg-card-bg rounded-xl border border-card-border p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3 pb-4 border-b border-border">
               <div className="bg-primary/10 text-primary p-2 rounded-lg">
                 <Building2 className="h-5 w-5" />
               </div>
@@ -102,7 +102,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
 
-            <div className="space-y-3.5 text-xs text-slate-600 dark:text-slate-350">
+            <div className="space-y-3.5 text-xs text-text-secondary">
               <div className="flex items-start gap-2.5">
                 <MapPin className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
@@ -132,7 +132,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* Serviced specialties */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Briefcase className="h-4 w-4 text-primary" />
               Especialidades Disponíveis
             </h3>
@@ -153,7 +153,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
         <div className="lg:col-span-2 space-y-6">
           {/* Linked doctors roster */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Users className="h-4.5 w-4.5 text-primary" />
               Corpo Clínico Escalonado ({linkedDoctors.length})
             </h3>
@@ -163,13 +163,13 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
                   <Link
                     key={doc.id}
                     href={`/medicos/${doc.id}`}
-                    className="p-3 bg-slate-50/50 dark:bg-slate-950/40 rounded-lg border border-card-border hover:border-primary/40 transition duration-150 flex items-center gap-3 text-xs"
+                    className="p-3 bg-slate-50/50 dark:bg-slate-950/40 rounded-lg border border-border hover:border-primary/40 transition duration-150 flex items-center gap-3 text-xs cursor-pointer group"
                   >
                     <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
                       {doc.name.charAt(4)}
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-850 dark:text-slate-200 truncate">{doc.name}</p>
+                    <div className="min-w-0 font-medium">
+                      <p className="font-semibold text-text-primary group-hover:text-primary transition-colors truncate">{doc.name}</p>
                       <p className="text-[10px] text-text-muted truncate">CRM {doc.crm}-{doc.crmUf} • {doc.specialty}</p>
                     </div>
                   </Link>
@@ -182,11 +182,11 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* Upcoming shifts list */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Calendar className="h-4.5 w-4.5 text-primary" />
               Próximos Plantões Agendados
             </h3>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-border">
               {upcomingShifts.length > 0 ? (
                 upcomingShifts.map((shift) => {
                   const doc = orgDoctors.find((d) => d.id === shift.doctorId);

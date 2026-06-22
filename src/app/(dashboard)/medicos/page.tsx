@@ -34,13 +34,36 @@ function DoctorsPageContent() {
   const orgDoctors = doctors.filter((d) => d.organizationId === activeOrganizationId);
 
   const searchParams = useSearchParams();
-  const urlSpecialty = searchParams?.get('especialidade') || 'all';
+  const urlSpecialty = searchParams?.get('especialidade') || searchParams?.get('specialty') || 'all';
+  const urlStatus = searchParams?.get('status') || 'all';
 
   // Search & Filter state
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(urlStatus);
   const [specialtyFilter, setSpecialtyFilter] = useState<string>(urlSpecialty);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Sync state if search parameters or organization changes
+  const [prevUrlParams, setPrevUrlParams] = useState({
+    specialty: urlSpecialty,
+    status: urlStatus,
+    orgId: activeOrganizationId
+  });
+
+  if (
+    urlSpecialty !== prevUrlParams.specialty ||
+    urlStatus !== prevUrlParams.status ||
+    activeOrganizationId !== prevUrlParams.orgId
+  ) {
+    setPrevUrlParams({
+      specialty: urlSpecialty,
+      status: urlStatus,
+      orgId: activeOrganizationId
+    });
+    setSpecialtyFilter(urlSpecialty);
+    setStatusFilter(urlStatus);
+  }
+
 
   // Form state for new doctor
   const [name, setName] = useState('');
@@ -62,7 +85,7 @@ function DoctorsPageContent() {
       doc.specialty.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
-    const matchesSpecialty = specialtyFilter === 'all' || doc.specialty === specialtyFilter;
+    const matchesSpecialty = specialtyFilter === 'all' || doc.specialty.toLowerCase() === specialtyFilter.toLowerCase();
 
     return matchesSearch && matchesStatus && matchesSpecialty;
   });
@@ -152,7 +175,7 @@ function DoctorsPageContent() {
             setSpecialty(activeOrg?.settings.specialties[0] || '');
             setIsModalOpen(true);
           }}
-          className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200"
+          className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Novo Médico
@@ -169,7 +192,7 @@ function DoctorsPageContent() {
             placeholder="Buscar por nome, CRM ou especialidade..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+            className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
           />
         </div>
 
@@ -178,7 +201,7 @@ function DoctorsPageContent() {
           <select
             value={specialtyFilter}
             onChange={(e) => setSpecialtyFilter(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+            className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
           >
             <option value="all">Todas Especialidades</option>
             {activeOrg?.settings.specialties.map((spec) => (
@@ -194,7 +217,7 @@ function DoctorsPageContent() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+            className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
           >
             <option value="all">Todos Status</option>
             <option value="active">Ativo</option>
@@ -204,12 +227,47 @@ function DoctorsPageContent() {
         </div>
       </div>
 
+      {/* Active Filters Summary */}
+      {(statusFilter !== 'all' || specialtyFilter !== 'all' || search !== '') && (
+        <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-in fade-in duration-200">
+          <div className="text-xs text-text-secondary">
+            <span className="font-bold text-primary mr-1">Filtros Ativos:</span>
+            {specialtyFilter !== 'all' && (
+              <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                Especialidade: {specialtyFilter}
+              </span>
+            )}
+            {statusFilter !== 'all' && (
+              <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                Status: {statusFilter === 'active' ? 'Ativo' : statusFilter === 'pending' ? 'Pendente' : 'Inativo'}
+              </span>
+            )}
+            {search !== '' && (
+              <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5 font-mono">
+                Busca: &quot;{search}&quot;
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              setStatusFilter('all');
+              setSpecialtyFilter('all');
+              setSearch('');
+              window.history.pushState({}, '', '/medicos');
+            }}
+            className="text-xs font-bold text-primary hover:underline hover:text-primary-hover flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+          >
+            ✕ Limpar Filtros
+          </button>
+        </div>
+      )}
+
       {/* Table grid */}
       <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-border bg-slate-50/50 dark:bg-slate-950/20 text-[10px] uppercase font-bold text-text-muted tracking-wider">
+              <tr className="border-b border-border bg-surface-muted/30 text-[10px] uppercase font-bold text-text-muted tracking-wider">
                 <th className="p-4">Médico</th>
                 <th className="p-4">CRM / UF</th>
                 <th className="p-4">Especialidade</th>
@@ -218,7 +276,7 @@ function DoctorsPageContent() {
                 <th className="p-4 text-center">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-150 dark:divide-slate-800 text-xs">
+            <tbody className="divide-y divide-border text-xs">
               {filteredDoctors.length > 0 ? (
                 filteredDoctors.map((doc) => {
                   // Find clinical names linked to this doctor
@@ -237,10 +295,10 @@ function DoctorsPageContent() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 font-mono font-medium">
+                      <td className="p-4 font-mono font-medium text-text-primary">
                         {doc.crm} / {doc.crmUf}
                       </td>
-                      <td className="p-4 text-slate-600 dark:text-slate-350">
+                      <td className="p-4 text-text-secondary">
                         {doc.specialty}
                       </td>
                       <td className="p-4">
@@ -263,14 +321,14 @@ function DoctorsPageContent() {
                         <div className="flex items-center justify-center gap-2">
                           <Link
                             href={`/medicos/${doc.id}`}
-                            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-text-muted hover:text-slate-800 dark:hover:text-slate-200 transition"
+                            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-text-muted hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
                             title="Ver Perfil Detalhado"
                           >
                             <Eye className="h-4 w-4" />
                           </Link>
                           <button
                             onClick={() => handleDelete(doc.id)}
-                            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-text-muted hover:text-red-600 dark:hover:text-red-400 transition"
+                            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer"
                             title="Excluir"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -295,11 +353,11 @@ function DoctorsPageContent() {
       {/* Creation Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="bg-card-bg rounded-xl border border-slate-250 dark:border-slate-800 max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-card-bg rounded-xl border border-border max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
                   <UserCheck className="h-4 w-4 text-primary" />
                   Cadastrar Novo Médico
                 </h3>
@@ -307,7 +365,7 @@ function DoctorsPageContent() {
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-text-muted hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+                className="text-text-muted hover:text-text-primary text-lg font-bold cursor-pointer"
               >
                 ✕
               </button>

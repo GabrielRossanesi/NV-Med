@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useStore } from '@/store/useStore';
+import { useSearchParams } from 'next/navigation';
 import { ShiftType, ShiftStatus } from '@/types';
 import {
   CalendarDays,
@@ -13,7 +14,7 @@ import {
   Trash2
 } from 'lucide-react';
 
-export default function EscalaPage() {
+function EscalaPageContent() {
   const {
     activeOrganizationId,
     organizations,
@@ -29,15 +30,58 @@ export default function EscalaPage() {
   const orgUnits = units.filter((u) => u.organizationId === activeOrganizationId && u.status === 'active');
   const orgShifts = shifts.filter((s) => s.organizationId === activeOrganizationId);
 
+  const searchParams = useSearchParams();
+  const urlDate = searchParams?.get('date') || '';
+  const urlDoctorId = searchParams?.get('doctorId') || 'all';
+  const urlUnitId = searchParams?.get('unitId') || 'all';
+
   // Month navigation state (defaulting to June 2026)
   const [currentYear, setCurrentYear] = useState(2026);
   const [currentMonth, setCurrentMonth] = useState(5); // 0-indexed, 5 = June
 
   // Filter States
-  const [filterDocId, setFilterDocId] = useState('all');
-  const [filterUnitId, setFilterUnitId] = useState('all');
+  const [filterDocId, setFilterDocId] = useState(urlDoctorId);
+  const [filterUnitId, setFilterUnitId] = useState(urlUnitId);
   const [filterSpecialty, setFilterSpecialty] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDate, setFilterDate] = useState(urlDate);
+
+  // Sync state if search parameters or organization changes
+  const [prevUrlParams, setPrevUrlParams] = useState({
+    doctorId: urlDoctorId,
+    unitId: urlUnitId,
+    date: urlDate,
+    orgId: activeOrganizationId
+  });
+
+  if (
+    urlDoctorId !== prevUrlParams.doctorId ||
+    urlUnitId !== prevUrlParams.unitId ||
+    urlDate !== prevUrlParams.date ||
+    activeOrganizationId !== prevUrlParams.orgId
+  ) {
+    setPrevUrlParams({
+      doctorId: urlDoctorId,
+      unitId: urlUnitId,
+      date: urlDate,
+      orgId: activeOrganizationId
+    });
+    setFilterDocId(urlDoctorId);
+    setFilterUnitId(urlUnitId);
+    setFilterDate(urlDate);
+    if (urlDate) {
+      const parts = urlDate.split('-');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1; // 0-indexed
+        if (!isNaN(y) && !isNaN(m)) {
+          setCurrentYear(y);
+          setCurrentMonth(m);
+        }
+      }
+    }
+  }
+
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -90,8 +134,9 @@ export default function EscalaPage() {
     const matchesUnit = filterUnitId === 'all' || shift.unitId === filterUnitId;
     const matchesSpecialty = filterSpecialty === 'all' || doc?.specialty === filterSpecialty;
     const matchesStatus = filterStatus === 'all' || shift.status === filterStatus;
+    const matchesDate = filterDate === '' || shift.date === filterDate;
 
-    return matchesDoc && matchesUnit && matchesSpecialty && matchesStatus;
+    return matchesDoc && matchesUnit && matchesSpecialty && matchesStatus && matchesDate;
   });
 
   // Calculate stats for sidebar
@@ -172,6 +217,7 @@ export default function EscalaPage() {
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const isToday = dayStr === todayStr;
+      const isFiltered = dayStr === filterDate;
 
       // Filter shifts scheduled on this specific day
       const dayShifts = filteredShifts.filter((s) => s.date === dayStr);
@@ -182,6 +228,8 @@ export default function EscalaPage() {
           onClick={() => handleOpenBookingModal(day)}
           className={`group bg-calendar-day-bg border-b border-r border-border p-2 min-h-[120px] flex flex-col justify-between cursor-pointer hover:bg-state-hover transition-colors ${
             isToday ? 'ring-2 ring-primary ring-inset z-10 bg-calendar-today-bg shadow-glow-primary' : ''
+          } ${
+            isFiltered ? 'ring-2 ring-amber-500 ring-inset z-10 bg-amber-500/5' : ''
           }`}
         >
           {/* Day number & Indicator */}
@@ -189,11 +237,14 @@ export default function EscalaPage() {
             <span className={`text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center font-mono ${
               isToday
                 ? 'bg-primary text-text-inverse font-bold'
+                : isFiltered
+                ? 'bg-amber-500 text-white font-bold'
                 : 'text-text-secondary'
             }`}>
               {day}
             </span>
             {isToday && <span className="text-[8px] uppercase tracking-wider text-primary font-bold">Hoje</span>}
+            {isFiltered && !isToday && <span className="text-[8px] uppercase tracking-wider text-amber-500 font-bold">Filtrado</span>}
           </div>
 
           {/* Compact shifts list */}
@@ -259,7 +310,7 @@ export default function EscalaPage() {
         </div>
         <button
           onClick={() => handleOpenBookingModal()}
-          className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200"
+          className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Novo Plantão
@@ -279,7 +330,7 @@ export default function EscalaPage() {
               <select
                 value={filterDocId}
                 onChange={(e) => setFilterDocId(e.target.value)}
-                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none"
+                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none"
               >
                 <option value="all">Todos Médicos</option>
                 {orgDoctors.map((d) => (
@@ -294,7 +345,7 @@ export default function EscalaPage() {
               <select
                 value={filterUnitId}
                 onChange={(e) => setFilterUnitId(e.target.value)}
-                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none"
+                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none"
               >
                 <option value="all">Todas Unidades</option>
                 {orgUnits.map((u) => (
@@ -309,7 +360,7 @@ export default function EscalaPage() {
               <select
                 value={filterSpecialty}
                 onChange={(e) => setFilterSpecialty(e.target.value)}
-                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none"
+                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none"
               >
                 <option value="all">Todas Especialidades</option>
                 {activeOrg?.settings.specialties.map((spec) => (
@@ -324,7 +375,7 @@ export default function EscalaPage() {
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background focus:outline-none"
+                className="w-full px-2 py-1.5 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none"
               >
                 <option value="all">Todos Status</option>
                 <option value="confirmed">Confirmado</option>
@@ -334,10 +385,57 @@ export default function EscalaPage() {
             </div>
           </div>
 
+          {/* Active Filters Summary */}
+          {(filterDocId !== 'all' || filterUnitId !== 'all' || filterSpecialty !== 'all' || filterStatus !== 'all' || filterDate !== '') && (
+            <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-in fade-in duration-200">
+              <div className="text-xs text-text-secondary">
+                <span className="font-bold text-primary mr-1">Filtros Ativos:</span>
+                {filterDocId !== 'all' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Médico: {orgDoctors.find(d => d.id === filterDocId)?.name}
+                  </span>
+                )}
+                {filterUnitId !== 'all' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Unidade: {orgUnits.find(u => u.id === filterUnitId)?.name}
+                  </span>
+                )}
+                {filterSpecialty !== 'all' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Especialidade: {filterSpecialty}
+                  </span>
+                )}
+                {filterStatus !== 'all' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Status: {filterStatus === 'confirmed' ? 'Confirmado' : filterStatus === 'pending' ? 'Pendente' : 'Concluído'}
+                  </span>
+                )}
+                {filterDate !== '' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Data: {new Date(filterDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setFilterDocId('all');
+                  setFilterUnitId('all');
+                  setFilterSpecialty('all');
+                  setFilterStatus('all');
+                  setFilterDate('');
+                  window.history.pushState({}, '', '/escala');
+                }}
+                className="text-xs font-bold text-primary hover:underline hover:text-primary-hover flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+              >
+                ✕ Limpar Filtros
+              </button>
+            </div>
+          )}
+
           {/* Calendar Box */}
           <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden shadow-sm">
             {/* Calendar Controls */}
-            <div className="p-4 border-b border-border flex items-center justify-between bg-slate-50/40 dark:bg-slate-950/20 flex-wrap gap-2">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-surface-muted/30 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
                 <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">
@@ -373,7 +471,7 @@ export default function EscalaPage() {
 
                 <button
                   onClick={handlePrevMonth}
-                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 transition cursor-pointer"
+                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-text-secondary transition cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -382,13 +480,13 @@ export default function EscalaPage() {
                     setCurrentYear(2026);
                     setCurrentMonth(5); // June
                   }}
-                  className="px-2.5 py-1 text-[10px] rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                  className="px-2.5 py-1 text-[10px] rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-text-secondary font-semibold cursor-pointer"
                 >
                   Hoje (Jun 2026)
                 </button>
                 <button
                   onClick={handleNextMonth}
-                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 transition cursor-pointer"
+                  className="p-1 rounded-lg border border-card-border hover:bg-slate-100 dark:hover:bg-slate-800 text-text-secondary transition cursor-pointer"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -405,7 +503,7 @@ export default function EscalaPage() {
             </div>
 
             {/* Calendar Grid Cells */}
-            <div className={`grid grid-cols-7 bg-surface-muted/5 ${
+            <div className={`grid grid-cols-7 bg-surface-muted/5 border-b border-border ${
               mobileViewMode === 'list' ? 'hidden md:grid' : 'grid'
             }`}>
               {renderCalendarCells()}
@@ -434,7 +532,7 @@ export default function EscalaPage() {
                               confirmed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20',
                               pending: 'bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/20',
                               completed: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
-                              cancelled: 'bg-red-500/10 text-red-650 dark:text-red-400 border border-red-500/20',
+                              cancelled: 'bg-red-500/10 text-red-655 dark:text-red-400 border border-red-500/20',
                             };
                             
                             const statusLabel = {
@@ -494,13 +592,13 @@ export default function EscalaPage() {
         <div className="space-y-6">
           {/* Calendar metrics stats */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5 space-y-4">
-            <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider">Resumo da Grade</h3>
+            <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">Resumo da Grade</h3>
             <div className="grid grid-cols-1 gap-2.5">
-              <div className="bg-background border border-slate-150 dark:border-slate-800/60 p-3 rounded-lg">
+              <div className="bg-background border border-border p-3 rounded-lg">
                 <span className="text-[10px] text-text-muted block uppercase font-medium">Plantões no Mês</span>
-                <span className="text-xl font-extrabold text-slate-800 dark:text-slate-100 mt-1 block">{totalMonthShifts}</span>
+                <span className="text-xl font-extrabold text-text-primary mt-1 block">{totalMonthShifts}</span>
               </div>
-              <div className="bg-background border border-slate-150 dark:border-slate-800/60 p-3 rounded-lg">
+              <div className="bg-background border border-border p-3 rounded-lg">
                 <span className="text-[10px] text-text-muted block uppercase font-medium">Plantões Hoje</span>
                 <span className="text-xl font-extrabold text-primary mt-1 block">{shiftsToday.length}</span>
               </div>
@@ -509,7 +607,7 @@ export default function EscalaPage() {
 
           {/* Plantonistas de Hoje */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-xs font-bold text-slate-950 dark:text-white uppercase tracking-wider mb-3">Escalados Hoje (21/06)</h3>
+            <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-3">Escalados Hoje (21/06)</h3>
             <div className="space-y-2">
               {shiftsToday.length > 0 ? (
                 shiftsToday.map((shift) => {
@@ -523,7 +621,7 @@ export default function EscalaPage() {
                   };
 
                   return (
-                    <div key={shift.id} className="p-3 bg-background border border-slate-150 dark:border-slate-800 rounded-lg text-xs flex justify-between items-start">
+                    <div key={shift.id} className="p-3 bg-background border border-border rounded-lg text-xs flex justify-between items-start">
                       <div>
                         <p className="font-bold text-text-secondary">{doc?.name}</p>
                         <p className="text-[10px] text-text-muted mt-0.5">{doc?.specialty} • {unit?.name}</p>
@@ -550,11 +648,11 @@ export default function EscalaPage() {
       {/* Booking Shift Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="bg-card-bg rounded-xl border border-slate-250 dark:border-slate-800 max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-card-bg rounded-xl border border-border max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-950 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
                   <Stethoscope className="h-4.5 w-4.5 text-primary" />
                   Agendar Novo Plantão
                 </h3>
@@ -562,7 +660,7 @@ export default function EscalaPage() {
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-text-muted hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+                className="text-text-muted hover:text-text-primary text-lg font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -577,7 +675,7 @@ export default function EscalaPage() {
                   value={bookingDocId}
                   onChange={(e) => setBookingDocId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                 >
                   {orgDoctors.map((doc) => (
                     <option key={doc.id} value={doc.id}>
@@ -594,7 +692,7 @@ export default function EscalaPage() {
                   value={bookingUnitId}
                   onChange={(e) => setBookingUnitId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                 >
                   {orgUnits.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -612,7 +710,7 @@ export default function EscalaPage() {
                   required
                   value={bookingDate}
                   onChange={(e) => setBookingDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                 />
               </div>
 
@@ -625,7 +723,7 @@ export default function EscalaPage() {
                     required
                     value={bookingStartTime}
                     onChange={(e) => setBookingStartTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                   />
                 </div>
                 <div className="space-y-1">
@@ -635,7 +733,7 @@ export default function EscalaPage() {
                     required
                     value={bookingEndTime}
                     onChange={(e) => setBookingEndTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                   />
                 </div>
               </div>
@@ -647,7 +745,7 @@ export default function EscalaPage() {
                   <select
                     value={bookingType}
                     onChange={(e) => setBookingType(e.target.value as ShiftType)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                   >
                     <option value="onsite">Presencial</option>
                     <option value="oncall">Sobreaviso</option>
@@ -659,7 +757,7 @@ export default function EscalaPage() {
                   <select
                     value={bookingStatus}
                     onChange={(e) => setBookingStatus(e.target.value as ShiftStatus)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                   >
                     <option value="confirmed">Confirmado</option>
                     <option value="pending">Pendente</option>
@@ -675,22 +773,22 @@ export default function EscalaPage() {
                   value={bookingNotes}
                   onChange={(e) => setBookingNotes(e.target.value)}
                   placeholder="Ex: Levar carimbo, UTI Coronária..."
-                  className="w-full px-3 py-2 text-xs bg-background border border-slate-250 dark:border-slate-800 rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition h-16 resize-none"
+                  className="w-full px-3 py-2 text-xs bg-background border border-border text-text-primary rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition h-16 resize-none"
                 />
               </div>
 
               {/* Footer */}
-              <div className="border-t border-border pt-4 flex items-center justify-end gap-3">
+              <div className="border-t border-border pt-4 flex items-center justify-end gap-3 bg-card-bg">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-card-border text-text-muted dark:text-slate-350 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  className="px-4 py-2 rounded-lg border border-card-border text-text-muted dark:text-text-secondary font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200"
+                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200 cursor-pointer"
                 >
                   Confirmar Plantão
                 </button>
@@ -700,5 +798,17 @@ export default function EscalaPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function EscalaPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-48 items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-teal-500" />
+      </div>
+    }>
+      <EscalaPageContent />
+    </Suspense>
   );
 }
