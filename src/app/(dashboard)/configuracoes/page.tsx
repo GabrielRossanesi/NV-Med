@@ -2,6 +2,7 @@
 
 import { useStore } from '@/store/useStore';
 import { Organization } from '@/types';
+import AccessGuard from '@/components/AccessGuard';
 import {
   Building,
   Wrench,
@@ -332,22 +333,24 @@ export default function SettingsPage() {
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Page Heading */}
-      <div>
-        <h2 className="text-2xl font-bold text-text-primary tracking-tight">Configurações Gerais</h2>
-        <p className="text-sm text-text-muted mt-1">
-          Ajustes cadastrais, regras de compliance, aparência e utilitários da empresa ativa.
-        </p>
-      </div>
+    <AccessGuard requiredPermission="configuracoes">
+      <div className="space-y-6 animate-in fade-in duration-300">
+        {/* Page Heading */}
+        <div>
+          <h2 className="text-2xl font-bold text-text-primary tracking-tight">Configurações Gerais</h2>
+          <p className="text-sm text-text-muted mt-1">
+            Ajustes cadastrais, regras de compliance, aparência e utilitários da empresa ativa.
+          </p>
+        </div>
 
-      <SettingsForm
-        key={activeOrganizationId}
-        activeOrg={activeOrg}
-        activeOrganizationId={activeOrganizationId}
-        updateOrganizationSettings={updateOrganizationSettings}
-        resetToMockData={resetToMockData}
-      />
-    </div>
+        <SettingsForm
+          key={activeOrganizationId}
+          activeOrg={activeOrg}
+          activeOrganizationId={activeOrganizationId}
+          updateOrganizationSettings={updateOrganizationSettings}
+          resetToMockData={resetToMockData}
+        />
+      </div>
+    </AccessGuard>
   );
 }

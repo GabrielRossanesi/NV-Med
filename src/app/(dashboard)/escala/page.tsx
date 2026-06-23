@@ -13,6 +13,8 @@ import {
   Stethoscope,
   Trash2
 } from 'lucide-react';
+import Link from 'next/link';
+import AccessGuard from '@/components/AccessGuard';
 
 function EscalaPageContent() {
   const {
@@ -318,7 +320,38 @@ function EscalaPageContent() {
       </div>
 
       {/* Main Grid: Filters + Calendar on Left, stats on right */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {orgDoctors.length === 0 || orgUnits.length === 0 ? (
+        <div className="bg-card-bg border border-card-border rounded-xl p-12 text-center max-w-xl mx-auto space-y-6 my-8">
+          <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <CalendarDays className="h-8 w-8 animate-pulse" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-text-primary">Escala Não Disponível</h3>
+            <p className="text-xs text-text-muted mt-2 max-w-md mx-auto">
+              Para planejar a grade de escalas de plantões, é necessário ter médicos ativos e unidades de atendimento cadastradas primeiro.
+            </p>
+          </div>
+          <div className="flex justify-center gap-3 mx-auto">
+            {orgDoctors.length === 0 && (
+              <Link
+                href="/medicos"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-text-inverse rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-glow-primary"
+              >
+                Cadastrar primeiro médico
+              </Link>
+            )}
+            {orgUnits.length === 0 && (
+              <Link
+                href="/unidades"
+                className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card-bg hover:bg-state-hover text-text-primary rounded-xl font-semibold text-xs transition duration-200 cursor-pointer"
+              >
+                Cadastrar primeira unidade
+              </Link>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         
         {/* Left Columns (Filters & Monthly Calendar Grid) */}
         <div className="lg:col-span-3 space-y-4">
@@ -644,6 +677,7 @@ function EscalaPageContent() {
         </div>
 
       </div>
+      )}
 
       {/* Booking Shift Modal */}
       {isModalOpen && (
@@ -803,12 +837,14 @@ function EscalaPageContent() {
 
 export default function EscalaPage() {
   return (
-    <Suspense fallback={
-      <div className="flex h-48 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-teal-500" />
-      </div>
-    }>
-      <EscalaPageContent />
-    </Suspense>
+    <AccessGuard requiredPermission="escala">
+      <Suspense fallback={
+        <div className="flex h-48 items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-teal-500" />
+        </div>
+      }>
+        <EscalaPageContent />
+      </Suspense>
+    </AccessGuard>
   );
 }

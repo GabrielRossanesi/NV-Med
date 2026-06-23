@@ -1,13 +1,23 @@
-import { Organization, Doctor, Unit, MedicalDocument, Shift } from '../types';
+import { Organization, Doctor, Unit, MedicalDocument, Shift, UserAccount } from '../types';
 
 export const mockOrganizations: Organization[] = [
   {
     id: 'org-1',
     name: 'NV Med Operadora Demo',
+    razaoSocial: 'NV Med Gestão e Serviços Médicos Ltda',
     cnpj: '12.345.678/0001-90',
     phone: '(11) 98888-7777',
     email: 'contato@nvmed.com.br',
     address: 'Av. Paulista, 1000, Bela Vista, São Paulo - SP',
+    responsavelName: 'Ana Souza',
+    responsavelRole: 'Diretora Médica',
+    city: 'São Paulo',
+    state: 'SP',
+    plan: 'platinum',
+    status: 'active',
+    enabledModules: ['Dashboard', 'Médicos', 'Unidades', 'Documentos', 'Escala', 'Configurações', 'Relatórios'],
+    createdAt: '2025-01-10',
+    lastActive: '2026-06-22',
     settings: {
       specialties: [
         'Clínico Geral',
@@ -31,10 +41,20 @@ export const mockOrganizations: Organization[] = [
   {
     id: 'org-2',
     name: 'Clínica Norte Saúde',
+    razaoSocial: 'Norte Saúde Assistência Médica S/A',
     cnpj: '98.765.432/0001-10',
     phone: '(31) 3245-8800',
     email: 'diretoria@nortesaude.com.br',
     address: 'Av. Norte, 1500, Lourdes, Belo Horizonte - MG',
+    responsavelName: 'Patrício Neves',
+    responsavelRole: 'Diretor Geral',
+    city: 'Belo Horizonte',
+    state: 'MG',
+    plan: 'gold',
+    status: 'active',
+    enabledModules: ['Dashboard', 'Médicos', 'Unidades', 'Documentos', 'Escala'],
+    createdAt: '2025-03-01',
+    lastActive: '2026-06-21',
     settings: {
       specialties: [
         'Clínico Geral',
@@ -54,10 +74,20 @@ export const mockOrganizations: Organization[] = [
   {
     id: 'org-3',
     name: 'Hospital São Lucas',
+    razaoSocial: 'Sociedade Beneficente São Lucas',
     cnpj: '45.678.901/0001-22',
     phone: '(41) 3012-9900',
     email: 'adm@hospitalsaolucas.com.br',
     address: 'Rua São Lucas, 12, Alto da Glória, Curitiba - PR',
+    responsavelName: 'Lucas Oliveira',
+    responsavelRole: 'Superintendente',
+    city: 'Curitiba',
+    state: 'PR',
+    plan: 'silver',
+    status: 'setup',
+    enabledModules: ['Dashboard', 'Médicos', 'Unidades', 'Escala'],
+    createdAt: '2026-02-15',
+    lastActive: '2026-06-20',
     settings: {
       specialties: [
         'Clínico Geral',
@@ -401,3 +431,207 @@ export const mockShifts: Shift[] = [
   { id: 'shift-3-9', doctorId: 'doc-7', unitId: 'unit-5', date: '2026-07-02', startTime: '07:00', endTime: '19:00', type: 'onsite', status: 'confirmed', organizationId: 'org-3' },
   { id: 'shift-3-10', doctorId: 'doc-6', unitId: 'unit-5', date: '2026-07-04', startTime: '08:00', endTime: '20:00', type: 'oncall', status: 'confirmed', organizationId: 'org-3' }
 ];
+
+export const mockUsers: UserAccount[] = [
+  // Admin SaaS Profiles
+  {
+    id: 'user-gabriel',
+    name: 'Gabriel Moraes',
+    email: 'gabriel.moraes@nvmed.com.br',
+    phone: '(11) 99999-0001',
+    type: 'saas_admin',
+    organizationId: null,
+    role: 'CEO',
+    status: 'active',
+    createdAt: '2026-01-10',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-camila',
+    name: 'Camila Torres',
+    email: 'camila.torres@nvmed.com.br',
+    phone: '(11) 99999-0002',
+    type: 'saas_admin',
+    organizationId: null,
+    role: 'Gerente',
+    status: 'active',
+    createdAt: '2026-01-12',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-rafael',
+    name: 'Rafael Lima',
+    email: 'rafael.lima@nvmed.com.br',
+    phone: '(11) 99999-0003',
+    type: 'saas_admin',
+    organizationId: null,
+    role: 'Coordenador',
+    status: 'active',
+    createdAt: '2026-01-15',
+    lastActive: '2026-06-21',
+    avatar: ''
+  },
+  {
+    id: 'user-beatriz',
+    name: 'Beatriz Nunes',
+    email: 'beatriz.nunes@nvmed.com.br',
+    phone: '(11) 99999-0004',
+    type: 'saas_admin',
+    organizationId: null,
+    role: 'Administrativo',
+    status: 'active',
+    createdAt: '2026-02-01',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-marcelo',
+    name: 'Marcelo Prado',
+    email: 'marcelo.prado@nvmed.com.br',
+    phone: '(11) 99999-0005',
+    type: 'saas_admin',
+    organizationId: null,
+    role: 'Financeiro',
+    status: 'active',
+    createdAt: '2026-02-10',
+    lastActive: '2026-06-18',
+    avatar: ''
+  },
+  {
+    id: 'user-helena',
+    name: 'Helena Duarte',
+    email: 'helena.duarte@nvmed.com.br',
+    phone: '(11) 99999-0006',
+    type: 'saas_admin',
+    organizationId: null,
+    role: 'Jurídico',
+    status: 'active',
+    createdAt: '2026-02-15',
+    lastActive: '2026-06-19',
+    avatar: ''
+  },
+
+  // Tenant/Company Profiles (Linked to org-1 by default for demo)
+  {
+    id: 'user-ana',
+    name: 'Ana Souza',
+    email: 'ana.souza@nvmed.com.br',
+    phone: '(11) 98888-0011',
+    type: 'tenant_user',
+    organizationId: 'org-1',
+    role: 'Diretor',
+    status: 'active',
+    createdAt: '2026-01-20',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-carla',
+    name: 'Carla Rocha',
+    email: 'carla.rocha@nvmed.com.br',
+    phone: '(11) 98888-0012',
+    type: 'tenant_user',
+    organizationId: 'org-1',
+    role: 'Gerente',
+    status: 'active',
+    createdAt: '2026-01-22',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-renata',
+    name: 'Renata Lima',
+    email: 'renata.lima@nvmed.com.br',
+    phone: '(11) 98888-0013',
+    type: 'tenant_user',
+    organizationId: 'org-1',
+    role: 'Coordenador de Escalas',
+    status: 'active',
+    createdAt: '2026-01-25',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-paulo',
+    name: 'Paulo Mendes',
+    email: 'paulo.mendes@nvmed.com.br',
+    phone: '(11) 98888-0014',
+    type: 'tenant_user',
+    organizationId: 'org-1',
+    role: 'Escalista',
+    status: 'active',
+    createdAt: '2026-02-05',
+    lastActive: '2026-06-22',
+    avatar: ''
+  },
+  {
+    id: 'user-bruno',
+    name: 'Bruno Almeida',
+    email: 'bruno.almeida@nvmed.com.br',
+    phone: '(11) 98888-0015',
+    type: 'tenant_user',
+    organizationId: 'org-1',
+    role: 'Financeiro',
+    status: 'active',
+    createdAt: '2026-02-12',
+    lastActive: '2026-06-20',
+    avatar: ''
+  },
+  {
+    id: 'user-juliana',
+    name: 'Juliana Castro',
+    email: 'juliana.castro@nvmed.com.br',
+    phone: '(11) 98888-0016',
+    type: 'tenant_user',
+    organizationId: 'org-1',
+    role: 'Jurídico',
+    status: 'active',
+    createdAt: '2026-02-20',
+    lastActive: '2026-06-21',
+    avatar: ''
+  },
+
+  // Other tenants for list checking
+  {
+    id: 'user-diego',
+    name: 'Diego Santos',
+    email: 'diego.santos@nortesaude.com.br',
+    phone: '(31) 97777-1111',
+    type: 'tenant_user',
+    organizationId: 'org-2',
+    role: 'Escalista',
+    status: 'active',
+    createdAt: '2026-03-01',
+    lastActive: '2026-06-18',
+    avatar: ''
+  },
+  {
+    id: 'user-patricia',
+    name: 'Patrícia Neves',
+    email: 'patricia.neves@nortesaude.com.br',
+    phone: '(31) 97777-2222',
+    type: 'tenant_user',
+    organizationId: 'org-2',
+    role: 'Diretor',
+    status: 'active',
+    createdAt: '2026-03-05',
+    lastActive: '2026-06-20',
+    avatar: ''
+  },
+  {
+    id: 'user-lucas',
+    name: 'Lucas Oliveira',
+    email: 'lucas.oliveira@hospitalsaolucas.com.br',
+    phone: '(41) 96666-3333',
+    type: 'tenant_user',
+    organizationId: 'org-3',
+    role: 'Gerente',
+    status: 'active',
+    createdAt: '2026-03-10',
+    lastActive: '2026-06-22',
+    avatar: ''
+  }
+];
+

@@ -8,9 +8,9 @@ import {
   Clock,
   AlertTriangle,
   ChevronRight,
-  TrendingUp,
   FileCheck2,
-  UserCheck
+  UserCheck,
+  Settings
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -73,6 +73,8 @@ export default function DashboardPage() {
     })
     .sort((a, b) => b.count - a.count) || [];
 
+  const isOrgEmpty = orgDoctors.length === 0 && orgUnits.length === 0;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Welcome Heading */}
@@ -85,271 +87,315 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Doctors */}
-        <Link
-          href="/medicos"
-          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
-        >
+      {isOrgEmpty ? (
+        <div className="bg-card-bg border border-border p-8 rounded-2xl shadow-soft text-center max-w-3xl mx-auto space-y-6 my-8">
+          <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Building2 className="h-8 w-8 animate-pulse" />
+          </div>
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Corpo Clínico</span>
-            <h3 className="text-2xl font-bold text-text-primary mt-1">{totalDoctors}</h3>
-            <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-              <UserCheck className="h-3 w-3" />
-              {activeDoctors} ativos • Ver médicos
-            </span>
+            <h3 className="text-xl font-bold text-text-primary">Bem-vindo ao NV Med!</h3>
+            <p className="text-sm text-text-muted mt-2 max-w-md mx-auto">
+              Para começar a gerenciar o corpo clínico, as escalas de plantões e a conformidade de documentos, cadastre os primeiros elementos da sua empresa.
+            </p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-200">
-            <Users className="h-5 w-5" />
-          </div>
-        </Link>
 
-        {/* Pending Docs */}
-        <Link
-          href="/documentos?status=critical"
-          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-medium group"
-        >
-          <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pendências Documentais</span>
-            <h3 className={`text-2xl font-bold mt-1 ${pendingDocsCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-text-primary'}`}>{pendingDocsCount}</h3>
-            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-              <FileCheck2 className="h-3 w-3" />
-              {pendingDocsCount > 0 ? 'Resolver pendências' : 'Tudo regularizado'}
-            </span>
-          </div>
-          <div className={`h-10 w-10 rounded-lg flex items-center justify-center transition-colors duration-200 ${pendingDocsCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-text-inverse' : 'bg-surface-muted text-text-muted group-hover:bg-text-muted group-hover:text-text-inverse'}`}>
-            <AlertTriangle className="h-5 w-5" />
-          </div>
-        </Link>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+            <Link
+              href="/medicos"
+              className="flex flex-col items-center p-4 bg-surface-muted border border-border hover:border-primary/45 rounded-xl transition duration-150 text-center cursor-pointer group"
+            >
+              <Users className="h-6 w-6 text-primary mb-2 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-text-primary">Corpo Clínico</span>
+              <span className="text-[10px] text-text-muted mt-1">Cadastrar primeiro médico</span>
+            </Link>
 
-        {/* Units */}
-        <Link
-          href="/unidades?status=active"
-          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
-        >
-          <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Unidades Ativas</span>
-            <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits}</h3>
-            <span className="text-[10px] text-text-muted font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-              <Building2 className="h-3 w-3" />
-              Gerenciar unidades
-            </span>
-          </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-200">
-            <Building2 className="h-5 w-5" />
-          </div>
-        </Link>
+            <Link
+              href="/unidades"
+              className="flex flex-col items-center p-4 bg-surface-muted border border-border hover:border-primary/45 rounded-xl transition duration-150 text-center cursor-pointer group"
+            >
+              <Building2 className="h-6 w-6 text-primary mb-2 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-text-primary">Unidades</span>
+              <span className="text-[10px] text-text-muted mt-1">Cadastrar primeira unidade</span>
+            </Link>
 
-        {/* Monthly Shifts */}
-        <Link
-          href="/escala"
-          className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
-        >
-          <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Plantões do Mês</span>
-            <h3 className="text-2xl font-bold text-text-primary mt-1">{shiftsThisMonth}</h3>
-            <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-              <TrendingUp className="h-3 w-3" />
-              {shiftsToday} hoje • Abrir escala
-            </span>
+            <Link
+              href="/configuracoes"
+              className="flex flex-col items-center p-4 bg-surface-muted border border-border hover:border-primary/45 rounded-xl transition duration-150 text-center cursor-pointer group"
+            >
+              <Settings className="h-6 w-6 text-primary mb-2 group-hover:scale-110 transition" />
+              <span className="text-xs font-bold text-text-primary">Configurações</span>
+              <span className="text-[10px] text-text-muted mt-1">Ajustar dados da empresa</span>
+            </Link>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-200">
-            <Calendar className="h-5 w-5" />
-          </div>
-        </Link>
-      </div>
-
-      {/* Main Section Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Columns (Upcoming Shifts + Unit summary) */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Upcoming Shifts */}
-          <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden">
-            <div className="p-5 border-b border-border flex items-center justify-between">
+        </div>
+      ) : (
+        <>
+          {/* KPI Stats Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Doctors */}
+            <Link
+              href="/medicos"
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+            >
               <div>
-                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Próximos Plantões</h3>
-                <p className="text-[11px] text-text-muted">Plantões agendados a partir de hoje</p>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Corpo Clínico</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{totalDoctors}</h3>
+                <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
+                  <UserCheck className="h-3 w-3" />
+                  {activeDoctors} ativos • Ver médicos
+                </span>
               </div>
-              <Link href="/escala" className="text-xs font-semibold text-primary flex items-center gap-0.5 hover:underline">
-                Escala completa
-                <ChevronRight className="h-3 w-3" />
-              </Link>
-            </div>
+              <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
+                <Users className="h-5 w-5" />
+              </div>
+            </Link>
+
+            {/* Document Alerts */}
+            <Link
+              href="/documentos?status=critical"
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
+            >
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pendências Documentais</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{pendingDocsCount}</h3>
+                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${pendingDocsCount > 0 ? 'text-danger group-hover:underline' : 'text-text-muted'}`}>
+                  <AlertTriangle className="h-3 w-3" />
+                  {pendingDocsCount > 0 ? 'Exige atenção • Resolver pendências' : 'Conformidade 100%'}
+                </span>
+              </div>
+              <div className={`p-2.5 rounded-xl transition-colors ${pendingDocsCount > 0 ? 'bg-danger/10 text-danger group-hover:bg-danger group-hover:text-text-inverse' : 'bg-surface-muted text-text-muted'}`}>
+                <FileCheck2 className="h-5 w-5" />
+              </div>
+            </Link>
+
+            {/* Active Units */}
+            <Link
+              href="/unidades?status=active"
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+            >
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Unidades Ativas</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits}</h3>
+                <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
+                  <Building2 className="h-3 w-3" />
+                  Gerenciar unidades
+                </span>
+              </div>
+              <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
+                <Building2 className="h-5 w-5" />
+              </div>
+            </Link>
+
+            {/* Month Shifts */}
+            <Link
+              href="/escala"
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+            >
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Plantões do Mês</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{shiftsThisMonth}</h3>
+                <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
+                  <Clock className="h-3 w-3" />
+                  {shiftsToday} hoje • Abrir escala
+                </span>
+              </div>
+              <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
+                <Calendar className="h-5 w-5" />
+              </div>
+            </Link>
+          </div>
+
+          {/* Main Operational grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <div className="divide-y divide-border">
-              {upcomingShifts.length > 0 ? (
-                upcomingShifts.map((shift) => {
-                  const doctor = orgDoctors.find((d) => d.id === shift.doctorId);
-                  const unit = orgUnits.find((u) => u.id === shift.unitId);
-                  
-                  // Status badge style
-                  const statusColors = {
-                    confirmed: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
-                    pending: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
-                    completed: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400',
-                    cancelled: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400',
-                  };
-
-                  return (
-                    <Link
-                      key={shift.id}
-                      href={`/escala?date=${shift.date}&doctorId=${shift.doctorId}`}
-                      className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                          {doctor?.name.charAt(4) || 'D'}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-text-secondary group-hover:text-primary transition-colors">{doctor?.name}</p>
-                          <p className="text-[10px] text-text-muted">{doctor?.specialty} • {unit?.name}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-semibold text-text-secondary">
-                            {new Date(shift.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                          </p>
-                          <p className="text-[10px] text-text-muted flex items-center gap-0.5 justify-end">
-                            <Clock className="h-2.5 w-2.5" />
-                            {shift.startTime} - {shift.endTime}
-                          </p>
-                        </div>
-
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${statusColors[shift.status]}`}>
-                          {shift.status === 'confirmed' ? 'Confirmado' : shift.status === 'pending' ? 'Pendente' : 'Concluído'}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })
-              ) : (
-                <div className="p-8 text-center text-text-muted">
-                  Nenhum plantão agendado nos próximos dias.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Unit Breakdown */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Plantões por Unidade no Mês</h3>
-            <div className="space-y-2">
-              {unitsBreakdown.map((ub) => {
-                const total = shiftsThisMonth || 1;
-                const percentage = Math.round((ub.count / total) * 100);
-                const unit = orgUnits.find((u) => u.name === ub.name);
-                return (
-                  <Link
-                    key={ub.name}
-                    href={unit ? `/escala?unitId=${unit.id}` : '/escala'}
-                    className="block space-y-1 p-2.5 rounded-xl hover:bg-slate-50/50 dark:hover:bg-slate-800/10 border border-transparent hover:border-border transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-text-secondary truncate pr-4 group-hover:text-primary transition-colors">{ub.name}</span>
-                      <span className="font-bold text-text-primary flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
-                    </div>
-                    <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </Link>
-                );
-              })}
-              {unitsBreakdown.length === 0 && (
-                <p className="text-xs text-text-muted text-center py-4">Nenhuma unidade com plantão agendado.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column (Alerts + Specialties) */}
-        <div className="space-y-8">
-          {/* Compliance Alerts */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-3">Pendências Críticas</h3>
-            <p className="text-[11px] text-text-muted mb-4">Médicos com documentação irregular</p>
-
-            <div className="space-y-3">
-              {doctorsWithAlerts.length > 0 ? (
-                doctorsWithAlerts.map((doc) => {
-                  const urgentCount = doc.alerts.filter((a) => a.status === 'expired' || a.status === 'rejected').length;
-                  return (
-                    <Link
-                      key={doc.id}
-                      href={`/documentos?doctorId=${doc.id}`}
-                      className="block p-3 rounded-xl bg-background border border-border hover:border-amber-400 dark:hover:border-amber-450 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all duration-150 cursor-pointer shadow-sm hover:shadow-md group"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-text-secondary truncate group-hover:text-primary transition-colors">{doc.name}</p>
-                          <p className="text-[10px] text-text-muted mt-0.5">CRM {doc.crm}-{doc.crmUf} • {doc.specialty}</p>
-                        </div>
-                        {urgentCount > 0 ? (
-                          <span className="flex-shrink-0 text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                            Crítico
-                          </span>
-                        ) : (
-                          <span className="flex-shrink-0 text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-450 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                            Análise
-                          </span>
-                        )}
-                      </div>
-                      
-                      {/* Sub checklist warning details */}
-                      <div className="mt-2 text-[10px] text-amber-600 dark:text-amber-400 flex flex-wrap gap-x-2 gap-y-0.5">
-                        {doc.alerts.slice(0, 2).map((alert) => (
-                          <span key={alert.id} className="flex items-center gap-0.5">
-                            • {alert.name} ({alert.status === 'expired' ? 'Vencido' : alert.status === 'rejected' ? 'Reprovado' : 'Em Análise'})
-                          </span>
-                        ))}
-                        {doc.alerts.length > 2 && (
-                          <span>e mais {doc.alerts.length - 2}</span>
-                        )}
-                      </div>
-                    </Link>
-                  );
-                })
-              ) : (
-                <div className="py-6 text-center text-text-muted text-xs">
-                  Sem irregularidades críticas de documentação.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Specialties Summary */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Corpo Clínico por Especialidade</h3>
-            <div className="divide-y divide-border">
-              {specialtiesBreakdown.map((sb) => (
-                <Link
-                  key={sb.name}
-                  href={`/medicos?specialty=${encodeURIComponent(sb.name)}`}
-                  className="py-2.5 flex items-center justify-between text-xs first:pt-0 last:pb-0 group/spec hover:bg-slate-50 dark:hover:bg-slate-800/20 px-1 rounded transition cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-primary group-hover/spec:scale-125 transition-transform" />
-                    <span className="font-medium text-text-secondary group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">{sb.name}</span>
-                  </div>
-                  <span className="font-bold text-text-primary bg-surface-muted px-2 py-0.5 rounded group-hover/spec:bg-primary/10 group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">
-                    {sb.count}
-                  </span>
+            {/* Upcoming Shifts list */}
+            <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden lg:col-span-2 flex flex-col justify-between">
+              <div className="p-5 border-b border-border flex items-center justify-between">
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Próximos Plantões Escalados</h3>
+                <Link href="/escala" className="text-xs text-primary font-semibold hover:underline flex items-center gap-0.5">
+                  Ver escala completa <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
-              ))}
-              {specialtiesBreakdown.length === 0 && (
-                <p className="text-xs text-text-muted text-center py-4">Nenhuma especialidade registrada.</p>
-              )}
+              </div>
+
+              <div className="divide-y divide-border">
+                {upcomingShifts.length > 0 ? (
+                  upcomingShifts.map((shift) => {
+                    const doctor = orgDoctors.find((d) => d.id === shift.doctorId);
+                    const unit = orgUnits.find((u) => u.id === shift.unitId);
+
+                    const statusColors = {
+                      confirmed: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
+                      pending: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
+                      completed: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400',
+                      cancelled: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400',
+                    };
+
+                    return (
+                      <Link
+                        key={shift.id}
+                        href={`/escala?date=${shift.date}&doctorId=${shift.doctorId}`}
+                        className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
+                            {doctor?.name.charAt(4) || 'D'}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-text-secondary group-hover:text-primary transition-colors">{doctor?.name}</p>
+                            <p className="text-[10px] text-text-muted">{doctor?.specialty} • {unit?.name}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="font-semibold text-text-secondary">
+                              {new Date(shift.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            </p>
+                            <p className="text-[10px] text-text-muted flex items-center gap-0.5 justify-end">
+                              <Clock className="h-2.5 w-2.5" />
+                              {shift.startTime} - {shift.endTime}
+                            </p>
+                          </div>
+
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${statusColors[shift.status]}`}>
+                            {shift.status === 'confirmed' ? 'Confirmado' : shift.status === 'pending' ? 'Pendente' : 'Concluído'}
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center text-text-muted">
+                    Nenhum plantão agendado nos próximos dias.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Unit Breakdown */}
+            <div className="bg-card-bg rounded-xl border border-card-border p-5">
+              <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Plantões por Unidade no Mês</h3>
+              <div className="space-y-2">
+                {unitsBreakdown.map((ub) => {
+                  const total = shiftsThisMonth || 1;
+                  const percentage = Math.round((ub.count / total) * 100);
+                  const unit = orgUnits.find((u) => u.name === ub.name);
+                  return (
+                    <Link
+                      key={ub.name}
+                      href={unit ? `/escala?unitId=${unit.id}` : '/escala'}
+                      className="block space-y-1 p-2.5 rounded-xl hover:bg-slate-50/50 dark:hover:bg-slate-800/10 border border-transparent hover:border-border transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-text-secondary truncate pr-4 group-hover:text-primary transition-colors">{ub.name}</span>
+                        <span className="font-bold text-text-primary flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
+                      </div>
+                      <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </Link>
+                  );
+                })}
+                {unitsBreakdown.length === 0 && (
+                  <p className="text-xs text-text-muted text-center py-8">Nenhum plantão registrado este mês.</p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-      </div>
+          {/* Bottom Operational grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Physicians with Document Alerts */}
+            <div className="bg-card-bg rounded-xl border border-card-border p-5 lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Médicos com Documentação Irregular</h3>
+                <Link href="/documentos?status=critical" className="text-xs text-primary font-semibold hover:underline flex items-center gap-0.5">
+                  Ver pendências <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+
+              <div className="space-y-3">
+                {doctorsWithAlerts.length > 0 ? (
+                  doctorsWithAlerts.map((doc) => {
+                    const expiredCount = doc.alerts.filter((d) => d.status === 'expired').length;
+                    const rejectedCount = doc.alerts.filter((d) => d.status === 'rejected').length;
+                    const analyzingCount = doc.alerts.filter((d) => d.status === 'analyzing' || d.status === 'sent').length;
+
+                    return (
+                      <Link
+                        key={doc.id}
+                        href={`/documentos?doctorId=${doc.id}`}
+                        className="flex items-center justify-between p-3 bg-surface-muted/50 border border-border hover:border-primary/30 rounded-xl transition duration-150 group cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                            {doc.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-text-primary group-hover:text-primary transition-colors">{doc.name}</p>
+                            <p className="text-[10px] text-text-muted">{doc.specialty} • CRM {doc.crm}-{doc.crmUf}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {expiredCount > 0 && (
+                            <span className="px-2 py-0.5 bg-red-500/10 text-red-650 dark:text-red-400 rounded text-[9px] font-bold">
+                              {expiredCount} Vencido{expiredCount > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {rejectedCount > 0 && (
+                            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-500 rounded text-[9px] font-bold">
+                              {rejectedCount} Reprovado{rejectedCount > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {analyzingCount > 0 && (
+                            <span className="px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded text-[9px] font-bold">
+                              {analyzingCount} Em Análise
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-6 text-xs text-text-muted bg-surface-muted rounded-xl border border-dashed border-border">
+                    Não há médicos com pendências documentais ativas.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Specialty Breakdown */}
+            <div className="bg-card-bg rounded-xl border border-card-border p-5">
+              <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Corpo Clínico por Especialidade</h3>
+              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                {specialtiesBreakdown.map((sb) => (
+                  <Link
+                    key={sb.name}
+                    href={`/medicos?specialty=${sb.name}`}
+                    className="flex items-center justify-between text-xs p-2 rounded-lg hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors group/spec cursor-pointer border border-transparent hover:border-border"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-primary group-hover/spec:scale-125 transition-transform" />
+                      <span className="font-medium text-text-secondary group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">{sb.name}</span>
+                    </div>
+                    <span className="font-bold text-text-primary bg-surface-muted px-2 py-0.5 rounded group-hover/spec:bg-primary/10 group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">
+                      {sb.count}
+                    </span>
+                  </Link>
+                ))}
+                {specialtiesBreakdown.length === 0 && (
+                  <p className="text-xs text-text-muted text-center py-4">Nenhuma especialidade registrada.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

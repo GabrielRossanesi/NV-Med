@@ -2,6 +2,7 @@
 
 import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
+import AccessGuard from '@/components/AccessGuard';
 import {
   Building,
   Users,
@@ -39,7 +40,8 @@ export default function CompaniesPage() {
   const grandTotalShifts = shifts.length;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <AccessGuard requiredPermission="empresas">
+      <div className="space-y-8 animate-in fade-in duration-300">
       {/* Page Heading */}
       <div>
         <h2 className="text-2xl font-bold text-text-primary tracking-tight">
@@ -220,5 +222,6 @@ export default function CompaniesPage() {
         </div>
       </div>
     </div>
+    </AccessGuard>
   );
 }

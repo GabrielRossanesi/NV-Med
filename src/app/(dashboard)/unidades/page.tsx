@@ -17,6 +17,7 @@ import {
   MapPin
 } from 'lucide-react';
 import Link from 'next/link';
+import AccessGuard from '@/components/AccessGuard';
 
 function UnitsPageContent() {
   const {
@@ -227,82 +228,124 @@ function UnitsPageContent() {
         </div>
       )}
 
-      {/* Units Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUnits.length > 0 ? (
-          filteredUnits.map((unit) => (
-            <div
-              key={unit.id}
-              className="bg-card-bg rounded-xl border border-card-border p-5 flex flex-col justify-between hover:border-primary/30 dark:hover:border-teal-555/20 transition duration-150"
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="bg-surface-muted p-2 rounded-lg text-text-muted">
-                      <Building2 className="h-5 w-5" />
+      {orgUnits.length === 0 ? (
+        <div className="bg-card-bg border border-card-border rounded-xl p-12 text-center max-w-xl mx-auto space-y-6 my-8">
+          <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Building2 className="h-8 w-8" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-text-primary">Nenhuma Unidade Cadastrada</h3>
+            <p className="text-xs text-text-muted mt-2 max-w-md mx-auto">
+              Esta empresa ainda não possui unidades de atendimento configuradas. Comece adicionando um hospital, UPA ou pronto atendimento.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-sm mx-auto"
+          >
+            <Plus className="h-4 w-4" />
+            Cadastrar primeira unidade
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Filters Bar */}
+          <div className="bg-card-bg p-4 rounded-xl border border-card-border flex flex-col md:flex-row items-center gap-4">
+            <div className="relative w-full md:flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
+              <input
+                type="text"
+                placeholder="Buscar por nome da clínica, CNPJ ou cidade..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+              />
+            </div>
+
+            <div className="relative w-full md:w-44">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+              >
+                <option value="all">Todos Status</option>
+                <option value="active">Ativa</option>
+                <option value="inactive">Inativa</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Grid of cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredUnits.length > 0 ? (
+              filteredUnits.map((unit) => (
+                <div key={unit.id} className="bg-card-bg border border-card-border rounded-xl p-5 flex flex-col justify-between hover:border-primary/20 transition duration-300">
+                  <div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <span className="text-[9px] uppercase font-bold text-text-muted tracking-wide">{getTypeLabel(unit.type)}</span>
+                        <h3 className="text-sm font-bold text-text-primary mt-0.5 truncate">{unit.name}</h3>
+                        <p className="text-[10px] text-text-muted mt-0.5 font-mono">CNPJ: {unit.cnpj}</p>
+                      </div>
+                      {getStatusBadge(unit.status)}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-text-primary leading-tight">{unit.name}</h4>
-                      <span className="text-[10px] text-text-muted font-semibold">{getTypeLabel(unit.type)}</span>
+
+                    {/* Local Info */}
+                    <div className="mt-4 space-y-2 text-xs text-text-secondary">
+                      <p className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-text-muted flex-shrink-0" />
+                        <span className="truncate">{unit.address}, {unit.city} - {unit.state}</span>
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-text-muted flex-shrink-0" />
+                        <span>Responsável: {unit.manager}</span>
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-text-muted flex-shrink-0" />
+                        <span>{unit.phone}</span>
+                      </p>
+                    </div>
+
+                    {/* Specialties badges */}
+                    <div className="mt-4 flex flex-wrap gap-1">
+                      {unit.specialties.map((spec) => (
+                        <span key={spec} className="bg-background border border-card-border text-[10px] text-text-muted px-2 py-0.5 rounded">
+                          {spec}
+                        </span>
+                      ))}
+                      {unit.specialties.length === 0 && (
+                        <span className="text-[10px] text-text-muted italic">Nenhuma especialidade vinculada</span>
+                      )}
                     </div>
                   </div>
-                  {getStatusBadge(unit.status)}
-                </div>
 
-                {/* Info summary */}
-                <div className="mt-4 space-y-2 text-xs text-text-secondary">
-                  <p className="flex items-start gap-2">
-                    <MapPin className="h-4 w-4 text-text-muted flex-shrink-0" />
-                    <span>{unit.address}, {unit.city} - {unit.state}</span>
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-text-muted flex-shrink-0" />
-                    <span>Responsável: {unit.manager}</span>
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-text-muted flex-shrink-0" />
-                    <span>{unit.phone}</span>
-                  </p>
+                  {/* Card actions */}
+                  <div className="mt-6 pt-4 border-t border-border flex items-center justify-end gap-2">
+                    <Link
+                      href={`/unidades/${unit.id}`}
+                      className="px-3 py-1.5 rounded bg-surface-muted hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-900 border border-border text-text-secondary font-semibold text-xs flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Ver Detalhes
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(unit.id)}
+                      className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer"
+                      title="Excluir"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-
-                {/* Specialties badges */}
-                <div className="mt-4 flex flex-wrap gap-1">
-                  {unit.specialties.map((spec) => (
-                    <span key={spec} className="bg-background border border-card-border text-[10px] text-text-muted px-2 py-0.5 rounded">
-                      {spec}
-                    </span>
-                  ))}
-                  {unit.specialties.length === 0 && (
-                    <span className="text-[10px] text-text-muted italic">Nenhuma especialidade vinculada</span>
-                  )}
-                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-12 text-center text-text-muted text-xs">
+                Nenhuma unidade cadastrada correspondente.
               </div>
-
-              {/* Card actions */}
-              <div className="mt-6 pt-4 border-t border-border flex items-center justify-end gap-2">
-                <Link
-                  href={`/unidades/${unit.id}`}
-                  className="px-3 py-1.5 rounded bg-surface-muted hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-900 border border-border text-text-secondary font-semibold text-xs flex items-center gap-1 transition"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  Ver Detalhes
-                </Link>
-                <button
-                  onClick={() => handleDelete(unit.id)}
-                  className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer"
-                  title="Excluir"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="col-span-full py-12 text-center text-text-muted text-xs">
-            Nenhuma unidade cadastrada correspondente.
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Creation Modal */}
       {isModalOpen && (
@@ -474,12 +517,14 @@ function UnitsPageContent() {
 
 export default function UnitsPage() {
   return (
-    <Suspense fallback={
-      <div className="flex h-48 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-teal-500" />
-      </div>
-    }>
-      <UnitsPageContent />
-    </Suspense>
+    <AccessGuard requiredPermission="unidades">
+      <Suspense fallback={
+        <div className="flex h-48 items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-teal-500" />
+        </div>
+      }>
+        <UnitsPageContent />
+      </Suspense>
+    </AccessGuard>
   );
 }

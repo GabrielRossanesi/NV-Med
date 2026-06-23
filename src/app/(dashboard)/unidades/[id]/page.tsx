@@ -2,6 +2,7 @@
 
 import { use } from 'react';
 import { useStore } from '@/store/useStore';
+import AccessGuard from '@/components/AccessGuard';
 import {
   Building2,
   ArrowLeft,
@@ -28,15 +29,17 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
 
   if (!unit) {
     return (
-      <div className="text-center py-12">
-        <Building2 className="h-10 w-10 text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-bold text-text-secondary">Unidade não encontrada</h3>
-        <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
-        <Link href="/unidades" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para listagem
-        </Link>
-      </div>
+      <AccessGuard requiredPermission="unidades">
+        <div className="text-center py-12">
+          <Building2 className="h-10 w-10 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-text-secondary">Unidade não encontrada</h3>
+          <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
+          <Link href="/unidades" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para listagem
+          </Link>
+        </div>
+      </AccessGuard>
     );
   }
 
@@ -58,7 +61,8 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <AccessGuard requiredPermission="unidades">
+      <div className="space-y-6 animate-in fade-in duration-300">
       {/* Back Navigation & Title */}
       <div>
         <Link href="/unidades" className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
@@ -230,5 +234,6 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
 
       </div>
     </div>
+    </AccessGuard>
   );
 }

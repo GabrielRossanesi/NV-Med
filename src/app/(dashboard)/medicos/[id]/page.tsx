@@ -3,6 +3,7 @@
 import { use, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { DocumentStatus, DocumentType, DoctorStatus } from '@/types';
+import AccessGuard from '@/components/AccessGuard';
 import {
   ArrowLeft,
   Calendar,
@@ -44,15 +45,17 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
   if (!doctor) {
     return (
-      <div className="text-center py-12">
-        <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-bold text-text-secondary">Médico não encontrado</h3>
-        <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
-        <Link href="/medicos" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para listagem
-        </Link>
-      </div>
+      <AccessGuard requiredPermission="medicos">
+        <div className="text-center py-12">
+          <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-text-secondary">Médico não encontrado</h3>
+          <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
+          <Link href="/medicos" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para listagem
+          </Link>
+        </div>
+      </AccessGuard>
     );
   }
 
@@ -121,7 +124,8 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     .slice(0, 5);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <AccessGuard requiredPermission="medicos">
+      <div className="space-y-6 animate-in fade-in duration-300">
       {/* Back navigation */}
       <div>
         <Link href="/medicos" className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
@@ -367,5 +371,6 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
       </div>
     </div>
+    </AccessGuard>
   );
 }

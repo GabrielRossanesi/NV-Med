@@ -6,6 +6,16 @@ export interface Organization {
   phone?: string;
   email?: string;
   address?: string;
+  razaoSocial?: string;
+  responsavelName?: string;
+  responsavelRole?: string;
+  city?: string;
+  state?: string;
+  plan?: 'bronze' | 'silver' | 'gold' | 'platinum';
+  status?: 'active' | 'setup' | 'suspended' | 'cancelled';
+  enabledModules?: string[];
+  createdAt?: string;
+  lastActive?: string;
   settings: {
     specialties: string[];
     requiredDocuments: {
@@ -94,3 +104,18 @@ export interface Shift {
   notes?: string;
   organizationId: string;
 }
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  type: 'saas_admin' | 'tenant_user';
+  organizationId: string | null; // null if saas_admin
+  role: string; // e.g. CEO, Gerente, Diretor, Escalista, etc.
+  status: 'active' | 'pending' | 'inactive';
+  createdAt: string;
+  lastActive?: string;
+  avatar?: string;
+}
+

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType } from '../types';
-import { mockOrganizations, mockDoctors, mockUnits, mockDocuments, mockShifts } from '../data/mockData';
+import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '../types';
+import { mockOrganizations, mockDoctors, mockUnits, mockDocuments, mockShifts, mockUsers } from '../data/mockData';
 
 interface NVMedState {
   activeOrganizationId: string;
@@ -11,15 +11,15 @@ interface NVMedState {
   documents: MedicalDocument[];
   shifts: Shift[];
   
-  // Auth simulation
-  currentUser: {
-    name: string;
-    role: string;
-    avatar?: string;
-  };
+  // Auth & Admin simulation
+  currentUser: UserAccount;
+  users: UserAccount[];
+  isSimulating: boolean;
+  simulatedOrganizationId: string | null;
 
   // Actions
   setActiveOrganizationId: (id: string) => void;
+  setCurrentUser: (userId: string) => void;
   
   // Doctor CRUD
   addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>) => void;
@@ -41,8 +41,18 @@ interface NVMedState {
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => void;
   
   // Org actions
+  addOrganization: (org: Omit<Organization, 'id'>) => void;
+  updateOrganization: (org: Organization) => void;
   updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => void;
   resetToMockData: () => void;
+
+  // User actions
+  addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>) => void;
+  updateUser: (user: UserAccount) => void;
+
+  // Simulation actions
+  startSimulation: (orgId: string) => void;
+  stopSimulation: () => void;
   
   // Theme state
   theme: 'light' | 'dark';
@@ -58,13 +68,28 @@ export const useStore = create<NVMedState>()(
       units: mockUnits,
       documents: mockDocuments,
       shifts: mockShifts,
-      currentUser: {
-        name: 'Dr. Gabriel Moraes',
-        role: 'Diretor Médico',
-        avatar: ''
-      },
+      users: mockUsers,
+      currentUser: mockUsers[0], // Gabriel Moraes CEO
+      isSimulating: false,
+      simulatedOrganizationId: null,
 
       setActiveOrganizationId: (id) => set({ activeOrganizationId: id }),
+
+      setCurrentUser: (userId) => {
+        const user = get().users.find((u) => u.id === userId);
+        if (user) {
+          const updates: Partial<NVMedState> = {
+            currentUser: user,
+            // If they are tenant_user, force to their organization and turn off simulation
+            ...(user.type === 'tenant_user' ? {
+              activeOrganizationId: user.organizationId || 'org-1',
+              isSimulating: false,
+              simulatedOrganizationId: null
+            } : {})
+          };
+          set(updates);
+        }
+      },
 
       addDoctor: (doctorData) => {
         const orgId = get().activeOrganizationId;
@@ -203,6 +228,68 @@ export const useStore = create<NVMedState>()(
         )
       })),
 
+      addOrganization: (orgData) => {
+        const newId = `org-${Date.now()}`;
+        const newOrg: Organization = {
+          ...orgData,
+          id: newId,
+          settings: orgData.settings || {
+            specialties: ['Clínico Geral'],
+            requiredDocuments: [
+              { type: 'rg_cnh', name: 'RG/CNH', required: true },
+              { type: 'diploma_medicina', name: 'Diploma de Medicina', required: true }
+            ]
+          }
+        };
+        set((state) => ({
+          organizations: [...state.organizations, newOrg]
+        }));
+      },
+
+      updateOrganization: (updatedOrg) => set((state) => ({
+        organizations: state.organizations.map((org) => org.id === updatedOrg.id ? updatedOrg : org)
+      })),
+
+      addUser: (userData) => {
+        const newId = `user-${Date.now()}`;
+        const newUser: UserAccount = {
+          ...userData,
+          id: newId,
+          createdAt: new Date().toISOString().split('T')[0]
+        };
+        set((state) => ({
+          users: [...state.users, newUser]
+        }));
+      },
+
+      updateUser: (updatedUser) => set((state) => {
+        const nextUsers = state.users.map((u) => u.id === updatedUser.id ? updatedUser : u);
+        const isCurrent = state.currentUser.id === updatedUser.id;
+        return {
+          users: nextUsers,
+          ...(isCurrent ? { currentUser: updatedUser } : {})
+        };
+      }),
+
+      startSimulation: (orgId) => {
+        const org = get().organizations.find((o) => o.id === orgId);
+        if (org) {
+          set({
+            isSimulating: true,
+            simulatedOrganizationId: orgId,
+            activeOrganizationId: orgId
+          });
+        }
+      },
+
+      stopSimulation: () => {
+        set({
+          isSimulating: false,
+          simulatedOrganizationId: null,
+          activeOrganizationId: 'org-1'
+        });
+      },
+
       resetToMockData: () => set({
         activeOrganizationId: 'org-1',
         organizations: mockOrganizations,
@@ -210,6 +297,10 @@ export const useStore = create<NVMedState>()(
         units: mockUnits,
         documents: mockDocuments,
         shifts: mockShifts,
+        users: mockUsers,
+        currentUser: mockUsers[0],
+        isSimulating: false,
+        simulatedOrganizationId: null,
       }),
 
       // Theme implementation
