@@ -41,17 +41,19 @@ function DocumentsPageContent() {
   const [filterStatus, setFilterStatus] = useState(urlStatus);
   const [filterDocName, setFilterDocName] = useState(initialDoctorId);
 
-  // Sync state if search parameters or organization changes
+  // Sync state if search parameters, organization, or doctors list changes
   const [prevUrlParams, setPrevUrlParams] = useState({
     status: urlStatus,
     doctorId: urlDoctorId,
-    orgId: activeOrganizationId
+    orgId: activeOrganizationId,
+    doctorsRef: doctors
   });
 
   if (
     urlStatus !== prevUrlParams.status ||
     urlDoctorId !== prevUrlParams.doctorId ||
-    activeOrganizationId !== prevUrlParams.orgId
+    activeOrganizationId !== prevUrlParams.orgId ||
+    doctors !== prevUrlParams.doctorsRef
   ) {
     const exists = urlDoctorId === 'all' || orgDoctors.some(d => d.id === urlDoctorId);
     const nextDoctorId = exists ? urlDoctorId : 'invalid';
@@ -59,7 +61,8 @@ function DocumentsPageContent() {
     setPrevUrlParams({
       status: urlStatus,
       doctorId: urlDoctorId,
-      orgId: activeOrganizationId
+      orgId: activeOrganizationId,
+      doctorsRef: doctors
     });
     setFilterStatus(urlStatus);
     setFilterDocName(nextDoctorId);

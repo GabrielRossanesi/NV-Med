@@ -91,7 +91,8 @@ export default function AdminUsersPage() {
       organizationId: type === 'saas_admin' ? null : organizationId,
       role,
       status,
-      avatar: ''
+      avatar: '',
+      lastActive: status === 'pending' ? undefined : (editingUser?.lastActive || (status === 'active' ? new Date().toISOString().split('T')[0] : undefined))
     };
 
     if (editingUser) {
@@ -252,6 +253,7 @@ export default function AdminUsersPage() {
                   <th className="p-4">Tipo & Vínculo</th>
                   <th className="p-4">Cargo / Função</th>
                   <th className="p-4">Contato</th>
+                  <th className="p-4 text-center">Último Acesso</th>
                   <th className="p-4 text-center">Status</th>
                   <th className="p-4 text-center">Ações</th>
                 </tr>
@@ -308,6 +310,21 @@ export default function AdminUsersPage() {
                         )}
                       </td>
                       <td className="p-4 text-center">
+                        {user.status === 'pending' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/5 px-2 py-0.5 rounded-full border border-amber-500/10">
+                            <Clock className="h-3 w-3 animate-pulse" /> Convite pendente
+                          </span>
+                        ) : user.lastActive ? (
+                          <span className="font-mono text-xs text-text-primary bg-surface-muted px-2 py-0.5 rounded border border-border inline-block">
+                            {user.lastActive}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-text-muted bg-surface-muted/30 px-2 py-0.5 rounded-full border border-border/30 italic">
+                            Nunca acessou
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
                         {getStatusBadge(user.status)}
                       </td>
                       <td className="p-4">
@@ -335,7 +352,7 @@ export default function AdminUsersPage() {
                 })}
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-text-muted">
+                    <td colSpan={7} className="p-8 text-center text-text-muted">
                       Nenhum usuário cadastrado com os filtros ativos.
                     </td>
                   </tr>

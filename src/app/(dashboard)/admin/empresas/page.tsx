@@ -44,6 +44,7 @@ export default function AdminOrganizationsPage() {
   const [state, setState] = useState('SP');
   const [plan, setPlan] = useState<'bronze' | 'silver' | 'gold' | 'platinum'>('silver');
   const [status, setStatus] = useState<'active' | 'setup' | 'suspended' | 'cancelled'>('active');
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
 
   const handleOpenCreateModal = () => {
     setEditingOrg(null);
@@ -58,6 +59,7 @@ export default function AdminOrganizationsPage() {
     setState('SP');
     setPlan('silver');
     setStatus('active');
+    setEnabledModules(['Dashboard', 'Médicos', 'Unidades', 'Documentos', 'Escala', 'Configurações']);
     setIsModalOpen(true);
   };
 
@@ -74,6 +76,7 @@ export default function AdminOrganizationsPage() {
     setState(org.state || 'SP');
     setPlan(org.plan || 'silver');
     setStatus(org.status || 'active');
+    setEnabledModules(org.enabledModules || []);
     setIsModalOpen(true);
   };
 
@@ -93,7 +96,7 @@ export default function AdminOrganizationsPage() {
       state,
       plan,
       status,
-      enabledModules: ['Dashboard', 'Médicos', 'Unidades', 'Documentos', 'Escala', 'Configurações'],
+      enabledModules,
       settings: editingOrg?.settings || {
         specialties: ['Clínico Geral', 'Cardiologia', 'Pediatria'],
         requiredDocuments: [
@@ -224,10 +227,19 @@ export default function AdminOrganizationsPage() {
 
                   return (
                     <tr key={org.id} className="hover:bg-state-hover transition duration-150">
-                      <td className="p-4">
-                        <div className="font-semibold text-text-primary text-sm">{org.name}</div>
-                        <div className="text-[10px] text-text-muted font-mono mt-0.5">{org.razaoSocial}</div>
-                      </td>
+                       <td className="p-4">
+                         <div className="font-semibold text-text-primary text-sm">{org.name}</div>
+                         <div className="text-[10px] text-text-muted font-mono mt-0.5">{org.razaoSocial}</div>
+                         {org.enabledModules && org.enabledModules.length > 0 && (
+                           <div className="flex flex-wrap gap-1 mt-1.5 max-w-[280px]">
+                             {org.enabledModules.map((mod) => (
+                               <span key={mod} className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 dark:bg-primary/20 dark:text-primary-hover">
+                                 {mod}
+                               </span>
+                             ))}
+                           </div>
+                         )}
+                       </td>
                       <td className="p-4">
                         <div className="text-text-secondary font-mono">{org.cnpj || 'S/ CNPJ'}</div>
                         <div className="text-[10px] text-text-muted flex items-center gap-1 mt-0.5">
@@ -439,6 +451,45 @@ export default function AdminOrganizationsPage() {
                       <option value="suspended">Suspensa</option>
                       <option value="cancelled">Cancelada</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* Enabled Modules Section */}
+                <div className="border-t border-border pt-4">
+                  <label className="block text-xs font-semibold text-text-muted uppercase mb-2">Módulos Habilitados</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      'Dashboard',
+                      'Médicos',
+                      'Unidades',
+                      'Documentos',
+                      'Escala',
+                      'Financeiro',
+                      'Jurídico',
+                      'Relatórios',
+                      'Portal do Médico',
+                      'Alertas',
+                      'Contratos'
+                    ].map((mod) => {
+                      const isChecked = enabledModules.includes(mod);
+                      return (
+                        <label key={mod} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-background hover:bg-state-hover cursor-pointer transition text-xs font-medium text-text-secondary select-none">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEnabledModules([...enabledModules, mod]);
+                              } else {
+                                setEnabledModules(enabledModules.filter((m) => m !== mod));
+                              }
+                            }}
+                            className="accent-primary h-3.5 w-3.5"
+                          />
+                          {mod}
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
