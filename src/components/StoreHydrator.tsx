@@ -2,17 +2,32 @@
 
 import { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
+import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
+import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 
 export default function StoreHydrator({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const theme = useStore((state) => state.theme);
 
   useEffect(() => {
-    // Trigger Zustand rehydration from localStorage
+    // Sincronização inicial: Zustand rehydration + Supabase Cloud Sync
     const hydrate = async () => {
       await useStore.persist.rehydrate();
+
+      if (isSupabaseConfigured()) {
+        try {
+          const cloudData = await fetchInitialDataFromSupabase();
+          if (cloudData) {
+            useStore.getState().syncWithCloud(cloudData);
+          }
+        } catch (err) {
+          console.warn('[StoreHydrator] Falha ao sincronizar com Supabase, operando com dados locais:', err);
+        }
+      }
+
       setHydrated(true);
     };
+
     hydrate();
   }, []);
 

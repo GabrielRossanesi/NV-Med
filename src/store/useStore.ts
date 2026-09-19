@@ -2,6 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '../types';
 import { mockOrganizations, mockDoctors, mockUnits, mockDocuments, mockShifts, mockUsers } from '../data/mockData';
+import {
+  saveDoctorToSupabase,
+  deleteDoctorFromSupabase,
+  saveUnitToSupabase,
+  deleteUnitFromSupabase,
+  saveShiftToSupabase,
+  deleteShiftFromSupabase,
+  saveDocumentToSupabase,
+  saveOrganizationToSupabase,
+  saveUserToSupabase
+} from '@/services/supabaseService';
 
 interface NVMedState {
   activeOrganizationId: string;
@@ -16,6 +27,16 @@ interface NVMedState {
   users: UserAccount[];
   isSimulating: boolean;
   simulatedOrganizationId: string | null;
+
+  // Cloud sync
+  syncWithCloud: (data: {
+    organizations?: Organization[];
+    doctors?: Doctor[];
+    units?: Unit[];
+    documents?: MedicalDocument[];
+    shifts?: Shift[];
+    users?: UserAccount[];
+  }) => void;
 
   // Actions
   setActiveOrganizationId: (id: string) => void;
@@ -73,6 +94,15 @@ export const useStore = create<NVMedState>()(
       isSimulating: false,
       simulatedOrganizationId: null,
 
+      syncWithCloud: (data) => set((state) => ({
+        organizations: data.organizations && data.organizations.length > 0 ? data.organizations : state.organizations,
+        doctors: data.doctors && data.doctors.length > 0 ? data.doctors : state.doctors,
+        units: data.units && data.units.length > 0 ? data.units : state.units,
+        documents: data.documents && data.documents.length > 0 ? data.documents : state.documents,
+        shifts: data.shifts && data.shifts.length > 0 ? data.shifts : state.shifts,
+        users: data.users && data.users.length > 0 ? data.users : state.users,
+      })),
+
       setActiveOrganizationId: (id) => set({ activeOrganizationId: id }),
 
       setCurrentUser: (userId) => {
@@ -116,18 +146,28 @@ export const useStore = create<NVMedState>()(
           doctors: [...state.doctors, newDoctor],
           documents: [...state.documents, ...newDocs],
         }));
+
+        // Persistência em nuvem (Supabase)
+        saveDoctorToSupabase(newDoctor).catch((err) => console.warn('[Supabase Sync Error]', err));
+        newDocs.forEach((d) => saveDocumentToSupabase(d).catch((err) => console.warn('[Supabase Sync Error]', err)));
       },
 
-      updateDoctor: (updatedDoctor) => set((state) => ({
-        doctors: state.doctors.map((d) => d.id === updatedDoctor.id ? updatedDoctor : d)
-      })),
+      updateDoctor: (updatedDoctor) => {
+        set((state) => ({
+          doctors: state.doctors.map((d) => d.id === updatedDoctor.id ? updatedDoctor : d)
+        }));
+        saveDoctorToSupabase(updatedDoctor).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
-      deleteDoctor: (id) => set((state) => ({
-        doctors: state.doctors.filter((d) => d.id !== id),
-        // Clean up linked shifts and documents
-        shifts: state.shifts.filter((s) => s.doctorId !== id),
-        documents: state.documents.filter((d) => d.doctorId !== id),
-      })),
+      deleteDoctor: (id) => {
+        set((state) => ({
+          doctors: state.doctors.filter((d) => d.id !== id),
+          // Clean up linked shifts and documents
+          shifts: state.shifts.filter((s) => s.doctorId !== id),
+          documents: state.documents.filter((d) => d.doctorId !== id),
+        }));
+        deleteDoctorFromSupabase(id).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
       addUnit: (unitData) => {
         const orgId = get().activeOrganizationId;
@@ -140,24 +180,31 @@ export const useStore = create<NVMedState>()(
         set((state) => ({
           units: [...state.units, newUnit]
         }));
+        saveUnitToSupabase(newUnit).catch((err) => console.warn('[Supabase Sync Error]', err));
       },
 
-      updateUnit: (updatedUnit) => set((state) => ({
-        units: state.units.map((u) => u.id === updatedUnit.id ? updatedUnit : u)
-      })),
+      updateUnit: (updatedUnit) => {
+        set((state) => ({
+          units: state.units.map((u) => u.id === updatedUnit.id ? updatedUnit : u)
+        }));
+        saveUnitToSupabase(updatedUnit).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
-      deleteUnit: (id) => set((state) => ({
-        units: state.units.filter((u) => u.id !== id),
-        // Clean up linked shifts
-        shifts: state.shifts.filter((s) => s.unitId !== id),
-        // Update doctors that might be linked
-        doctors: state.doctors.map((doc) => {
-          if (doc.linkedUnits.includes(id)) {
-            return { ...doc, linkedUnits: doc.linkedUnits.filter((uid) => uid !== id) };
-          }
-          return doc;
-        }),
-      })),
+      deleteUnit: (id) => {
+        set((state) => ({
+          units: state.units.filter((u) => u.id !== id),
+          // Clean up linked shifts
+          shifts: state.shifts.filter((s) => s.unitId !== id),
+          // Update doctors that might be linked
+          doctors: state.doctors.map((doc) => {
+            if (doc.linkedUnits.includes(id)) {
+              return { ...doc, linkedUnits: doc.linkedUnits.filter((uid) => uid !== id) };
+            }
+            return doc;
+          }),
+        }));
+        deleteUnitFromSupabase(id).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
       addShift: (shiftData) => {
         const orgId = get().activeOrganizationId;
@@ -170,38 +217,46 @@ export const useStore = create<NVMedState>()(
         set((state) => ({
           shifts: [...state.shifts, newShift]
         }));
+        saveShiftToSupabase(newShift).catch((err) => console.warn('[Supabase Sync Error]', err));
       },
 
-      updateShift: (updatedShift) => set((state) => ({
-        shifts: state.shifts.map((s) => s.id === updatedShift.id ? updatedShift : s)
-      })),
+      updateShift: (updatedShift) => {
+        set((state) => ({
+          shifts: state.shifts.map((s) => s.id === updatedShift.id ? updatedShift : s)
+        }));
+        saveShiftToSupabase(updatedShift).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
-      deleteShift: (id) => set((state) => ({
-        shifts: state.shifts.filter((s) => s.id !== id)
-      })),
+      deleteShift: (id) => {
+        set((state) => ({
+          shifts: state.shifts.filter((s) => s.id !== id)
+        }));
+        deleteShiftFromSupabase(id).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
       uploadDocument: (doctorId, type, fileName) => {
         const orgId = get().activeOrganizationId;
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        let targetDoc: MedicalDocument | null = null;
+
         set((state) => {
-          // Check if document checklist item already exists for doctor
           const existingDocIndex = state.documents.findIndex(
             (d) => d.doctorId === doctorId && d.type === type
           );
 
-          const todayStr = new Date().toISOString().split('T')[0];
-
           if (existingDocIndex >= 0) {
             const updatedDocs = [...state.documents];
-            updatedDocs[existingDocIndex] = {
+            targetDoc = {
               ...updatedDocs[existingDocIndex],
               status: 'sent',
               fileName,
               uploadDate: todayStr,
             };
+            updatedDocs[existingDocIndex] = targetDoc;
             return { documents: updatedDocs };
           } else {
-            // Fallback: create a new one
-            const newDoc: MedicalDocument = {
+            targetDoc = {
               id: `doc-${doctorId}-${type}-${Date.now()}`,
               doctorId,
               name: type.replace('_', ' ').toUpperCase(),
@@ -211,22 +266,49 @@ export const useStore = create<NVMedState>()(
               uploadDate: todayStr,
               organizationId: orgId,
             };
-            return { documents: [...state.documents, newDoc] };
+            return { documents: [...state.documents, targetDoc] };
           }
         });
+
+        if (targetDoc) {
+          saveDocumentToSupabase(targetDoc).catch((err) => console.warn('[Supabase Sync Error]', err));
+        }
       },
 
-      updateDocumentStatus: (documentId, status) => set((state) => ({
-        documents: state.documents.map((d) => 
-          d.id === documentId ? { ...d, status } : d
-        )
-      })),
+      updateDocumentStatus: (documentId, status) => {
+        let updatedDoc: MedicalDocument | null = null;
+        set((state) => {
+          const docs = state.documents.map((d) => {
+            if (d.id === documentId) {
+              updatedDoc = { ...d, status };
+              return updatedDoc;
+            }
+            return d;
+          });
+          return { documents: docs };
+        });
 
-      updateOrganizationSettings: (orgId, updates) => set((state) => ({
-        organizations: state.organizations.map((org) => 
-          org.id === orgId ? { ...org, ...updates } : org
-        )
-      })),
+        if (updatedDoc) {
+          saveDocumentToSupabase(updatedDoc).catch((err) => console.warn('[Supabase Sync Error]', err));
+        }
+      },
+
+      updateOrganizationSettings: (orgId, updates) => {
+        let updatedOrg: Organization | null = null;
+        set((state) => ({
+          organizations: state.organizations.map((org) => {
+            if (org.id === orgId) {
+              updatedOrg = { ...org, ...updates };
+              return updatedOrg;
+            }
+            return org;
+          })
+        }));
+
+        if (updatedOrg) {
+          saveOrganizationToSupabase(updatedOrg).catch((err) => console.warn('[Supabase Sync Error]', err));
+        }
+      },
 
       addOrganization: (orgData) => {
         const newId = `org-${Date.now()}`;
@@ -244,11 +326,15 @@ export const useStore = create<NVMedState>()(
         set((state) => ({
           organizations: [...state.organizations, newOrg]
         }));
+        saveOrganizationToSupabase(newOrg).catch((err) => console.warn('[Supabase Sync Error]', err));
       },
 
-      updateOrganization: (updatedOrg) => set((state) => ({
-        organizations: state.organizations.map((org) => org.id === updatedOrg.id ? updatedOrg : org)
-      })),
+      updateOrganization: (updatedOrg) => {
+        set((state) => ({
+          organizations: state.organizations.map((org) => org.id === updatedOrg.id ? updatedOrg : org)
+        }));
+        saveOrganizationToSupabase(updatedOrg).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
       addUser: (userData) => {
         const newId = `user-${Date.now()}`;
@@ -260,16 +346,20 @@ export const useStore = create<NVMedState>()(
         set((state) => ({
           users: [...state.users, newUser]
         }));
+        saveUserToSupabase(newUser).catch((err) => console.warn('[Supabase Sync Error]', err));
       },
 
-      updateUser: (updatedUser) => set((state) => {
-        const nextUsers = state.users.map((u) => u.id === updatedUser.id ? updatedUser : u);
-        const isCurrent = state.currentUser.id === updatedUser.id;
-        return {
-          users: nextUsers,
-          ...(isCurrent ? { currentUser: updatedUser } : {})
-        };
-      }),
+      updateUser: (updatedUser) => {
+        set((state) => {
+          const nextUsers = state.users.map((u) => u.id === updatedUser.id ? updatedUser : u);
+          const isCurrent = state.currentUser.id === updatedUser.id;
+          return {
+            users: nextUsers,
+            ...(isCurrent ? { currentUser: updatedUser } : {})
+          };
+        });
+        saveUserToSupabase(updatedUser).catch((err) => console.warn('[Supabase Sync Error]', err));
+      },
 
       startSimulation: (orgId) => {
         const org = get().organizations.find((o) => o.id === orgId);
