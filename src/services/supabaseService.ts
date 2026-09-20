@@ -269,6 +269,10 @@ export async function fetchInitialDataFromSupabase() {
   const { data: profile, error: profileError } = await supabase.from('user_accounts').select('*').eq('auth_user_id', auth.user.id).eq('status', 'active').single();
   if (profileError || !profile) throw new Error('Seu acesso ainda não foi liberado. Contate o administrador.');
   const currentUser = mapUserFromDb(profile);
+  if (currentUser.avatar) {
+    const { data: avatar } = await supabase.storage.from('profile-avatars').createSignedUrl(currentUser.avatar, 3600);
+    if (avatar?.signedUrl) currentUser.avatar = avatar.signedUrl;
+  }
   async function rows(table: string) {
     const result = [];
     for (let offset = 0; ; offset += 500) {

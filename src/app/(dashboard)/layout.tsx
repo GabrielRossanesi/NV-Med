@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import StoreHydrator from '@/components/StoreHydrator';
 import AppBackground from '@/components/AppBackground';
+import DashboardChrome from '@/components/DashboardChrome';
 
 export default async function DashboardLayout({
   children,
@@ -23,13 +24,13 @@ export default async function DashboardLayout({
         <Sidebar />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col md:pl-64 min-h-screen pb-16 md:pb-0">
+        <DashboardChrome>
           <Header />
           <SaveFeedback />
           <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
             {children}
           </main>
-        </div>
+        </DashboardChrome>
       </div>
     </StoreHydrator>
   );

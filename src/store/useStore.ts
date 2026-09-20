@@ -32,6 +32,8 @@ interface NVMedState {
   updateUser: (user: UserAccount) => Promise<boolean>;
   startSimulation: (orgId: string) => void; stopSimulation: () => void;
   theme: 'light' | 'dark'; setTheme: (theme: 'light' | 'dark') => void;
+  sidebarCollapsed: boolean; setSidebarCollapsed: (collapsed: boolean) => void;
+  updateProfile: (form: FormData) => Promise<boolean>;
 }
 
 export const useStore = create<NVMedState>()(persist((set, get) => {
@@ -49,8 +51,9 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   }
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
-    saving: false, error: null, notice: null, theme: 'dark',
+    saving: false, error: null, notice: null, theme: 'dark', sidebarCollapsed: false,
     setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null, notice: null }),
+    setSidebarCollapsed: sidebarCollapsed => set({ sidebarCollapsed }),
     clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null, notice: null }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
@@ -90,7 +93,8 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     updateOrganizationSettings: (id, updates) => commit(async () => { const previous = get().organizations.find(o => o.id === id); if (!previous) throw new Error('Empresa não encontrada.'); const org = { ...previous, ...updates }; await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === id ? org : o) }); }),
     addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }),
     updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }),
+    updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }),
     startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
     stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),
   };
-}, { name: 'nv-med-preferences', skipHydration: true, partialize: state => ({ theme: state.theme }), merge: (saved, current) => ({ ...current, theme: (saved as { theme?: string })?.theme === 'light' ? 'light' : 'dark' }) }));
+}, { name: 'nv-med-preferences', skipHydration: true, partialize: state => ({ theme: state.theme, sidebarCollapsed: state.sidebarCollapsed }), merge: (saved, current) => ({ ...current, theme: (saved as { theme?: string })?.theme === 'light' ? 'light' : 'dark', sidebarCollapsed: Boolean((saved as { sidebarCollapsed?: boolean })?.sidebarCollapsed) }) }));

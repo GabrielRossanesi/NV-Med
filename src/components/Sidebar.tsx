@@ -1,221 +1,206 @@
 'use client';
 
-import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useStore } from '@/store/useStore';
-import { ROLE_PERMISSIONS } from './AccessGuard';
 import {
-  LayoutDashboard,
-  Users,
+  Activity,
+  Building,
   Building2,
   CalendarDays,
-  FileText,
-  Settings,
-  Building,
-  LogOut,
   ChevronDown,
-  Activity,
-  Shield
+  FileText,
+  LayoutDashboard,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Shield,
+  Users,
 } from 'lucide-react';
+import { useStore } from '@/store/useStore';
+import { ROLE_PERMISSIONS } from './AccessGuard';
+import UserAvatar from './UserAvatar';
+
+const operationalItems = [
+  { name: 'Dashboard', shortName: 'Início', href: '/dashboard', icon: LayoutDashboard, permission: 'dashboard' },
+  { name: 'Médicos', shortName: 'Médicos', href: '/medicos', icon: Users, permission: 'medicos' },
+  { name: 'Escalas', shortName: 'Escalas', href: '/escala', icon: CalendarDays, permission: 'escala' },
+  { name: 'Unidades', shortName: 'Unidades', href: '/unidades', icon: Building2, permission: 'unidades' },
+  { name: 'Documentos', shortName: 'Docs', href: '/documentos', icon: FileText, permission: 'documentos' },
+  { name: 'Configurações', shortName: 'Ajustes', href: '/configuracoes', icon: Settings, permission: 'configuracoes' },
+];
+
+const adminItems = [
+  { name: 'Visão SaaS', shortName: 'SaaS', href: '/admin', icon: LayoutDashboard, permission: 'admin' },
+  { name: 'Empresas', shortName: 'Empresas', href: '/admin/empresas', icon: Building, permission: 'empresas' },
+  { name: 'Usuários', shortName: 'Usuários', href: '/admin/usuarios', icon: Users, permission: 'usuarios' },
+  { name: 'Permissões', shortName: 'Acessos', href: '/admin/permissoes', icon: Shield, permission: 'permissoes' },
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isOrgDropdownOpen, setIsOrgDropdownOpen] = useState(false);
-
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const {
     activeOrganizationId,
     organizations,
     setActiveOrganizationId,
-    currentUser
+    currentUser,
+    sidebarCollapsed,
+    setSidebarCollapsed,
   } = useStore();
 
-  const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
-  const otherOrgs = organizations.filter((o) => o.id !== activeOrganizationId);
+  const activeOrg = organizations.find((org) => org.id === activeOrganizationId) || organizations[0];
+  const permissions = ROLE_PERMISSIONS[`${currentUser.type}:${currentUser.role}`] || [];
+  const items = [
+    ...(currentUser.type === 'saas_admin' ? adminItems : []),
+    ...operationalItems,
+  ].filter((item) => permissions.includes(item.permission));
 
-  // Define operational and admin menu items
-  const allOperationalItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: 'dashboard' },
-    { name: 'Médicos', href: '/medicos', icon: Users, permission: 'medicos' },
-    { name: 'Escala de Plantões', href: '/escala', icon: CalendarDays, permission: 'escala' },
-    { name: 'Unidades', href: '/unidades', icon: Building2, permission: 'unidades' },
-    { name: 'Documentos', href: '/documentos', icon: FileText, permission: 'documentos' },
-    { name: 'Configurações', href: '/configuracoes', icon: Settings, permission: 'configuracoes' },
-  ];
-
-  const allAdminItems = [
-    { name: 'Dashboard SaaS', href: '/admin', icon: LayoutDashboard, permission: 'admin' },
-    { name: 'Empresas', href: '/admin/empresas', icon: Building, permission: 'empresas' },
-    { name: 'Usuários', href: '/admin/usuarios', icon: Users, permission: 'usuarios' },
-    { name: 'Permissões (RBAC)', href: '/admin/permissoes', icon: Shield, permission: 'permissoes' },
-  ];
-
-  const userPermissions = ROLE_PERMISSIONS[`${currentUser.type}:${currentUser.role}`] || [];
-
-  // Determine items based on user type and simulation status
-  const operationalItems = allOperationalItems.filter((item) => {
-    if (currentUser.type === 'saas_admin') {
-      return userPermissions.includes(item.permission);
-    }
-    return userPermissions.includes(item.permission);
-  });
-
-  const adminItems = currentUser.type === 'saas_admin' ? allAdminItems.filter((item) => {
-    return userPermissions.includes(item.permission);
-  }) : [];
-
-  const visibleMenuItems = [...adminItems, ...operationalItems];
-
-  const handleOrgSwitch = (orgId: string) => {
-    setActiveOrganizationId(orgId);
-    setIsOrgDropdownOpen(false);
+  const switchOrganization = (organizationId: string) => {
+    setActiveOrganizationId(organizationId);
+    setOrgMenuOpen(false);
     router.refresh();
   };
 
-  const handleLogout = async () => {
-    await createClient()?.auth.signOut();
-    useStore.getState().clearSession();
-    window.location.replace('/login');
-  };
-
-  const initials = currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2);
-
   return (
     <>
-      {/* Sidebar Desktop */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-sidebar-border bg-sidebar-bg/95 backdrop-blur-md h-screen fixed left-0 top-0 z-20 shadow-soft">
-        {/* Brand / Logo + Org Selector */}
-        <div className="p-4 border-b border-sidebar-border relative">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="bg-primary text-text-inverse p-1.5 rounded-lg flex items-center justify-center shadow-glow-primary">
-              <Activity className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-text-primary tracking-tight">NV Med</h1>
-              <span className="text-[10px] text-primary font-semibold tracking-wider uppercase">SaaS Gestão</span>
-            </div>
-          </div>
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-sidebar-border bg-sidebar-bg/96 backdrop-blur-xl transition-[width] duration-200 md:flex ${sidebarCollapsed ? 'w-[72px]' : 'w-60'}`}
+      >
+        <div className={`flex h-16 items-center border-b border-sidebar-border ${sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-4'}`}>
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5" aria-label="NV Med — início">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-text-inverse shadow-glow-primary">
+              <Activity className="h-[18px] w-[18px]" />
+            </span>
+            {!sidebarCollapsed && (
+              <span className="min-w-0">
+                <span className="block text-[15px] font-bold tracking-tight text-text-primary">NV Med</span>
+                <span className="block text-[9px] font-semibold uppercase tracking-[0.16em] text-primary">Gestão médica</span>
+              </span>
+            )}
+          </Link>
+        </div>
 
-          {/* Tenant view: Static label. SaaS admin view: Dropdown switcher */}
-          {currentUser.type === 'saas_admin' ? (
-            <>
-              {/* Org Selector Button */}
-              <button
-                onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
-                className="w-full flex items-center justify-between gap-2 p-2 rounded-lg bg-input-bg border border-input-border text-left hover:border-border-strong transition duration-150 cursor-pointer"
-              >
-                <div className="min-w-0">
-                  <p className="text-[10px] text-text-muted font-medium uppercase tracking-wider">Empresa Ativa</p>
-                  <p className="text-xs font-semibold text-text-secondary truncate">{activeOrg?.name}</p>
-                </div>
-                <ChevronDown className="h-4 w-4 text-text-muted flex-shrink-0" />
-              </button>
+        <div className="relative border-b border-sidebar-border p-2.5">
+          <button
+            type="button"
+            onClick={() => currentUser.type === 'saas_admin' && setOrgMenuOpen((open) => !open)}
+            className={`flex w-full items-center rounded-xl text-left text-text-secondary transition hover:bg-state-hover hover:text-text-primary ${sidebarCollapsed ? 'h-11 justify-center px-2' : 'gap-2.5 px-2.5 py-2'}`}
+            aria-label={`Empresa ativa: ${activeOrg?.name || 'nenhuma'}`}
+            title={sidebarCollapsed ? activeOrg?.name : undefined}
+          >
+            <Building2 className="h-[18px] w-[18px] shrink-0 text-primary" />
+            {!sidebarCollapsed && (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[9px] font-semibold uppercase tracking-wider text-text-muted">Empresa ativa</span>
+                  <span className="block truncate text-xs font-semibold">{activeOrg?.name || 'Sem empresa'}</span>
+                </span>
+                {currentUser.type === 'saas_admin' && <ChevronDown className="h-4 w-4 text-text-muted" />}
+              </>
+            )}
+          </button>
 
-              {/* Org Dropdown */}
-              {isOrgDropdownOpen && (
-                <div className="absolute left-4 right-4 mt-1 bg-surface-elevated border border-border rounded-lg shadow-medium z-30 p-1">
-                  <p className="text-[10px] text-text-muted font-semibold uppercase p-2 tracking-wider">Alternar Empresa</p>
-                  {otherOrgs.map((org) => (
-                    <button
-                      key={org.id}
-                      onClick={() => handleOrgSwitch(org.id)}
-                      className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-state-hover text-left transition duration-150 cursor-pointer"
-                    >
-                      <Building className="h-4 w-4 text-primary flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-text-secondary truncate">{org.name}</p>
-                      </div>
-                    </button>
-                  ))}
-                  <div className="border-t border-border my-1"></div>
-                  <Link
-                    href="/admin/empresas"
-                    onClick={() => setIsOrgDropdownOpen(false)}
-                    className="flex items-center gap-2 p-2 text-xs text-primary hover:bg-primary/10 rounded-md font-semibold transition"
-                  >
-                    <Building className="h-4 w-4" />
-                    Gerenciar Empresas
-                  </Link>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="w-full p-2 rounded-lg bg-surface-muted/50 border border-border text-left">
-              <p className="text-[10px] text-text-muted font-medium uppercase tracking-wider">Empresa Vinculada</p>
-              <p className="text-xs font-semibold text-text-secondary truncate">{activeOrg?.name}</p>
+          {orgMenuOpen && !sidebarCollapsed && currentUser.type === 'saas_admin' && (
+            <div className="absolute left-2.5 right-2.5 top-[calc(100%-4px)] z-40 rounded-xl border border-border bg-surface-elevated p-1.5 shadow-strong">
+              {organizations.map((org) => (
+                <button
+                  type="button"
+                  key={org.id}
+                  onClick={() => switchOrganization(org.id)}
+                  className={`w-full truncate rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-state-hover ${org.id === activeOrganizationId ? 'text-primary' : 'text-text-secondary'}`}
+                >
+                  {org.name}
+                </button>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Navigation Menu */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {visibleMenuItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2.5 py-4" aria-label="Navegação principal">
+          {items.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition duration-150 ${
-                  isActive
-                    ? 'bg-primary/10 text-primary font-semibold'
-                    : 'text-text-secondary hover:bg-state-hover hover:text-text-primary'
-                }`}
+                title={sidebarCollapsed ? item.name : undefined}
+                aria-current={active ? 'page' : undefined}
+                className={`group relative flex h-11 items-center rounded-xl text-sm font-medium transition ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} ${active ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-state-hover hover:text-text-primary'}`}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-text-muted'}`} />
-                {item.name}
+                {active && <span className="absolute -left-2.5 h-5 w-0.5 rounded-r-full bg-primary" />}
+                <Icon className={`h-[19px] w-[19px] shrink-0 ${active ? 'text-primary' : 'text-text-muted group-hover:text-text-primary'}`} />
+                {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
               </Link>
             );
           })}
         </nav>
 
-        {/* Footer Info / Operator */}
-        <div className="p-3 border-t border-sidebar-border bg-surface-muted/20">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm text-text-inverse ${
-              currentUser.type === 'saas_admin' ? 'bg-primary' : 'bg-amber-500'
-            }`}>
-              {initials}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-text-secondary truncate">{currentUser.name}</p>
-              <p className="text-[10px] text-text-muted truncate">{currentUser.role} {currentUser.type === 'saas_admin' ? '(SaaS)' : ''}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-semibold text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 transition duration-150 cursor-pointer"
+        <div className="border-t border-sidebar-border p-2.5">
+          <Link
+            href="/perfil"
+            title={sidebarCollapsed ? 'Meu perfil' : undefined}
+            className={`flex items-center rounded-xl transition hover:bg-state-hover ${sidebarCollapsed ? 'h-11 justify-center' : 'gap-2.5 p-2'}`}
           >
-            <LogOut className="h-3.5 w-3.5" />
-            Sair do Painel
+            <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-8 w-8" />
+            {!sidebarCollapsed && (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-semibold text-text-primary">{currentUser.name}</span>
+                <span className="block truncate text-[10px] text-text-muted">Meu perfil</span>
+              </span>
+            )}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className={`mt-1 flex h-9 w-full items-center rounded-lg text-xs font-medium text-text-muted transition hover:bg-state-hover hover:text-text-primary ${sidebarCollapsed ? 'justify-center' : 'gap-2.5 px-2.5'}`}
+            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+            title={sidebarCollapsed ? 'Expandir menu' : undefined}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {!sidebarCollapsed && 'Recolher menu'}
           </button>
         </div>
       </aside>
 
-      {/* Mobile Header / Bottom Nav or Drawer */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar-bg/95 border-t border-sidebar-border backdrop-blur-md p-2 flex justify-around items-center shadow-soft">
-        {visibleMenuItems.slice(0, 5).map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[68px] items-center justify-around border-t border-sidebar-border bg-sidebar-bg/96 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden" aria-label="Navegação móvel">
+        {items.slice(0, 3).map((item) => {
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center gap-1 p-1 text-[10px] font-medium ${
-                isActive
-                  ? 'text-primary'
-                  : 'text-text-secondary'
-              }`}
-            >
+            <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`flex min-w-14 flex-col items-center gap-1 py-2 text-[10px] font-medium ${active ? 'text-primary' : 'text-text-muted'}`}>
               <Icon className="h-5 w-5" />
-              <span>{item.name.split(' ')[0]}</span>
+              <span>{item.shortName}</span>
             </Link>
           );
         })}
-      </div>
+        <div className="relative">
+          <button type="button" onClick={() => setMobileMoreOpen((open) => !open)} className={`flex min-w-14 flex-col items-center gap-1 py-2 text-[10px] font-medium ${items.slice(3).some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)) ? 'text-primary' : 'text-text-muted'}`} aria-expanded={mobileMoreOpen}>
+            <MoreHorizontal className="h-5 w-5" />
+            <span>Mais</span>
+          </button>
+          {mobileMoreOpen && (
+            <div className="absolute bottom-14 left-1/2 w-52 -translate-x-1/2 rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong">
+              {items.slice(3).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileMoreOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-text-secondary hover:bg-state-hover hover:text-text-primary">
+                    <Icon className="h-4 w-4 text-text-muted" /> {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <Link href="/perfil" aria-current={pathname.startsWith('/perfil') ? 'page' : undefined} className={`flex min-w-14 flex-col items-center gap-1 py-2 text-[10px] font-medium ${pathname.startsWith('/perfil') ? 'text-primary' : 'text-text-muted'}`}>
+          <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-5 w-5" />
+          <span>Perfil</span>
+        </Link>
+      </nav>
     </>
   );
 }
-
