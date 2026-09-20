@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AccessGuard from '@/components/AccessGuard';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import { Organization } from '@/types';
 import { 
   Building, 
@@ -14,7 +15,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  MinusCircle
+  MinusCircle,
+  Trash2
 } from 'lucide-react';
 
 export default function AdminOrganizationsPage() {
@@ -22,15 +24,22 @@ export default function AdminOrganizationsPage() {
     organizations, 
     doctors, 
     units, 
+    sectors,
+    shifts,
     documents, 
+    users,
+    currentUser,
+    saving,
     addOrganization, 
     updateOrganization, 
+    deleteOrganization,
     startSimulation 
   } = useStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [deletingOrg, setDeletingOrg] = useState<Organization | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -291,6 +300,16 @@ export default function AdminOrganizationsPage() {
                             <Eye className="h-3.5 w-3.5" />
                             Simular
                           </button>
+                          {currentUser.role === 'CEO' && (
+                            <button
+                              onClick={() => setDeletingOrg(org)}
+                              className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition cursor-pointer"
+                              title="Excluir empresa"
+                              aria-label={`Excluir ${org.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -512,6 +531,21 @@ export default function AdminOrganizationsPage() {
               </form>
             </div>
           </div>
+        )}
+        {deletingOrg && (
+          <DeleteConfirmDialog
+            title="Excluir empresa"
+            itemName={deletingOrg.name}
+            description="Toda a operação vinculada será removida em uma única transação. Use esta ação somente quando a empresa não precisar mais ser recuperada."
+            impacts={[
+              `${doctors.filter(item => item.organizationId === deletingOrg.id).length} médicos e ${users.filter(item => item.organizationId === deletingOrg.id).length} usuários`,
+              `${units.filter(item => item.organizationId === deletingOrg.id).length} unidades e ${sectors.filter(item => item.organizationId === deletingOrg.id).length} setores`,
+              `${shifts.filter(item => item.organizationId === deletingOrg.id).length} postos de escala e ${documents.filter(item => item.organizationId === deletingOrg.id).length} documentos`,
+            ]}
+            busy={saving}
+            onClose={() => setDeletingOrg(null)}
+            onConfirm={async (confirmation) => { if (await deleteOrganization(deletingOrg.id, confirmation)) setDeletingOrg(null); }}
+          />
         )}
       </div>
     </AccessGuard>

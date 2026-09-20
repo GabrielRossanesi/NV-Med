@@ -16,6 +16,33 @@ async function authorize(request: NextRequest) {
 }
 export async function POST(request: NextRequest) { return save(request, false); }
 export async function PATCH(request: NextRequest) { return save(request, true); }
+export async function DELETE(request: NextRequest) {
+  let profile;
+  try { profile = await authorize(request); } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'Acesso negado.' }, { status: 403 }); }
+  const admin = createAdminClient();
+  if (!admin) return NextResponse.json({ error: 'A administração de acessos não está configurada no servidor.' }, { status: 503 });
+  try {
+    const input = await request.json();
+    const { data: target } = await admin.from('user_accounts').select('*').eq('id', input.id).single();
+    if (!target) return NextResponse.json({ error: 'Usuário não encontrado.' }, { status: 404 });
+    if (target.id === profile.id) return NextResponse.json({ error: 'Você não pode excluir a própria conta.' }, { status: 403 });
+    if (target.type === 'saas_admin' && profile.role !== 'CEO') return NextResponse.json({ error: 'Somente o CEO pode excluir administradores SaaS.' }, { status: 403 });
+    if (typeof input.confirmation !== 'string' || input.confirmation.trim().toLowerCase() !== target.email.toLowerCase()) {
+      return NextResponse.json({ error: 'Digite o e-mail exato do usuário para confirmar.' }, { status: 400 });
+    }
+
+    if (target.auth_user_id) {
+      const { error: authError } = await admin.auth.admin.deleteUser(target.auth_user_id);
+      if (authError) throw authError;
+    }
+    const { error: deleteError } = await admin.from('user_accounts').delete().eq('id', target.id);
+    if (deleteError) throw deleteError;
+    if (target.avatar) await admin.storage.from('profile-avatars').remove([target.avatar]);
+    return NextResponse.json({ deleted: true });
+  } catch {
+    return NextResponse.json({ error: 'Não foi possível excluir o usuário. Tente novamente.' }, { status: 500 });
+  }
+}
 async function save(request: NextRequest, updating: boolean) {
   let profile;
   try { profile = await authorize(request); } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'Acesso negado.' }, { status: 403 }); }

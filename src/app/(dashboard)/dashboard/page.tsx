@@ -30,9 +30,7 @@ export default function DashboardPage() {
   // Compute metrics
   const totalDoctors = orgDoctors.length;
   const activeDoctors = orgDoctors.filter((d) => d.status === 'active').length;
-  const pendingDocsCount = orgDocs.filter(
-    (d) => d.status === 'analyzing' || d.status === 'expired' || d.status === 'rejected'
-  ).length;
+  const pendingDocsCount = orgDocs.filter((document) => document.status !== 'approved').length;
   const totalUnits = orgUnits.length;
   
   const today = localDate();
@@ -50,19 +48,17 @@ export default function DashboardPage() {
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .slice(0, 5);
 
-  // Doctors with pending documents
-  const doctorsWithAlerts = orgDoctors
-    .map((doc) => {
-      const docAlerts = orgDocs.filter(
-        (d) => d.doctorId === doc.id && (d.status === 'analyzing' || d.status === 'expired' || d.status === 'rejected')
-      );
-      return {
-        ...doc,
-        alerts: docAlerts
-      };
-    })
-    .filter((d) => d.alerts.length > 0)
-    .slice(0, 4);
+  const pendingDocumentItems = orgDocs
+    .filter((document) => document.status !== 'approved')
+    .sort((a, b) => {
+      const priority = { expired: 0, rejected: 1, not_sent: 2, sent: 3, analyzing: 4, approved: 5 };
+      return priority[a.status] - priority[b.status];
+    });
+  const documentStages = [
+    { label: 'Envio pendente', status: 'not_sent', count: pendingDocumentItems.filter((item) => item.status === 'not_sent').length },
+    { label: 'Em conferência', status: 'review', count: pendingDocumentItems.filter((item) => item.status === 'sent' || item.status === 'analyzing').length },
+    { label: 'Ação necessária', status: 'critical', count: pendingDocumentItems.filter((item) => item.status === 'expired' || item.status === 'rejected').length },
+  ];
 
   // Specialties breakdown (doctors per specialty)
   const specialtiesBreakdown = activeOrg?.settings.specialties
@@ -317,63 +313,41 @@ export default function DashboardPage() {
           {/* Bottom Operational grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Physicians with Document Alerts */}
-            <div className="bg-card-bg rounded-xl border border-card-border p-5 lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Médicos com Documentação Irregular</h3>
+            {/* Document workflow */}
+            <div className="overflow-hidden rounded-xl border border-card-border bg-card-bg lg:col-span-2">
+              <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">Esteira documental</h3>
+                  <p className="mt-1 text-xs text-text-muted">Pendências por etapa, do envio até a regularização.</p>
+                </div>
                 <Link href="/documentos?status=critical" className="text-xs text-primary font-semibold hover:underline flex items-center gap-0.5">
-                  Ver pendências <ChevronRight className="h-3.5 w-3.5" />
+                  Abrir documentos <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
 
-              <div className="space-y-3">
-                {doctorsWithAlerts.length > 0 ? (
-                  doctorsWithAlerts.map((doc) => {
-                    const expiredCount = doc.alerts.filter((d) => d.status === 'expired').length;
-                    const rejectedCount = doc.alerts.filter((d) => d.status === 'rejected').length;
-                    const analyzingCount = doc.alerts.filter((d) => d.status === 'analyzing' || d.status === 'sent').length;
+              <div className="grid grid-cols-3 border-b border-border">
+                {documentStages.map((stage, index) => (
+                  <Link key={stage.label} href={`/documentos?status=${stage.status}`} className={`relative p-4 transition hover:bg-state-hover ${index ? 'border-l border-border' : ''}`}>
+                    <span className={`text-2xl font-semibold tabular-nums ${stage.status === 'critical' && stage.count ? 'text-danger' : 'text-text-primary'}`}>{stage.count}</span>
+                    <span className="mt-1 block text-[11px] font-medium text-text-muted">{stage.label}</span>
+                    {stage.count > 0 && <span className={`absolute bottom-0 left-0 h-0.5 ${stage.status === 'critical' ? 'bg-danger' : 'bg-primary'}`} style={{ width: `${Math.min(100, 24 + stage.count * 12)}%` }} />}
+                  </Link>
+                ))}
+              </div>
 
-                    return (
-                      <Link
-                        key={doc.id}
-                        href={`/documentos?doctorId=${doc.id}`}
-                        className="flex items-center justify-between p-3 bg-surface-muted/50 border border-border hover:border-primary/30 rounded-xl transition duration-150 group cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                            {doc.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-text-primary group-hover:text-primary transition-colors">{doc.name}</p>
-                            <p className="text-[10px] text-text-muted">{doc.specialty} • CRM {doc.crm}-{doc.crmUf}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {expiredCount > 0 && (
-                            <span className="px-2 py-0.5 bg-red-500/10 text-red-650 dark:text-red-400 rounded text-[9px] font-bold">
-                              {expiredCount} Vencido{expiredCount > 1 ? 's' : ''}
-                            </span>
-                          )}
-                          {rejectedCount > 0 && (
-                            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-500 rounded text-[9px] font-bold">
-                              {rejectedCount} Reprovado{rejectedCount > 1 ? 's' : ''}
-                            </span>
-                          )}
-                          {analyzingCount > 0 && (
-                            <span className="px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded text-[9px] font-bold">
-                              {analyzingCount} Em Análise
-                            </span>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-6 text-xs text-text-muted bg-surface-muted rounded-xl border border-dashed border-border">
-                    Não há médicos com pendências documentais ativas.
-                  </div>
-                )}
+              <div className="flex gap-3 overflow-x-auto p-4">
+                {pendingDocumentItems.slice(0, 8).map((document) => {
+                  const doctor = orgDoctors.find((item) => item.id === document.doctorId);
+                  const critical = document.status === 'expired' || document.status === 'rejected';
+                  return (
+                    <Link key={document.id} href={`/documentos?doctorId=${document.doctorId}&status=${document.status}`} className="min-w-[210px] border-l-2 border-border px-3 py-1 transition hover:border-primary">
+                      <p className="truncate text-xs font-semibold text-text-primary">{doctor?.name || 'Médico'}</p>
+                      <p className="mt-1 truncate text-[11px] text-text-muted">{document.name}</p>
+                      <p className={`mt-2 text-[10px] font-semibold uppercase tracking-wider ${critical ? 'text-danger' : 'text-primary'}`}>{document.status === 'not_sent' ? 'Não enviado' : document.status === 'sent' ? 'Recebido' : document.status === 'analyzing' ? 'Em análise' : document.status === 'expired' ? 'Vencido' : 'Reprovado'}</p>
+                    </Link>
+                  );
+                })}
+                {!pendingDocumentItems.length && <p className="w-full py-4 text-center text-xs text-success">Documentação regularizada. Nenhuma pendência ativa.</p>}
               </div>
             </div>
 

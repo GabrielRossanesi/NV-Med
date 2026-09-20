@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AccessGuard from '@/components/AccessGuard';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import { UserAccount } from '@/types';
 import { 
   Users, 
@@ -16,11 +17,12 @@ import {
   Clock, 
   CheckCircle, 
   XCircle, 
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 
 export default function AdminUsersPage() {
-  const { users, organizations, addUser, updateUser } = useStore();
+  const { users, organizations, currentUser, saving, addUser, updateUser, deleteUser } = useStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -30,6 +32,7 @@ export default function AdminUsersPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
+  const [deletingUser, setDeletingUser] = useState<UserAccount | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -39,6 +42,7 @@ export default function AdminUsersPage() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [role, setRole] = useState('Escalista');
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>('active');
+  const canManageUsers = currentUser.role === 'CEO' || currentUser.role === 'Gerente';
 
   // Available roles by type
   const saasRoles = ['CEO', 'Gerente', 'Coordenador', 'Administrativo', 'Financeiro', 'Jurídico'];
@@ -161,13 +165,13 @@ export default function AdminUsersPage() {
               Controle credenciais de acessos de operadores internos (SaaS) e profissionais administrativos de hospitais clientes.
             </p>
           </div>
-          <button
+          {canManageUsers && <button
             onClick={handleOpenCreateModal}
             className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-text-inverse hover:bg-primary-hover rounded-xl shadow-glow-primary transition cursor-pointer self-start sm:self-auto"
           >
             <Plus className="h-4 w-4" />
             Novo Usuário
-          </button>
+          </button>}
         </div>
 
         {/* Filters Panel */}
@@ -327,13 +331,13 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-center gap-2">
-                          <button
+                          {canManageUsers && (currentUser.role === 'CEO' || user.type !== 'saas_admin') && <button
                             onClick={() => handleOpenEditModal(user)}
                             className="p-2 text-text-secondary hover:text-primary hover:bg-surface-muted rounded-lg transition cursor-pointer"
                             title="Editar usuário"
                           >
                             <Edit className="h-4 w-4" />
-                          </button>
+                          </button>}
                           {user.status === 'pending' && (
                             <button
                               onClick={() => handleSimulateInvite(user)}
@@ -341,6 +345,16 @@ export default function AdminUsersPage() {
                               title="Instruções de acesso"
                             >
                               Convidar
+                            </button>
+                          )}
+                          {user.id !== currentUser.id && (currentUser.role === 'CEO' || (currentUser.role === 'Gerente' && user.type === 'tenant_user')) && (
+                            <button
+                              onClick={() => setDeletingUser(user)}
+                              className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition cursor-pointer"
+                              title="Excluir usuário"
+                              aria-label={`Excluir ${user.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           )}
                         </div>
@@ -490,6 +504,21 @@ export default function AdminUsersPage() {
               </form>
             </div>
           </div>
+        )}
+        {deletingUser && (
+          <DeleteConfirmDialog
+            title="Excluir usuário"
+            itemName={deletingUser.email}
+            description={`O acesso de ${deletingUser.name} será removido do NV Med e do Supabase Auth.`}
+            impacts={[
+              'A pessoa perderá o acesso imediatamente.',
+              'O perfil e a foto serão removidos permanentemente.',
+              'Os registros operacionais criados anteriormente serão preservados.',
+            ]}
+            busy={saving}
+            onClose={() => setDeletingUser(null)}
+            onConfirm={async (confirmation) => { if (await deleteUser(deletingUser.id, confirmation)) setDeletingUser(null); }}
+          />
         )}
       </div>
     </AccessGuard>

@@ -22,9 +22,7 @@ export default function Header() {
   } = useStore();
 
   const activeOrg = organizations.find((organization) => organization.id === activeOrganizationId) || organizations[0];
-  const alerts = documents.filter((document) =>
-    document.organizationId === activeOrganizationId && ['analyzing', 'expired', 'rejected'].includes(document.status)
-  ).length;
+  const alerts = documents.filter((document) => document.organizationId === activeOrganizationId && document.status !== 'approved').length;
 
   useEffect(() => {
     const close = (event: PointerEvent) => {

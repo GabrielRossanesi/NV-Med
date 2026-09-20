@@ -18,6 +18,7 @@ import {
 import Link from 'next/link';
 
 function DocumentsPageContent() {
+  const [referenceTime] = useState(() => Date.now());
   const {
     activeOrganizationId,
     doctors,
@@ -81,6 +82,8 @@ function DocumentsPageContent() {
     } else if (filterStatus === 'critical') {
       // Critical documents include expired, rejected, analyzing, sent and not_sent
       matchesStatus = doc.status === 'expired' || doc.status === 'rejected' || doc.status === 'analyzing' || doc.status === 'sent' || doc.status === 'not_sent';
+    } else if (filterStatus === 'review') {
+      matchesStatus = doc.status === 'sent' || doc.status === 'analyzing';
     } else {
       matchesStatus = doc.status === filterStatus;
     }
@@ -139,7 +142,7 @@ function DocumentsPageContent() {
 
   const isNearExpiry = (expiryDate?: string) => {
     if (!expiryDate) return false;
-    const diffTime = new Date(expiryDate).getTime() - new Date('2026-06-21').getTime();
+    const diffTime = new Date(expiryDate + 'T12:00:00').getTime() - referenceTime;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays > 0 && diffDays <= 30;
   };
@@ -255,6 +258,7 @@ function DocumentsPageContent() {
               >
                 <option value="all">Todos os Status</option>
                 <option value="critical">Crítico (Pendentes / Irregulares)</option>
+                <option value="review">Recebidos / Em análise</option>
                 {Object.entries(statusLabels).map(([status, label]) => (
                   <option key={status} value={status}>{label}</option>
                 ))}
@@ -293,7 +297,7 @@ function DocumentsPageContent() {
                 )}
                 {filterStatus !== 'all' && (
                   <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
-                    Status: {filterStatus === 'critical' ? 'Crítico (Vencidos / Pendentes)' : statusLabels[filterStatus as DocumentStatus]}
+                    Status: {filterStatus === 'critical' ? 'Crítico (Vencidos / Pendentes)' : filterStatus === 'review' ? 'Recebidos / Em análise' : statusLabels[filterStatus as DocumentStatus]}
                   </span>
                 )}
                 {filterDocType !== 'all' && (

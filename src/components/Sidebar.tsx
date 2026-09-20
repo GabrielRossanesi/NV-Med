@@ -88,11 +88,11 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => currentUser.type === 'saas_admin' && setOrgMenuOpen((open) => !open)}
-            className={`flex w-full items-center rounded-xl text-left text-text-secondary transition hover:bg-state-hover hover:text-text-primary ${sidebarCollapsed ? 'h-11 justify-center px-2' : 'gap-2.5 px-2.5 py-2'}`}
+            className={`group/org relative flex w-full items-center rounded-xl text-left text-text-secondary transition hover:bg-state-hover hover:text-text-primary ${sidebarCollapsed ? 'h-11 justify-center px-2' : 'gap-2.5 px-2.5 py-2'}`}
             aria-label={`Empresa ativa: ${activeOrg?.name || 'nenhuma'}`}
-            title={sidebarCollapsed ? activeOrg?.name : undefined}
           >
             <Building2 className="h-[18px] w-[18px] shrink-0 text-primary" />
+            {sidebarCollapsed && <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 shadow-medium transition group-hover/org:opacity-100">{activeOrg?.name || 'Empresa ativa'}</span>}
             {!sidebarCollapsed && (
               <>
                 <span className="min-w-0 flex-1">
@@ -120,7 +120,7 @@ export default function Sidebar() {
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-2.5 py-4" aria-label="Navegação principal">
+        <nav className="flex-1 space-y-1 px-2.5 py-4" aria-label="Navegação principal">
           {items.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
@@ -128,13 +128,13 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                title={sidebarCollapsed ? item.name : undefined}
                 aria-current={active ? 'page' : undefined}
                 className={`group relative flex h-11 items-center rounded-xl text-sm font-medium transition ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} ${active ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-state-hover hover:text-text-primary'}`}
               >
                 {active && <span className="absolute -left-2.5 h-5 w-0.5 rounded-r-full bg-primary" />}
                 <Icon className={`h-[19px] w-[19px] shrink-0 ${active ? 'text-primary' : 'text-text-muted group-hover:text-text-primary'}`} />
                 {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
+                {sidebarCollapsed && <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 shadow-medium transition duration-150 group-hover:opacity-100">{item.name}</span>}
               </Link>
             );
           })}
@@ -143,10 +143,10 @@ export default function Sidebar() {
         <div className="border-t border-sidebar-border p-2.5">
           <Link
             href="/perfil"
-            title={sidebarCollapsed ? 'Meu perfil' : undefined}
-            className={`flex items-center rounded-xl transition hover:bg-state-hover ${sidebarCollapsed ? 'h-11 justify-center' : 'gap-2.5 p-2'}`}
+            className={`group/profile relative flex items-center rounded-xl transition hover:bg-state-hover ${sidebarCollapsed ? 'h-11 justify-center' : 'gap-2.5 p-2'}`}
           >
             <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-8 w-8" />
+            {sidebarCollapsed && <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 shadow-medium transition group-hover/profile:opacity-100">Meu perfil</span>}
             {!sidebarCollapsed && (
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-semibold text-text-primary">{currentUser.name}</span>
@@ -157,12 +157,12 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className={`mt-1 flex h-9 w-full items-center rounded-lg text-xs font-medium text-text-muted transition hover:bg-state-hover hover:text-text-primary ${sidebarCollapsed ? 'justify-center' : 'gap-2.5 px-2.5'}`}
+            className={`group/toggle relative mt-1 flex h-9 w-full items-center rounded-lg text-xs font-medium text-text-muted transition hover:bg-state-hover hover:text-text-primary ${sidebarCollapsed ? 'justify-center' : 'gap-2.5 px-2.5'}`}
             aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            title={sidebarCollapsed ? 'Expandir menu' : undefined}
           >
             {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             {!sidebarCollapsed && 'Recolher menu'}
+            {sidebarCollapsed && <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 shadow-medium transition group-hover/toggle:opacity-100">Expandir menu</span>}
           </button>
         </div>
       </aside>
