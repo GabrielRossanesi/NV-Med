@@ -4,6 +4,7 @@ import {
   Organization,
   Doctor,
   Unit,
+  Sector,
   MedicalDocument,
   Shift,
   UserAccount,
@@ -74,6 +75,18 @@ interface DbUnit {
   created_at?: string;
 }
 
+interface DbSector {
+  id: string;
+  organization_id: string;
+  unit_id: string;
+  name: string;
+  specialties?: string[];
+  status: string;
+  default_start_time: string;
+  default_end_time: string;
+  required_doctors: number;
+}
+
 interface DbMedicalDocument {
   id: string;
   organization_id: string;
@@ -90,12 +103,14 @@ interface DbMedicalDocument {
 }
 
 interface DbShift {
+  sector_id?: string;
   sector?: string;
+  specialty?: string;
   employment_type?: Shift['employmentType'];
   employer_name?: string;
   id: string;
   organization_id: string;
-  doctor_id: string;
+  doctor_id?: string | null;
   unit_id: string;
   date: string;
   start_time: string;
@@ -176,6 +191,20 @@ function mapUnitFromDb(row: DbUnit): Unit {
   };
 }
 
+function mapSectorFromDb(row: DbSector): Sector {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    unitId: row.unit_id,
+    name: row.name,
+    specialties: row.specialties || [],
+    status: row.status === 'inactive' ? 'inactive' : 'active',
+    defaultStartTime: row.default_start_time || '07:00',
+    defaultEndTime: row.default_end_time || '19:00',
+    requiredDoctors: Math.max(1, row.required_doctors || 1)
+  };
+}
+
 function mapDocumentFromDb(row: DbMedicalDocument): MedicalDocument {
   return {
     id: row.id,
@@ -193,12 +222,14 @@ function mapDocumentFromDb(row: DbMedicalDocument): MedicalDocument {
 
 function mapShiftFromDb(row: DbShift): Shift {
   return {
+    sectorId: row.sector_id,
     sector: row.sector,
+    specialty: row.specialty,
     employmentType: row.employment_type,
     employerName: row.employer_name,
     id: row.id,
     organizationId: row.organization_id,
-    doctorId: row.doctor_id,
+    doctorId: row.doctor_id || undefined,
     unitId: row.unit_id,
     date: row.date,
     startTime: row.start_time,
@@ -252,12 +283,12 @@ export async function fetchInitialDataFromSupabase() {
       if (data.length < 500) return result;
     }
   }
-  const [orgs, doctors, units, documents, shifts, users] = await Promise.all([
-    rows('organizations'), rows('doctors'), rows('units'), rows('medical_documents'), rows('shifts'),
+  const [orgs, doctors, units, sectors, documents, shifts, users] = await Promise.all([
+    rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('shifts'),
     currentUser.type === 'saas_admin' ? rows('user_accounts') : Promise.resolve([profile])
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
-    units: units.map(mapUnitFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb) };
+    units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb) };
 }
 
 // ==============================================================================
@@ -326,17 +357,44 @@ export async function deleteUnitFromSupabase(unitId: string) {
   if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
+export async function saveSectorToSupabase(sector: Sector) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const payload: DbSector = {
+    id: sector.id,
+    organization_id: sector.organizationId,
+    unit_id: sector.unitId,
+    name: sector.name,
+    specialties: sector.specialties,
+    status: sector.status,
+    default_start_time: sector.defaultStartTime,
+    default_end_time: sector.defaultEndTime,
+    required_doctors: sector.requiredDoctors
+  };
+  const { error } = await supabase.from('sectors').upsert(payload).select('id').single();
+  if (error) throw new Error('Não foi possível salvar o setor: ' + error.message);
+}
+
+export async function deleteSectorFromSupabase(sectorId: string) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { error } = await supabase.from('sectors').delete().eq('id', sectorId).select('id').single();
+  if (error) throw new Error('Não foi possível excluir o setor. Desative-o se já houver plantões vinculados.');
+}
+
 export async function saveShiftToSupabase(shift: Shift) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
   const payload: DbShift = {
     id: shift.id,
+    sector_id: shift.sectorId,
     sector: shift.sector,
+    specialty: shift.specialty,
     employment_type: shift.employmentType,
     employer_name: shift.employerName,
     organization_id: shift.organizationId,
-    doctor_id: shift.doctorId,
+    doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
     date: shift.date,
     start_time: shift.startTime,
@@ -348,6 +406,30 @@ export async function saveShiftToSupabase(shift: Shift) {
 
   const { error } = await supabase.from('shifts').upsert(payload).select('id').single();
   if (error) throw new Error('Não foi possível salvar: ' + error.message);
+}
+
+export async function saveShiftsToSupabase(shifts: Shift[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const payload = shifts.map((shift): DbShift => ({
+    id: shift.id,
+    sector_id: shift.sectorId,
+    sector: shift.sector,
+    specialty: shift.specialty,
+    employment_type: shift.employmentType,
+    employer_name: shift.employerName,
+    organization_id: shift.organizationId,
+    doctor_id: shift.doctorId || null,
+    unit_id: shift.unitId,
+    date: shift.date,
+    start_time: shift.startTime,
+    end_time: shift.endTime,
+    type: shift.type,
+    status: shift.status,
+    notes: shift.notes
+  }));
+  const { error } = await supabase.from('shifts').upsert(payload).select('id');
+  if (error) throw new Error('Não foi possível salvar os postos: ' + error.message);
 }
 
 export async function deleteShiftFromSupabase(shiftId: string) {

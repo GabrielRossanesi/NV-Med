@@ -9,7 +9,7 @@ export function shiftTouchesDay(shift: Shift, date: string) {
   return localDate(next) === date;
 }
 export function countDoctors(shifts: Shift[]) {
-  return new Set(shifts.filter(s => s.status !== 'cancelled').map(s => s.doctorId)).size;
+  return new Set(shifts.filter(s => s.status !== 'cancelled' && s.doctorId).map(s => s.doctorId)).size;
 }
 export function shiftInterval(shift: Pick<Shift, 'date' | 'startTime' | 'endTime'>) {
   const start = new Date(shift.date + 'T' + shift.startTime);
@@ -18,7 +18,7 @@ export function shiftInterval(shift: Pick<Shift, 'date' | 'startTime' | 'endTime
   return { start: start.getTime(), end: end.getTime() };
 }
 export function hasConflict(candidate: Shift, shifts: Shift[]) {
-  if (candidate.status === 'cancelled') return false;
+  if (candidate.status === 'cancelled' || !candidate.doctorId) return false;
   const a = shiftInterval(candidate);
   return shifts.some(s => {
     if (s.id === candidate.id || s.doctorId !== candidate.doctorId || s.status === 'cancelled') return false;

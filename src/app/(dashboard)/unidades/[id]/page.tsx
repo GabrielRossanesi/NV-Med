@@ -1,239 +1,57 @@
 'use client';
 
-import { use } from 'react';
-import { useStore } from '@/store/useStore';
-import AccessGuard from '@/components/AccessGuard';
-import {
-  Building2,
-  ArrowLeft,
-  Calendar,
-  Users,
-  MapPin,
-  Phone,
-  User,
-  CheckCircle2,
-  Clock,
-  Briefcase
-} from 'lucide-react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ArrowLeft, Building2, CalendarDays, Clock3, MapPin, Pencil, Plus, Stethoscope, UserRound, Users } from 'lucide-react';
+import AccessGuard from '@/components/AccessGuard';
+import Dialog from '@/components/Dialog';
+import { localDate } from '@/lib/scheduling';
+import { useStore } from '@/store/useStore';
+import type { Sector } from '@/types';
+
+type SectorDraft = Omit<Sector, 'id' | 'organizationId' | 'unitId'> & { id?: string };
+const emptySector: SectorDraft = { name: '', specialties: [], status: 'active', defaultStartTime: '07:00', defaultEndTime: '19:00', requiredDoctors: 1 };
 
 export default function UnitDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const unitId = resolvedParams.id;
+  const { id: unitId } = use(params);
+  const store = useStore();
+  const [draft, setDraft] = useState<SectorDraft | null>(null);
+  const [specialty, setSpecialty] = useState('');
+  const [formError, setFormError] = useState('');
+  const unit = store.units.find(item => item.id === unitId && item.organizationId === store.activeOrganizationId);
+  const sectors = store.sectors.filter(item => item.unitId === unitId && item.organizationId === store.activeOrganizationId);
+  const doctors = store.doctors.filter(item => item.organizationId === store.activeOrganizationId && item.linkedUnits.includes(unitId));
+  const upcoming = store.shifts.filter(item => item.unitId === unitId && item.organizationId === store.activeOrganizationId && item.date >= localDate() && item.status !== 'cancelled').sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)).slice(0, 8);
+  const specialtyOptions = useMemo(() => [...new Set([...(unit?.specialties || []), ...store.doctors.map(item => item.specialty)].filter(Boolean))].sort(), [unit, store.doctors]);
 
-  const { activeOrganizationId, units, doctors, shifts } = useStore();
+  if (!unit) return <AccessGuard requiredPermission="unidades"><div className="py-16 text-center"><Building2 className="mx-auto mb-4 text-danger"/><h1 className="text-lg font-semibold">Unidade não encontrada</h1><Link href="/unidades" className="mt-4 inline-flex text-sm text-primary">Voltar para unidades</Link></div></AccessGuard>;
 
-  const unit = units.find((u) => u.id === unitId && u.organizationId === activeOrganizationId);
-  const orgDoctors = doctors.filter((d) => d.organizationId === activeOrganizationId);
-  const orgShifts = shifts.filter((s) => s.organizationId === activeOrganizationId);
-
-  if (!unit) {
-    return (
-      <AccessGuard requiredPermission="unidades">
-        <div className="text-center py-12">
-          <Building2 className="h-10 w-10 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-text-secondary">Unidade não encontrada</h3>
-          <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
-          <Link href="/unidades" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
-            <ArrowLeft className="h-4 w-4" />
-            Voltar para listagem
-          </Link>
-        </div>
-      </AccessGuard>
-    );
+  function openSector(sector?: Sector) {
+    setSpecialty(''); setFormError('');
+    setDraft(sector ? { id: sector.id, name: sector.name, specialties: sector.specialties, status: sector.status, defaultStartTime: sector.defaultStartTime, defaultEndTime: sector.defaultEndTime, requiredDoctors: sector.requiredDoctors } : { ...emptySector });
+  }
+  async function saveSector(event: React.FormEvent) {
+    event.preventDefault(); if (!draft) return;
+    if (!draft.name.trim()) return setFormError('Informe o nome do setor.');
+    if (draft.defaultStartTime === draft.defaultEndTime) return setFormError('Início e fim precisam ser diferentes.');
+    const payload = { ...draft, name: draft.name.trim(), specialties: [...new Set(draft.specialties.map(item => item.trim()).filter(Boolean))] };
+    const ok = draft.id ? await store.updateSector({ ...payload, id: draft.id, organizationId: store.activeOrganizationId, unitId }) : await store.addSector({ ...payload, unitId });
+    if (ok) setDraft(null); else setFormError(useStore.getState().error || 'Não foi possível salvar o setor.');
+  }
+  function addSpecialty() {
+    if (!draft || !specialty.trim()) return;
+    setDraft({ ...draft, specialties: [...new Set([...draft.specialties, specialty.trim()])] }); setSpecialty('');
   }
 
-  // Find doctors linked to this unit
-  const linkedDoctors = orgDoctors.filter((doc) => doc.linkedUnits.includes(unitId));
+  return <AccessGuard requiredPermission="unidades"><div className="space-y-7">
+    <header><Link href="/unidades" className="mb-3 inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-primary"><ArrowLeft size={16}/>Unidades</Link><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">{unit.status === 'active' ? 'Unidade ativa' : 'Unidade inativa'}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{unit.name}</h1><p className="mt-2 text-sm text-text-secondary">{unit.city} · {unit.state} · {unit.cnpj}</p></div><Link href={`/escala?unitId=${unit.id}`} className="nv-button-secondary"><CalendarDays size={16}/>Abrir escala</Link></div></header>
 
-  // Find upcoming shifts at this unit
-  const upcomingShifts = orgShifts
-    .filter((s) => s.unitId === unitId && s.date >= '2026-06-21' && s.status !== 'cancelled')
-    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
-    .slice(0, 8);
+    <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3" aria-label="Resumo da unidade"><div className="bg-card-bg p-4"><p className="text-xs text-text-muted">Setores ativos</p><p className="mt-1 text-2xl font-semibold tabular-nums">{sectors.filter(item => item.status === 'active').length}</p></div><div className="bg-card-bg p-4"><p className="text-xs text-text-muted">Médicos vinculados</p><p className="mt-1 text-2xl font-semibold tabular-nums">{doctors.length}</p></div><div className="bg-card-bg p-4"><p className="text-xs text-text-muted">Próximos postos</p><p className="mt-1 text-2xl font-semibold tabular-nums">{upcoming.length}</p></div></section>
 
-  const unitTypeLabels = {
-    hospital: 'Hospital',
-    clinic: 'Clínica',
-    er: 'Pronto Atendimento',
-    upa: 'UPA',
-    lab: 'Laboratório'
-  };
+    <div className="grid gap-7 xl:grid-cols-[minmax(0,1.5fr)_minmax(290px,.7fr)]"><section className="min-w-0"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Setores e cobertura padrão</h2><p className="mt-1 text-sm text-text-secondary">Defina onde a equipe atua e quantos médicos são esperados por dia.</p></div><button className="nv-button" onClick={() => openSector()}><Plus size={16}/>Novo setor</button></div><div className="overflow-hidden rounded-xl border border-border bg-card-bg">
+      {sectors.length === 0 ? <div className="p-10 text-center"><Stethoscope className="mx-auto mb-3 text-text-muted"/><h3 className="font-semibold">Nenhum setor cadastrado</h3><p className="mt-1 text-sm text-text-secondary">Cadastre o primeiro setor para montar a grade semanal.</p></div> : <ul className="divide-y divide-border">{sectors.map(sector => <li key={sector.id} className="flex flex-wrap items-center justify-between gap-4 p-4 hover:bg-state-hover"><div className="min-w-0"><div className="flex items-center gap-2"><p className="font-semibold">{sector.name}</p>{sector.status === 'inactive' && <span className="rounded bg-surface-muted px-2 py-0.5 text-[11px] text-text-muted">Inativo</span>}</div><p className="mt-1 text-sm text-text-secondary">{sector.specialties.length ? sector.specialties.join(' · ') : 'Especialidade ainda não definida'}</p><p className="mt-2 flex items-center gap-3 text-xs text-text-muted"><span className="inline-flex items-center gap-1"><Clock3 size={13}/>{sector.defaultStartTime}–{sector.defaultEndTime}</span><span className="inline-flex items-center gap-1"><Users size={13}/>{sector.requiredDoctors} médico{sector.requiredDoctors === 1 ? '' : 's'} por dia</span></p></div><button className="p-2.5 text-text-muted hover:text-primary" aria-label={`Editar ${sector.name}`} onClick={() => openSector(sector)}><Pencil size={16}/></button></li>)}</ul>}
+    </div></section><aside className="space-y-5"><section className="rounded-xl border border-border bg-card-bg p-5"><h2 className="flex items-center gap-2 font-semibold"><MapPin size={17} className="text-primary"/>Informações</h2><dl className="mt-4 space-y-3 text-sm"><div><dt className="text-xs text-text-muted">Endereço</dt><dd className="mt-1">{unit.address}, {unit.city} – {unit.state}</dd></div><div><dt className="text-xs text-text-muted">Responsável</dt><dd className="mt-1">{unit.manager || 'Não informado'}</dd></div><div><dt className="text-xs text-text-muted">Telefone</dt><dd className="mt-1">{unit.phone || 'Não informado'}</dd></div></dl></section><section className="rounded-xl border border-border bg-card-bg p-5"><h2 className="flex items-center gap-2 font-semibold"><UserRound size={17} className="text-primary"/>Corpo clínico</h2><div className="mt-4 space-y-3">{doctors.slice(0,5).map(doctor => <Link key={doctor.id} href={`/medicos/${doctor.id}`} className="block text-sm hover:text-primary"><span className="font-medium">{doctor.name}</span><span className="block text-xs text-text-muted">{doctor.specialty}</span></Link>)}{doctors.length === 0 && <p className="text-sm text-text-muted">Nenhum médico vinculado.</p>}</div></section></aside></div>
 
-  return (
-    <AccessGuard requiredPermission="unidades">
-      <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Back Navigation & Title */}
-      <div>
-        <Link href="/unidades" className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para listagem
-        </Link>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight">{unit.name}</h2>
-            <p className="text-xs text-text-muted mt-1">Tipo: {unitTypeLabels[unit.type]} • CNPJ: {unit.cnpj}</p>
-          </div>
-          <div>
-            {unit.status === 'active' ? (
-              <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100 dark:border-emerald-900/30">
-                <CheckCircle2 className="h-4 w-4" />
-                Unidade Ativa
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-red-100 dark:border-red-900/30">
-                <CheckCircle2 className="h-4 w-4" />
-                Desativada
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Grid structure */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column (Metadata details & Specialties) */}
-        <div className="space-y-6">
-          <div className="bg-card-bg rounded-xl border border-card-border p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-4 border-b border-border">
-              <div className="bg-primary/10 text-primary p-2 rounded-lg">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-bold text-text-primary leading-tight">Especificações Físicas</p>
-                <p className="text-[10px] text-text-muted font-semibold uppercase mt-0.5">{unit.type}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3.5 text-xs text-text-secondary">
-              <div className="flex items-start gap-2.5">
-                <MapPin className="h-4 w-4 text-text-muted flex-shrink-0" />
-                <div>
-                  <span className="block text-[10px] text-text-muted uppercase font-bold">Localização</span>
-                  <span>{unit.address}</span>
-                  <span className="block font-medium mt-0.5">{unit.city} - {unit.state}</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <User className="h-4 w-4 text-text-muted flex-shrink-0" />
-                <div>
-                  <span className="block text-[10px] text-text-muted uppercase font-bold">Diretor Técnico / Responsável</span>
-                  <span>{unit.manager}</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <Phone className="h-4 w-4 text-text-muted flex-shrink-0" />
-                <div>
-                  <span className="block text-[10px] text-text-muted uppercase font-bold">Telefone Geral</span>
-                  <span>{unit.phone}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Serviced specialties */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Briefcase className="h-4 w-4 text-primary" />
-              Especialidades Disponíveis
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {unit.specialties.map((spec) => (
-                <span key={spec} className="bg-background border border-card-border text-xs font-medium text-text-secondary px-3 py-1 rounded-lg">
-                  {spec}
-                </span>
-              ))}
-              {unit.specialties.length === 0 && (
-                <p className="text-xs text-text-muted italic">Nenhuma especialidade associada.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Columns (Linked Doctors & Upcoming Shifts) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Linked doctors roster */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Users className="h-4.5 w-4.5 text-primary" />
-              Corpo Clínico Escalonado ({linkedDoctors.length})
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {linkedDoctors.length > 0 ? (
-                linkedDoctors.map((doc) => (
-                  <Link
-                    key={doc.id}
-                    href={`/medicos/${doc.id}`}
-                    className="p-3 bg-slate-50/50 dark:bg-slate-950/40 rounded-lg border border-border hover:border-primary/40 transition duration-150 flex items-center gap-3 text-xs cursor-pointer group"
-                  >
-                    <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                      {doc.name.charAt(4)}
-                    </div>
-                    <div className="min-w-0 font-medium">
-                      <p className="font-semibold text-text-primary group-hover:text-primary transition-colors truncate">{doc.name}</p>
-                      <p className="text-[10px] text-text-muted truncate">CRM {doc.crm}-{doc.crmUf} • {doc.specialty}</p>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="text-xs text-text-muted italic col-span-2 py-4 text-center">Nenhum médico vinculado a esta unidade.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Upcoming shifts list */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Calendar className="h-4.5 w-4.5 text-primary" />
-              Próximos Plantões Agendados
-            </h3>
-            <div className="divide-y divide-border">
-              {upcomingShifts.length > 0 ? (
-                upcomingShifts.map((shift) => {
-                  const doc = orgDoctors.find((d) => d.id === shift.doctorId);
-                  
-                  const typeLabels = {
-                    onsite: 'Presencial',
-                    oncall: 'Sobreaviso',
-                    telemedicine: 'Telemedicina'
-                  };
-
-                  return (
-                    <div key={shift.id} className="py-3 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition px-2 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="h-7 w-7 rounded-full bg-surface-muted flex items-center justify-center font-semibold text-text-muted text-[10px]">
-                          {doc?.name.charAt(4) || 'M'}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-text-primary">{doc?.name}</p>
-                          <p className="text-[10px] text-text-muted">{doc?.specialty} • Tipo: {typeLabels[shift.type]}</p>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="font-bold text-text-secondary">
-                          {new Date(shift.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                        </p>
-                        <p className="text-[10px] text-text-muted flex items-center gap-0.5 justify-end mt-0.5">
-                          <Clock className="h-3 w-3" />
-                          {shift.startTime} - {shift.endTime}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-xs text-text-muted italic py-6 text-center">Nenhum plantão agendado para esta unidade.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-    </AccessGuard>
-  );
+    {draft && <Dialog title={draft.id ? 'Editar setor' : 'Novo setor'} onClose={() => !store.saving && setDraft(null)}><form onSubmit={saveSector} className="space-y-4"><label className="nv-label">Nome do setor<input className="nv-input" autoFocus maxLength={100} required placeholder="Ex.: UTI adulto" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })}/></label><div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Início padrão<input className="nv-input" type="time" required value={draft.defaultStartTime} onChange={event => setDraft({ ...draft, defaultStartTime: event.target.value })}/></label><label className="nv-label">Fim padrão<input className="nv-input" type="time" required value={draft.defaultEndTime} onChange={event => setDraft({ ...draft, defaultEndTime: event.target.value })}/></label></div><div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Médicos esperados por dia<input className="nv-input" type="number" min={1} max={99} required value={draft.requiredDoctors} onChange={event => setDraft({ ...draft, requiredDoctors: Number(event.target.value) })}/></label><label className="nv-label">Situação<select className="nv-input" value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as Sector['status'] })}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label></div><div><label className="nv-label">Especialidades aceitas<div className="flex gap-2"><input className="nv-input" list="specialty-options" placeholder="Ex.: Medicina intensiva" value={specialty} onChange={event => setSpecialty(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addSpecialty(); } }}/><button type="button" className="nv-button-secondary" onClick={addSpecialty}>Adicionar</button></div></label><datalist id="specialty-options">{specialtyOptions.map(item => <option key={item} value={item}/>)}</datalist><div className="mt-2 flex flex-wrap gap-2">{draft.specialties.map(item => <button type="button" key={item} className="rounded-md bg-surface-muted px-2.5 py-1 text-xs" onClick={() => setDraft({ ...draft, specialties: draft.specialties.filter(value => value !== item) })}>{item} ×</button>)}</div></div>{formError && <p role="alert" className="text-sm text-danger">{formError}</p>}<div className="flex justify-end gap-3 pt-2"><button type="button" className="nv-button-secondary" onClick={() => setDraft(null)}>Cancelar</button><button className="nv-button" disabled={store.saving}>{store.saving ? 'Salvando…' : 'Salvar setor'}</button></div></form></Dialog>}
+  </div></AccessGuard>;
 }

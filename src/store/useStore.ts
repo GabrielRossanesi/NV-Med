@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '@/types';
+import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { createClient } from '@/lib/supabase/client';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
-const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], documents: [] as MedicalDocument[], shifts: [] as Shift[], users: [] as UserAccount[] };
+const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
 interface NVMedState {
-  activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; documents: MedicalDocument[]; shifts: Shift[];
+  activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; shifts: Shift[];
   currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
   saving: boolean; error: string | null; notice: string | null;
   clearFeedback: () => void; clearSession: () => void;
@@ -18,7 +18,10 @@ interface NVMedState {
   updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
   updateUnit: (unit: Unit) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
+  addSector: (sector: Omit<Sector, 'id' | 'organizationId'>) => Promise<boolean>;
+  updateSector: (sector: Sector) => Promise<boolean>; deleteSector: (id: string) => Promise<boolean>;
   addShift: (shift: Omit<Shift, 'id' | 'organizationId'>) => Promise<boolean>;
+  addShifts: (shifts: Omit<Shift, 'id' | 'organizationId'>[]) => Promise<boolean>;
   updateShift: (shift: Shift) => Promise<boolean>; deleteShift: (id: string) => Promise<boolean>;
   uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
@@ -63,8 +66,12 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
     addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit); set({ units: [...get().units, unit] }); }),
     updateUnit: unit => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }),
-    deleteUnit: id => commit(async () => { await cloud.deleteUnitFromSupabase(id); set({ units: get().units.filter(u => u.id !== id), shifts: get().shifts.filter(s => s.unitId !== id) }); }),
+    deleteUnit: id => commit(async () => { await cloud.deleteUnitFromSupabase(id); set({ units: get().units.filter(u => u.id !== id), sectors: get().sectors.filter(s => s.unitId !== id), shifts: get().shifts.filter(s => s.unitId !== id) }); }),
+    addSector: input => commit(async () => { const sector = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveSectorToSupabase(sector); set({ sectors: [...get().sectors, sector] }); }),
+    updateSector: sector => commit(async () => { await cloud.saveSectorToSupabase(sector); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }),
+    deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
     addShift: input => commit(async () => { const shift = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveShiftToSupabase(shift); set({ shifts: [...get().shifts, shift] }); }),
+    addShifts: inputs => commit(async () => { const shifts = inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })); await cloud.saveShiftsToSupabase(shifts); set({ shifts: [...get().shifts, ...shifts] }); }),
     updateShift: shift => commit(async () => { await cloud.saveShiftToSupabase(shift); set({ shifts: get().shifts.map(s => s.id === shift.id ? shift : s) }); }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
     uploadDocument: (doctorId, type, file) => commit(async () => {

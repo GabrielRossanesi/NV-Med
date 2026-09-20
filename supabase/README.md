@@ -17,15 +17,17 @@ Este guia contém as instruções passo a passo para conectar o banco de dados P
 
 ---
 
-## ⚡ Passo 2: Executar o Script de Inicialização (1 Clique)
+## ⚡ Passo 2: Executar o banco
 
 1. No menu lateral esquerdo do Dashboard do Supabase, clique no ícone **SQL Editor** (ou acesse a URL: `https://supabase.com/dashboard/project/<seu-projeto>/sql`).
 2. Clique em **+ New query**.
-3. Abra o arquivo [supabase/init_all.sql](file:///E:/0.%20Projetos/NV-Med/supabase/init_all.sql) deste repositório, copie todo o conteúdo e cole no editor do Supabase.
-4. Clique no botão verde **Run** (ou pressione `Ctrl + Enter` / `Cmd + Enter`).
+3. Em uma instalação nova, execute `init_all.sql` para criar a estrutura e os dados de demonstração.
+4. Depois execute, nesta ordem: `04_storage.sql`, `05_production.sql` e `06_operational_scheduling.sql`.
+5. Crie o usuário no Supabase Auth e use `07_bootstrap_admin.sql` para vinculá-lo ao perfil administrativo.
+6. Clique no botão verde **Run** em cada etapa.
 
 > O script criará automaticamente:
-> - Todas as tabelas relacionais (`organizations`, `doctors`, `units`, `shifts`, `medical_documents`, `user_accounts`).
+> - Todas as tabelas relacionais (`organizations`, `doctors`, `units`, `sectors`, `shifts`, `medical_documents`, `user_accounts`).
 > - Índices de alta performance e triggers de auditoria (`updated_at`).
 > - Políticas de segurança Row Level Security (RLS).
 > - Bucket de armazenamento de arquivos médicos (`medical-documents`).

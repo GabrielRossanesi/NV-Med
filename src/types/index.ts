@@ -61,6 +61,20 @@ export interface Unit {
   organizationId: string;
 }
 
+export type SectorStatus = 'active' | 'inactive';
+
+export interface Sector {
+  id: string;
+  organizationId: string;
+  unitId: string;
+  name: string;
+  specialties: string[];
+  status: SectorStatus;
+  defaultStartTime: string;
+  defaultEndTime: string;
+  requiredDoctors: number;
+}
+
 export type DocumentType =
   | 'rg_cnh'
   | 'diploma_medicina'
@@ -91,15 +105,17 @@ export interface MedicalDocument {
 }
 
 export type ShiftType = 'onsite' | 'oncall' | 'telemedicine';
-export type ShiftStatus = 'confirmed' | 'pending' | 'cancelled' | 'completed';
+export type ShiftStatus = 'open' | 'confirmed' | 'pending' | 'cancelled' | 'completed';
 export type EmploymentType = 'clt' | 'concursado' | 'pj';
 
 export interface Shift {
+  sectorId?: string;
   sector?: string;
+  specialty?: string;
   employmentType?: EmploymentType;
   employerName?: string;
   id: string;
-  doctorId: string; // Linked Doctor ID
+  doctorId?: string; // Empty while this staffing position is open
   unitId: string; // Linked Unit ID
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM

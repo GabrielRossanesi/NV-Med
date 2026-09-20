@@ -18,11 +18,11 @@ CREATE OR REPLACE FUNCTION public.nv_can_write(org text, resource text) RETURNS 
  SELECT EXISTS(SELECT 1 FROM public.user_accounts u WHERE u.auth_user_id=(SELECT auth.uid()) AND u.status='active' AND (
    (u.type='saas_admin' AND (
       u.role IN ('CEO','Gerente') OR
-      (u.role IN ('Coordenador','Administrativo') AND resource IN ('doctors','units','shifts')) OR
+      (u.role IN ('Coordenador','Administrativo') AND resource IN ('doctors','units','sectors','shifts')) OR
       (u.role='Jurídico' AND resource='medical_documents')
    )) OR (u.type='tenant_user' AND u.organization_id=org AND (
       u.role='Diretor' OR
-      (u.role IN ('Gerente','Coordenador de Escalas','Escalista') AND resource IN ('doctors','units','shifts','medical_documents')) OR
+      (u.role IN ('Gerente','Coordenador de Escalas','Escalista') AND resource IN ('doctors','units','sectors','shifts','medical_documents')) OR
       (u.role='Jurídico' AND resource='medical_documents')
    ))
  ));

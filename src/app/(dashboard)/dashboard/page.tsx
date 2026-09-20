@@ -13,10 +13,10 @@ import {
   Settings
 } from 'lucide-react';
 import Link from 'next/link';
-import { localDate } from '@/lib/scheduling';
+import { localDate, shiftTouchesDay } from '@/lib/scheduling';
 
 export default function DashboardPage() {
-  const { activeOrganizationId, organizations, doctors, units, shifts, documents } = useStore();
+  const { activeOrganizationId, organizations, doctors, units, sectors, shifts, documents } = useStore();
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
 
@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const orgDoctors = doctors.filter((d) => d.organizationId === activeOrganizationId);
   const orgUnits = units.filter((u) => u.organizationId === activeOrganizationId);
   const orgShifts = shifts.filter((s) => s.organizationId === activeOrganizationId);
+  const orgSectors = sectors.filter((s) => s.organizationId === activeOrganizationId && s.status === 'active');
   const orgDocs = documents.filter((d) => d.organizationId === activeOrganizationId);
 
   // Compute metrics
@@ -37,7 +38,11 @@ export default function DashboardPage() {
   const today = localDate();
   const month = today.slice(0, 7);
   const shiftsThisMonth = orgShifts.filter((s) => s.date.includes(month)).length;
-  const shiftsToday = orgShifts.filter((s) => s.date === today).length;
+  const pendingToday = orgShifts.filter((s) => shiftTouchesDay(s, today) && s.status === 'pending').length;
+  const gapsToday = orgSectors.reduce((total, sector) => {
+    const filled = new Set(orgShifts.filter((shift) => shift.sectorId === sector.id && shiftTouchesDay(shift, today) && shift.doctorId && shift.status !== 'cancelled').map((shift) => shift.doctorId)).size;
+    return total + Math.max(sector.requiredDoctors - filled, 0);
+  }, 0);
 
   // Upcoming shifts sorted from the user's current local day.
   const upcomingShifts = [...orgShifts]
@@ -136,55 +141,55 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Total Doctors */}
             <Link
-              href="/medicos"
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+              href={`/escala?date=${today}`}
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
             >
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Corpo Clínico</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{totalDoctors}</h3>
-                <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-                  <UserCheck className="h-3 w-3" />
-                  {activeDoctors} ativos • Ver médicos
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Furos de cobertura hoje</span>
+                <h3 className={`text-2xl font-bold mt-1 ${gapsToday ? 'text-danger' : 'text-success'}`}>{gapsToday}</h3>
+                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${gapsToday ? 'text-danger' : 'text-success'}`}>
+                  <AlertTriangle className="h-3 w-3" />
+                  {gapsToday ? 'Abrir escala e preencher' : 'Cobertura planejada completa'}
                 </span>
               </div>
-              <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
-                <Users className="h-5 w-5" />
+              <div className={`p-2.5 rounded-xl ${gapsToday ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
+                <Calendar className="h-5 w-5" />
               </div>
             </Link>
 
             {/* Document Alerts */}
             <Link
-              href="/documentos?status=critical"
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
+              href={`/escala?date=${today}`}
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-warning/55 hover:shadow-medium group"
             >
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pendências Documentais</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{pendingDocsCount}</h3>
-                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${pendingDocsCount > 0 ? 'text-danger group-hover:underline' : 'text-text-muted'}`}>
-                  <AlertTriangle className="h-3 w-3" />
-                  {pendingDocsCount > 0 ? 'Exige atenção • Resolver pendências' : 'Conformidade 100%'}
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Confirmações de hoje</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{pendingToday}</h3>
+                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${pendingToday ? 'text-warning' : 'text-success'}`}>
+                  <Clock className="h-3 w-3" />
+                  {pendingToday ? 'Aguardando profissionais' : 'Nenhuma confirmação pendente'}
                 </span>
               </div>
-              <div className={`p-2.5 rounded-xl transition-colors ${pendingDocsCount > 0 ? 'bg-danger/10 text-danger group-hover:bg-danger group-hover:text-text-inverse' : 'bg-surface-muted text-text-muted'}`}>
-                <FileCheck2 className="h-5 w-5" />
+              <div className={`p-2.5 rounded-xl ${pendingToday ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+                <UserCheck className="h-5 w-5" />
               </div>
             </Link>
 
             {/* Active Units */}
             <Link
-              href="/unidades?status=active"
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
+              href="/documentos?status=critical"
+              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
             >
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Unidades Ativas</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits}</h3>
-                <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-                  <Building2 className="h-3 w-3" />
-                  Gerenciar unidades
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pendências documentais</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{pendingDocsCount}</h3>
+                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${pendingDocsCount ? 'text-danger' : 'text-success'}`}>
+                  <FileCheck2 className="h-3 w-3" />
+                  {pendingDocsCount ? 'Revisar documentos' : 'Documentação em dia'}
                 </span>
               </div>
-              <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
-                <Building2 className="h-5 w-5" />
+              <div className={`p-2.5 rounded-xl ${pendingDocsCount ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
+                <FileCheck2 className="h-5 w-5" />
               </div>
             </Link>
 
@@ -194,11 +199,11 @@ export default function DashboardPage() {
               className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
             >
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Plantões do Mês</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{shiftsThisMonth}</h3>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Estrutura da operação</span>
+                <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits} <span className="text-sm font-medium text-text-muted">unid.</span> · {orgSectors.length} <span className="text-sm font-medium text-text-muted">set.</span></h3>
                 <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
                   <Clock className="h-3 w-3" />
-                  {shiftsToday} hoje • Abrir escala
+                  {activeDoctors}/{totalDoctors} médicos ativos · {shiftsThisMonth} postos no mês
                 </span>
               </div>
               <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
@@ -226,6 +231,7 @@ export default function DashboardPage() {
                     const unit = orgUnits.find((u) => u.id === shift.unitId);
 
                     const statusColors = {
+                      open: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400',
                       confirmed: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
                       pending: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
                       completed: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400',
@@ -235,7 +241,7 @@ export default function DashboardPage() {
                     return (
                       <Link
                         key={shift.id}
-                        href={`/escala?date=${shift.date}&doctorId=${shift.doctorId}`}
+                        href={`/escala?date=${shift.date}${shift.doctorId ? `&doctorId=${shift.doctorId}` : ''}`}
                         className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition cursor-pointer group"
                       >
                         <div className="flex items-center gap-3">
@@ -243,8 +249,8 @@ export default function DashboardPage() {
                             {doctor?.name.charAt(4) || 'D'}
                           </div>
                           <div>
-                            <p className="font-semibold text-text-secondary group-hover:text-primary transition-colors">{doctor?.name}</p>
-                            <p className="text-[10px] text-text-muted">{doctor?.specialty} • {unit?.name}</p>
+                            <p className="font-semibold text-text-secondary group-hover:text-primary transition-colors">{doctor?.name || 'Vaga aberta'}</p>
+                            <p className="text-[10px] text-text-muted">{shift.specialty || doctor?.specialty || 'Sem especialidade'} • {unit?.name}</p>
                           </div>
                         </div>
 
@@ -260,7 +266,7 @@ export default function DashboardPage() {
                           </div>
 
                           <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${statusColors[shift.status]}`}>
-                            {shift.status === 'confirmed' ? 'Confirmado' : shift.status === 'pending' ? 'Pendente' : 'Concluído'}
+                            {shift.status === 'open' ? 'Vaga aberta' : shift.status === 'confirmed' ? 'Confirmado' : shift.status === 'pending' ? 'Pendente' : shift.status === 'cancelled' ? 'Cancelado' : 'Concluído'}
                           </span>
                         </div>
                       </Link>

@@ -9,3 +9,4 @@ test('overnight counts across month and year boundaries',()=>assert.equal(shiftT
 test('adjacent shifts are allowed but overlap across midnight is rejected',()=>{const night={...base,startTime:'19:00',endTime:'07:00'};assert.equal(hasConflict({...base,id:'b',date:'2026-09-21'},[night]),false);assert.equal(hasConflict({...base,id:'b',date:'2026-09-21',startTime:'06:00'},[night]),true);});
 test('editing a shift does not conflict with itself',()=>assert.equal(hasConflict(base,[base]),false));
 test('cancellation and different doctors do not conflict',()=>{assert.equal(hasConflict({...base,id:'b',status:'cancelled'},[base]),false);assert.equal(hasConflict({...base,id:'b',doctorId:'other'},[base]),false);});
+test('open positions do not count as doctors or create conflicts',()=>{const open={...base,id:'open',doctorId:undefined,status:'open'};assert.equal(countDoctors([base,open]),1);assert.equal(hasConflict(open,[base]),false);});
