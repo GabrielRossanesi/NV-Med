@@ -36,7 +36,7 @@ export default function AdminUsersPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [type, setType] = useState<'saas_admin' | 'tenant_user'>('tenant_user');
-  const [organizationId, setOrganizationId] = useState<string | null>('org-1');
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [role, setRole] = useState('Escalista');
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>('active');
 
@@ -79,7 +79,7 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email) return;
 
@@ -96,19 +96,17 @@ export default function AdminUsersPage() {
     };
 
     if (editingUser) {
-      updateUser({
+      if (!await updateUser({
         ...editingUser,
         ...userData
-      });
+      })) return;
     } else {
-      addUser(userData);
+      if (!await addUser(userData)) return;
     }
     setIsModalOpen(false);
   };
 
-  const handleSimulateInvite = (user: UserAccount) => {
-    alert(`Convite de acesso reenviado com sucesso para ${user.name} (${user.email})!`);
-  };
+  const handleSimulateInvite = (user: UserAccount) => { alert('Acesso de ' + user.name + ': peça para abrir a tela de login e selecionar Primeiro acesso ou esqueci minha senha.'); };
 
   // Filter logic
   const filteredUsers = users.filter((user) => {
@@ -340,7 +338,7 @@ export default function AdminUsersPage() {
                             <button
                               onClick={() => handleSimulateInvite(user)}
                               className="px-2 py-1 bg-surface-muted hover:bg-state-hover border border-border rounded text-[10px] font-semibold text-text-secondary cursor-pointer"
-                              title="Reenviar convite"
+                              title="Instruções de acesso"
                             >
                               Convidar
                             </button>
@@ -395,6 +393,7 @@ export default function AdminUsersPage() {
                     <label className="block text-xs font-semibold text-text-muted uppercase mb-1">E-mail Corporativo *</label>
                     <input
                       type="email"
+                      readOnly={!!editingUser}
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}

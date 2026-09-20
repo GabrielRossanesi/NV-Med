@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+
 import { useStore } from '@/store/useStore';
 import { Bell, ShieldAlert, Sparkles, Building, Sun, Moon, ChevronDown, EyeOff, Shield } from 'lucide-react';
 import Link from 'next/link';
-import ProfileSelectorModal from './ProfileSelectorModal';
+import { createClient } from '@/lib/supabase/client';
 
 export default function Header() {
   const {
@@ -19,7 +19,7 @@ export default function Header() {
     stopSimulation
   } = useStore();
 
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
   
@@ -69,7 +69,7 @@ export default function Header() {
               </span>
             )}
             <span className="text-[10px] bg-surface-muted text-text-muted px-2 py-0.5 rounded font-mono uppercase tracking-wider">
-              Demo Mode
+              Conectado
             </span>
           </div>
 
@@ -127,9 +127,9 @@ export default function Header() {
 
           {/* Active Profile Trigger (Avatar + Name) */}
           <button
-            onClick={() => setIsProfileModalOpen(true)}
+            onClick={async () => { await createClient()?.auth.signOut(); useStore.getState().clearSession(); window.location.replace('/login'); }}
             className="flex items-center gap-2 border-l border-border pl-4 text-left hover:opacity-85 transition group cursor-pointer"
-            title="Clique para alternar perfil ativo de demonstração"
+            title="Sair da conta"
           >
             <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-text-inverse shadow-sm group-hover:scale-105 transition duration-150 ${
               currentUser.type === 'saas_admin' ? 'bg-primary' : 'bg-amber-500'
@@ -148,12 +148,6 @@ export default function Header() {
           </button>
         </div>
       </header>
-
-      {/* Profile Selector Modal */}
-      <ProfileSelectorModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
     </>
   );
 }

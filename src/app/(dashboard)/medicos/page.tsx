@@ -98,10 +98,10 @@ function DoctorsPageContent() {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    addDoctor({
+    if (!await addDoctor({
       name,
       crm,
       crmUf,
@@ -112,7 +112,7 @@ function DoctorsPageContent() {
       address,
       status,
       linkedUnits: selectedUnits
-    });
+    })) return;
 
     // Reset Form
     setName('');

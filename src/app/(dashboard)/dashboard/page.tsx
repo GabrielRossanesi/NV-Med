@@ -13,6 +13,7 @@ import {
   Settings
 } from 'lucide-react';
 import Link from 'next/link';
+import { localDate } from '@/lib/scheduling';
 
 export default function DashboardPage() {
   const { activeOrganizationId, organizations, doctors, units, shifts, documents } = useStore();
@@ -33,13 +34,14 @@ export default function DashboardPage() {
   ).length;
   const totalUnits = orgUnits.length;
   
-  // June 2026 is current month in mockData
-  const shiftsThisMonth = orgShifts.filter((s) => s.date.includes('2026-06')).length;
-  const shiftsToday = orgShifts.filter((s) => s.date === '2026-06-21').length;
+  const today = localDate();
+  const month = today.slice(0, 7);
+  const shiftsThisMonth = orgShifts.filter((s) => s.date.includes(month)).length;
+  const shiftsToday = orgShifts.filter((s) => s.date === today).length;
 
-  // Upcoming shifts (sorted by date/time from today 2026-06-21)
+  // Upcoming shifts sorted from the user's current local day.
   const upcomingShifts = [...orgShifts]
-    .filter((s) => s.date >= '2026-06-21' && s.status !== 'cancelled')
+    .filter((s) => s.date >= today && s.status !== 'cancelled')
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .slice(0, 5);
 
@@ -68,7 +70,7 @@ export default function DashboardPage() {
   // Units breakdown (shifts per unit for the current month)
   const unitsBreakdown = orgUnits
     .map((unit) => {
-      const count = orgShifts.filter((s) => s.unitId === unit.id && s.date.includes('2026-06')).length;
+      const count = orgShifts.filter((s) => s.unitId === unit.id && s.date.includes(month)).length;
       return { name: unit.name, count };
     })
     .sort((a, b) => b.count - a.count) || [];

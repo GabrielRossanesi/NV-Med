@@ -80,7 +80,7 @@ export default function AdminOrganizationsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name) return;
 
@@ -107,12 +107,12 @@ export default function AdminOrganizationsPage() {
     };
 
     if (editingOrg) {
-      updateOrganization({
+      if (!await updateOrganization({
         ...editingOrg,
         ...orgData
-      });
+      })) return;
     } else {
-      addOrganization(orgData);
+      if (!await addOrganization(orgData)) return;
     }
     setIsModalOpen(false);
   };

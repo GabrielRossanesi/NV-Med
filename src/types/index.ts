@@ -78,6 +78,7 @@ export type DocumentStatus =
   | 'rejected';
 
 export interface MedicalDocument {
+  filePath?: string;
   id: string;
   doctorId: string;
   name: string; // Display name, e.g. "Diploma de Medicina"
@@ -91,8 +92,12 @@ export interface MedicalDocument {
 
 export type ShiftType = 'onsite' | 'oncall' | 'telemedicine';
 export type ShiftStatus = 'confirmed' | 'pending' | 'cancelled' | 'completed';
+export type EmploymentType = 'clt' | 'concursado' | 'pj';
 
 export interface Shift {
+  sector?: string;
+  employmentType?: EmploymentType;
+  employerName?: string;
   id: string;
   doctorId: string; // Linked Doctor ID
   unitId: string; // Linked Unit ID
@@ -106,6 +111,7 @@ export interface Shift {
 }
 
 export interface UserAccount {
+  authUserId?: string;
   id: string;
   name: string;
   email: string;
@@ -118,4 +124,3 @@ export interface UserAccount {
   lastActive?: string;
   avatar?: string;
 }
-

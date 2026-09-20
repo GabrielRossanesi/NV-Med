@@ -85,10 +85,14 @@ interface DbMedicalDocument {
   expiry_date?: string;
   file_name?: string;
   file_url?: string;
+  file_path?: string;
   created_at?: string;
 }
 
 interface DbShift {
+  sector?: string;
+  employment_type?: Shift['employmentType'];
+  employer_name?: string;
   id: string;
   organization_id: string;
   doctor_id: string;
@@ -182,12 +186,16 @@ function mapDocumentFromDb(row: DbMedicalDocument): MedicalDocument {
     status: row.status as DocumentStatus,
     uploadDate: row.upload_date,
     expiryDate: row.expiry_date,
-    fileName: row.file_name
+    fileName: row.file_name,
+    filePath: row.file_path
   };
 }
 
 function mapShiftFromDb(row: DbShift): Shift {
   return {
+    sector: row.sector,
+    employmentType: row.employment_type,
+    employerName: row.employer_name,
     id: row.id,
     organizationId: row.organization_id,
     doctorId: row.doctor_id,
@@ -201,9 +209,10 @@ function mapShiftFromDb(row: DbShift): Shift {
   };
 }
 
-function mapUserFromDb(row: DbUserAccount): UserAccount {
+export function mapUserFromDb(row: DbUserAccount): UserAccount {
   return {
     id: row.id,
+    authUserId: row.auth_user_id,
     name: row.name,
     email: row.email,
     phone: row.phone,
@@ -221,45 +230,34 @@ function mapUserFromDb(row: DbUserAccount): UserAccount {
 // OPERAÇÕES DE LEITURA (BOOTSTRAP & REFRESH)
 // ==============================================================================
 
-export async function fetchInitialDataFromSupabase(): Promise<{
-  organizations?: Organization[];
-  doctors?: Doctor[];
-  units?: Unit[];
-  documents?: MedicalDocument[];
-  shifts?: Shift[];
-  users?: UserAccount[];
-} | null> {
-  if (!isSupabaseConfigured()) {
-    return null;
-  }
-
+export async function fetchInitialDataFromSupabase() {
   const supabase = createClient();
-  if (!supabase) return null;
-
-  try {
-    const [orgsRes, doctorsRes, unitsRes, docsRes, shiftsRes, usersRes] = await Promise.all([
-      supabase.from('organizations').select('*').order('name'),
-      supabase.from('doctors').select('*').order('name'),
-      supabase.from('units').select('*').order('name'),
-      supabase.from('medical_documents').select('*'),
-      supabase.from('shifts').select('*').order('date', { ascending: false }),
-      supabase.from('user_accounts').select('*').order('name')
-    ]);
-
-    if (orgsRes.error) throw orgsRes.error;
-
-    return {
-      organizations: (orgsRes.data as DbOrganization[] | null)?.map(mapOrgFromDb) || [],
-      doctors: (doctorsRes.data as DbDoctor[] | null)?.map(mapDoctorFromDb) || [],
-      units: (unitsRes.data as DbUnit[] | null)?.map(mapUnitFromDb) || [],
-      documents: (docsRes.data as DbMedicalDocument[] | null)?.map(mapDocumentFromDb) || [],
-      shifts: (shiftsRes.data as DbShift[] | null)?.map(mapShiftFromDb) || [],
-      users: (usersRes.data as DbUserAccount[] | null)?.map(mapUserFromDb) || []
-    };
-  } catch (error) {
-    console.warn('[Supabase] Falha ao sincronizar dados em nuvem, usando cache local:', error);
-    return null;
+  if (!supabase || !isSupabaseConfigured()) throw new Error('Conexão não configurada. Contate o administrador.');
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) throw new Error('Sua sessão expirou. Entre novamente.');
+  const { data: profile, error: profileError } = await supabase.from('user_accounts').select('*').eq('auth_user_id', auth.user.id).eq('status', 'active').single();
+  if (profileError || !profile) throw new Error('Seu acesso ainda não foi liberado. Contate o administrador.');
+  const currentUser = mapUserFromDb(profile);
+  async function rows(table: string) {
+    const result = [];
+    for (let offset = 0; ; offset += 500) {
+      let query = supabase!.from(table).select('*').order('id').range(offset, offset + 499);
+      if (currentUser.type !== 'saas_admin') {
+        if (!currentUser.organizationId) throw new Error('Usuário sem empresa vinculada.');
+        query = query.eq(table === 'organizations' ? 'id' : 'organization_id', currentUser.organizationId);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error('Não foi possível carregar ' + table + '. Tente novamente.');
+      result.push(...data);
+      if (data.length < 500) return result;
+    }
   }
+  const [orgs, doctors, units, documents, shifts, users] = await Promise.all([
+    rows('organizations'), rows('doctors'), rows('units'), rows('medical_documents'), rows('shifts'),
+    currentUser.type === 'saas_admin' ? rows('user_accounts') : Promise.resolve([profile])
+  ]);
+  return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
+    units: units.map(mapUnitFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb) };
 }
 
 // ==============================================================================
@@ -268,7 +266,7 @@ export async function fetchInitialDataFromSupabase(): Promise<{
 
 export async function saveDoctorToSupabase(doctor: Doctor) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
   const payload: DbDoctor = {
     id: doctor.id,
@@ -285,19 +283,21 @@ export async function saveDoctorToSupabase(doctor: Doctor) {
     linked_units: doctor.linkedUnits
   };
 
-  await supabase.from('doctors').upsert(payload);
+  const { error } = await supabase.from('doctors').upsert(payload).select('id').single();
+  if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
 export async function deleteDoctorFromSupabase(doctorId: string) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
-  await supabase.from('doctors').delete().eq('id', doctorId);
+  const { error } = await supabase.from('doctors').delete().eq('id', doctorId).select('id').single();
+  if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
 export async function saveUnitToSupabase(unit: Unit) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
   const payload: DbUnit = {
     id: unit.id,
@@ -314,22 +314,27 @@ export async function saveUnitToSupabase(unit: Unit) {
     specialties: unit.specialties
   };
 
-  await supabase.from('units').upsert(payload);
+  const { error } = await supabase.from('units').upsert(payload).select('id').single();
+  if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
 export async function deleteUnitFromSupabase(unitId: string) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
-  await supabase.from('units').delete().eq('id', unitId);
+  const { error } = await supabase.from('units').delete().eq('id', unitId).select('id').single();
+  if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
 export async function saveShiftToSupabase(shift: Shift) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
   const payload: DbShift = {
     id: shift.id,
+    sector: shift.sector,
+    employment_type: shift.employmentType,
+    employer_name: shift.employerName,
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId,
     unit_id: shift.unitId,
@@ -341,19 +346,21 @@ export async function saveShiftToSupabase(shift: Shift) {
     notes: shift.notes
   };
 
-  await supabase.from('shifts').upsert(payload);
+  const { error } = await supabase.from('shifts').upsert(payload).select('id').single();
+  if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
 export async function deleteShiftFromSupabase(shiftId: string) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
-  await supabase.from('shifts').delete().eq('id', shiftId);
+  const { error } = await supabase.from('shifts').delete().eq('id', shiftId).select('id').single();
+  if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
 export async function saveDocumentToSupabase(doc: MedicalDocument) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
   const payload: DbMedicalDocument = {
     id: doc.id,
@@ -364,15 +371,17 @@ export async function saveDocumentToSupabase(doc: MedicalDocument) {
     status: doc.status,
     upload_date: doc.uploadDate,
     expiry_date: doc.expiryDate,
-    file_name: doc.fileName
+    file_name: doc.fileName,
+    file_path: doc.filePath
   };
 
-  await supabase.from('medical_documents').upsert(payload);
+  const { error } = await supabase.from('medical_documents').upsert(payload).select('id').single();
+  if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
 export async function saveOrganizationToSupabase(org: Organization) {
   const supabase = createClient();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Conexão não configurada.');
 
   const payload: DbOrganization = {
     id: org.id,
@@ -392,65 +401,31 @@ export async function saveOrganizationToSupabase(org: Organization) {
     last_active: org.lastActive
   };
 
-  await supabase.from('organizations').upsert(payload);
-}
-
-export async function saveUserToSupabase(user: UserAccount) {
-  const supabase = createClient();
-  if (!supabase) return;
-
-  const payload: DbUserAccount = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    type: user.type,
-    organization_id: user.organizationId,
-    role: user.role,
-    status: user.status,
-    avatar: user.avatar,
-    last_active: user.lastActive
-  };
-
-  await supabase.from('user_accounts').upsert(payload);
+  const { error } = await supabase.from('organizations').upsert(payload).select('id').single();
+  if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
 // ==============================================================================
 // STORAGE: UPLOAD DE DOCUMENTOS PARA O BUCKET 'medical-documents'
 // ==============================================================================
 
-export async function uploadDocumentFileToSupabase(
-  file: File,
-  organizationId: string,
-  doctorId: string
-): Promise<{ fileUrl: string; fileName: string } | null> {
+export async function uploadDocumentFileToSupabase(file: File, organizationId: string, doctorId: string) {
   const supabase = createClient();
-  if (!supabase) return null;
-
-  try {
-    const fileExt = file.name.split('.').pop();
-    const cleanFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `${organizationId}/${doctorId}/${cleanFileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('medical-documents')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true
-      });
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('medical-documents')
-      .getPublicUrl(filePath);
-
-    return {
-      fileUrl: publicUrl,
-      fileName: file.name
-    };
-  } catch (err) {
-    console.error('[Supabase Storage] Erro ao fazer upload de documento:', err);
-    return null;
+  if (!supabase) throw new Error('Conexão não configurada.');
+  if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size > 10 * 1024 * 1024 || file.size === 0) {
+    throw new Error('Selecione um PDF, JPG ou PNG de até 10 MB.');
   }
+  const ext = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' }[file.type];
+  const filePath = organizationId + '/' + doctorId + '/' + crypto.randomUUID() + '.' + ext;
+  const { error } = await supabase.storage.from('medical-documents').upload(filePath, file, { upsert: false, contentType: file.type });
+  if (error) throw new Error('Não foi possível enviar o arquivo: ' + error.message);
+  return { filePath, fileName: file.name };
+}
+
+export async function openDocument(filePath: string) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase.storage.from('medical-documents').createSignedUrl(filePath, 60);
+  if (error) throw new Error('Não foi possível abrir o documento.');
+  return data.signedUrl;
 }

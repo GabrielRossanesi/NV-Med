@@ -5,8 +5,6 @@ import { Organization } from '@/types';
 import AccessGuard from '@/components/AccessGuard';
 import {
   Building,
-  Wrench,
-  RotateCcw,
   ShieldCheck,
   CheckCircle,
   Plus,
@@ -18,15 +16,14 @@ import { useState } from 'react';
 interface SettingsFormProps {
   activeOrg: Organization;
   activeOrganizationId: string;
-  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => void;
-  resetToMockData: () => void;
+  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => Promise<boolean>;
+
 }
 
 function SettingsForm({
   activeOrg,
   activeOrganizationId,
-  updateOrganizationSettings,
-  resetToMockData
+  updateOrganizationSettings
 }: SettingsFormProps) {
   const { theme, setTheme } = useStore();
 
@@ -39,20 +36,20 @@ function SettingsForm({
   const [newSpec, setNewSpec] = useState('');
   const [isSaved, setIsSaved] = useState(false);
 
-  const handleSaveOrgInfo = (e: React.FormEvent) => {
+  const handleSaveOrgInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateOrganizationSettings(activeOrganizationId, {
+    if (!await updateOrganizationSettings(activeOrganizationId, {
       name,
       cnpj,
       phone,
       email,
       address
-    });
+    })) return;
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
 
-  const handleAddSpecialty = (e: React.FormEvent) => {
+  const handleAddSpecialty = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSpec.trim()) return;
 
@@ -62,31 +59,26 @@ function SettingsForm({
     }
 
     const updatedSpecs = [...activeOrg.settings.specialties, newSpec.trim()];
-    updateOrganizationSettings(activeOrganizationId, {
+    if (!await updateOrganizationSettings(activeOrganizationId, {
       settings: {
         ...activeOrg.settings,
         specialties: updatedSpecs
       }
-    });
+    })) return;
     setNewSpec('');
   };
 
-  const handleRemoveSpecialty = (spec: string) => {
+  const handleRemoveSpecialty = async (spec: string) => {
     const updatedSpecs = activeOrg.settings.specialties.filter((s) => s !== spec);
-    updateOrganizationSettings(activeOrganizationId, {
+    if (!await updateOrganizationSettings(activeOrganizationId, {
       settings: {
         ...activeOrg.settings,
         specialties: updatedSpecs
       }
-    });
+    })) return;
   };
 
-  const handleResetDemo = () => {
-    if (confirm('Atenção: Isso irá apagar todas as alterações do localStorage e restaurar os dados iniciais da demo. Deseja continuar?')) {
-      resetToMockData();
-      window.location.reload();
-    }
-  };
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -298,25 +290,6 @@ function SettingsForm({
             ))}
           </div>
         </div>
-
-        {/* Demonstration utilities */}
-        <div className="bg-card-bg rounded-xl border border-card-border p-5 space-y-4">
-          <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
-            <Wrench className="h-4 w-4 text-text-muted" />
-            Ambiente de Demonstração
-          </h3>
-          <p className="text-[11px] text-text-muted leading-relaxed">
-            Utilitários para reconfigurar a demonstração comercial do NV Med de volta ao estado inicial.
-          </p>
-
-          <button
-            onClick={handleResetDemo}
-            className="w-full bg-surface-muted hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-900 border border-border text-text-primary py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar Dados Originais
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -326,8 +299,7 @@ export default function SettingsPage() {
   const {
     activeOrganizationId,
     organizations,
-    updateOrganizationSettings,
-    resetToMockData
+    updateOrganizationSettings
   } = useStore();
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
@@ -343,13 +315,12 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <SettingsForm
+        {activeOrg && <SettingsForm
           key={activeOrganizationId}
           activeOrg={activeOrg}
           activeOrganizationId={activeOrganizationId}
           updateOrganizationSettings={updateOrganizationSettings}
-          resetToMockData={resetToMockData}
-        />
+        />}
       </div>
     </AccessGuard>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import { openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import { DocumentStatus, DocumentType, DoctorStatus } from '@/types';
 import AccessGuard from '@/components/AccessGuard';
@@ -41,7 +42,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const docShifts = shifts.filter((s) => s.doctorId === doctorId && s.organizationId === activeOrganizationId);
   const docDocs = documents.filter((d) => d.doctorId === doctorId && d.organizationId === activeOrganizationId);
 
-  const [selectedFileNames, setSelectedFileNames] = useState<Record<string, string>>({});
+  const [selectedFileNames, setSelectedFileNames] = useState<Record<string, File>>({});
 
   if (!doctor) {
     return (
@@ -68,14 +69,14 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const handleFileChange = (type: DocumentType, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedFileNames((prev) => ({ ...prev, [type]: file.name }));
+      setSelectedFileNames((prev) => ({ ...prev, [type]: file }));
     }
   };
 
   // Trigger simulated upload
-  const handleUpload = (type: DocumentType) => {
-    const fileName = selectedFileNames[type] || 'documento_enviado.pdf';
-    uploadDocument(doctorId, type, fileName);
+  const handleUpload = async (type: DocumentType) => {
+    const file = selectedFileNames[type];
+    if (!file || !await uploadDocument(doctorId, type, file)) return;
     // Clear filename selection
     setSelectedFileNames((prev) => {
       const copy = { ...prev };
@@ -297,6 +298,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                         <h4 className="font-semibold text-xs text-text-primary leading-snug">{doc.name}</h4>
                       </div>
                       
+                      {doc.filePath && <button className="text-primary text-xs underline" onClick={async () => { try { const url = await openDocument(doc.filePath!); window.open(url, '_blank', 'noopener,noreferrer'); } catch (e) { useStore.setState({error: e instanceof Error ? e.message : 'Falha ao abrir documento.'}); } }}>Abrir documento</button>}
                       {doc.fileName && (
                         <div className="text-[10px] text-text-muted flex flex-col sm:flex-row sm:gap-4 gap-1 pl-6">
                           <span className="truncate max-w-[200px] font-mono">Arquivo: {doc.fileName}</span>
@@ -315,7 +317,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                       {/* Document Action Simulator */}
                       <div className="flex items-center gap-1 bg-background p-1.5 rounded-lg border border-card-border">
                         {/* If not sent, let them simulate mock select and upload */}
-                        {doc.status === 'not_sent' || doc.status === 'expired' || doc.status === 'rejected' ? (
+                        {!doc.filePath || doc.status === 'not_sent' || doc.status === 'expired' || doc.status === 'rejected' ? (
                           <div className="flex items-center gap-1.5">
                             <label className="cursor-pointer bg-card-bg hover:bg-slate-100 dark:hover:bg-slate-800 text-text-secondary border border-border rounded px-2.5 py-1 text-[10px] font-bold flex items-center gap-1">
                               <Upload className="h-3 w-3" />
@@ -330,6 +332,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                             
                             {isSelected && (
                               <button
+                                disabled={useStore.getState().saving}
                                 onClick={() => handleUpload(doc.type)}
                                 className="bg-primary hover:bg-primary-hover text-white rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
                               >

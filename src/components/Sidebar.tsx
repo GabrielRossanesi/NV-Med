@@ -1,5 +1,6 @@
 'use client';
 
+import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -28,8 +29,7 @@ export default function Sidebar() {
     activeOrganizationId,
     organizations,
     setActiveOrganizationId,
-    currentUser,
-    isSimulating
+    currentUser
   } = useStore();
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
@@ -57,7 +57,7 @@ export default function Sidebar() {
   // Determine items based on user type and simulation status
   const operationalItems = allOperationalItems.filter((item) => {
     if (currentUser.type === 'saas_admin') {
-      return isSimulating; // SaaS admins see operational links only when simulating
+      return userPermissions.includes(item.permission);
     }
     return userPermissions.includes(item.permission);
   });
@@ -74,8 +74,10 @@ export default function Sidebar() {
     router.refresh();
   };
 
-  const handleLogout = () => {
-    router.push('/login');
+  const handleLogout = async () => {
+    await createClient()?.auth.signOut();
+    useStore.getState().clearSession();
+    window.location.replace('/login');
   };
 
   const initials = currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2);

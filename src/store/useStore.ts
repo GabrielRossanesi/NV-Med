@@ -1,405 +1,89 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '../types';
-import { mockOrganizations, mockDoctors, mockUnits, mockDocuments, mockShifts, mockUsers } from '../data/mockData';
-import {
-  saveDoctorToSupabase,
-  deleteDoctorFromSupabase,
-  saveUnitToSupabase,
-  deleteUnitFromSupabase,
-  saveShiftToSupabase,
-  deleteShiftFromSupabase,
-  saveDocumentToSupabase,
-  saveOrganizationToSupabase,
-  saveUserToSupabase
-} from '@/services/supabaseService';
+import { Organization, Doctor, Unit, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '@/types';
+import * as cloud from '@/services/supabaseService';
+import { createClient } from '@/lib/supabase/client';
 
+const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
+const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], documents: [] as MedicalDocument[], shifts: [] as Shift[], users: [] as UserAccount[] };
+type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
 interface NVMedState {
-  activeOrganizationId: string;
-  organizations: Organization[];
-  doctors: Doctor[];
-  units: Unit[];
-  documents: MedicalDocument[];
-  shifts: Shift[];
-  
-  // Auth & Admin simulation
-  currentUser: UserAccount;
-  users: UserAccount[];
-  isSimulating: boolean;
-  simulatedOrganizationId: string | null;
-
-  // Cloud sync
-  syncWithCloud: (data: {
-    organizations?: Organization[];
-    doctors?: Doctor[];
-    units?: Unit[];
-    documents?: MedicalDocument[];
-    shifts?: Shift[];
-    users?: UserAccount[];
-  }) => void;
-
-  // Actions
+  activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; documents: MedicalDocument[]; shifts: Shift[];
+  currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
+  saving: boolean; error: string | null; notice: string | null;
+  clearFeedback: () => void; clearSession: () => void;
+  syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
-  setCurrentUser: (userId: string) => void;
-  
-  // Doctor CRUD
-  addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>) => void;
-  updateDoctor: (doctor: Doctor) => void;
-  deleteDoctor: (id: string) => void;
-  
-  // Unit CRUD
-  addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => void;
-  updateUnit: (unit: Unit) => void;
-  deleteUnit: (id: string) => void;
-  
-  // Shift CRUD
-  addShift: (shift: Omit<Shift, 'id' | 'organizationId'>) => void;
-  updateShift: (shift: Shift) => void;
-  deleteShift: (id: string) => void;
-  
-  // Document actions
-  uploadDocument: (doctorId: string, type: DocumentType, fileName: string) => void;
-  updateDocumentStatus: (documentId: string, status: DocumentStatus) => void;
-  
-  // Org actions
-  addOrganization: (org: Omit<Organization, 'id'>) => void;
-  updateOrganization: (org: Organization) => void;
-  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => void;
-  resetToMockData: () => void;
-
-  // User actions
-  addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>) => void;
-  updateUser: (user: UserAccount) => void;
-
-  // Simulation actions
-  startSimulation: (orgId: string) => void;
-  stopSimulation: () => void;
-  
-  // Theme state
-  theme: 'light' | 'dark';
-  setTheme: (theme: 'light' | 'dark') => void;
+  addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>) => Promise<boolean>;
+  updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
+  addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
+  updateUnit: (unit: Unit) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
+  addShift: (shift: Omit<Shift, 'id' | 'organizationId'>) => Promise<boolean>;
+  updateShift: (shift: Shift) => Promise<boolean>; deleteShift: (id: string) => Promise<boolean>;
+  uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
+  updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
+  addOrganization: (org: Omit<Organization, 'id'>) => Promise<boolean>;
+  updateOrganization: (org: Organization) => Promise<boolean>;
+  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => Promise<boolean>;
+  addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>) => Promise<boolean>;
+  updateUser: (user: UserAccount) => Promise<boolean>;
+  startSimulation: (orgId: string) => void; stopSimulation: () => void;
+  theme: 'light' | 'dark'; setTheme: (theme: 'light' | 'dark') => void;
 }
 
-export const useStore = create<NVMedState>()(
-  persist(
-    (set, get) => ({
-      activeOrganizationId: 'org-1',
-      organizations: mockOrganizations,
-      doctors: mockDoctors,
-      units: mockUnits,
-      documents: mockDocuments,
-      shifts: mockShifts,
-      users: mockUsers,
-      currentUser: mockUsers[0], // Gabriel Moraes CEO
-      isSimulating: false,
-      simulatedOrganizationId: null,
-
-      syncWithCloud: (data) => set((state) => ({
-        organizations: data.organizations && data.organizations.length > 0 ? data.organizations : state.organizations,
-        doctors: data.doctors && data.doctors.length > 0 ? data.doctors : state.doctors,
-        units: data.units && data.units.length > 0 ? data.units : state.units,
-        documents: data.documents && data.documents.length > 0 ? data.documents : state.documents,
-        shifts: data.shifts && data.shifts.length > 0 ? data.shifts : state.shifts,
-        users: data.users && data.users.length > 0 ? data.users : state.users,
-      })),
-
-      setActiveOrganizationId: (id) => set({ activeOrganizationId: id }),
-
-      setCurrentUser: (userId) => {
-        const user = get().users.find((u) => u.id === userId);
-        if (user) {
-          const updates: Partial<NVMedState> = {
-            currentUser: user,
-            // If they are tenant_user, force to their organization and turn off simulation
-            ...(user.type === 'tenant_user' ? {
-              activeOrganizationId: user.organizationId || 'org-1',
-              isSimulating: false,
-              simulatedOrganizationId: null
-            } : {})
-          };
-          set(updates);
-        }
-      },
-
-      addDoctor: (doctorData) => {
-        const orgId = get().activeOrganizationId;
-        const newId = `doc-${Date.now()}`;
-        const newDoctor: Doctor = {
-          ...doctorData,
-          id: newId,
-          organizationId: orgId,
-        };
-
-        // Auto-generate document templates for the doctor based on organization settings
-        const org = get().organizations.find((o) => o.id === orgId);
-        const requiredDocs = org?.settings.requiredDocuments || [];
-        const newDocs: MedicalDocument[] = requiredDocs.map((doc, index) => ({
-          id: `doc-${newId}-${index}-${Date.now()}`,
-          doctorId: newId,
-          name: doc.name,
-          type: doc.type as DocumentType,
-          status: 'not_sent',
-          organizationId: orgId,
-        }));
-
-        set((state) => ({
-          doctors: [...state.doctors, newDoctor],
-          documents: [...state.documents, ...newDocs],
-        }));
-
-        // Persistência em nuvem (Supabase)
-        saveDoctorToSupabase(newDoctor).catch((err) => console.warn('[Supabase Sync Error]', err));
-        newDocs.forEach((d) => saveDocumentToSupabase(d).catch((err) => console.warn('[Supabase Sync Error]', err)));
-      },
-
-      updateDoctor: (updatedDoctor) => {
-        set((state) => ({
-          doctors: state.doctors.map((d) => d.id === updatedDoctor.id ? updatedDoctor : d)
-        }));
-        saveDoctorToSupabase(updatedDoctor).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      deleteDoctor: (id) => {
-        set((state) => ({
-          doctors: state.doctors.filter((d) => d.id !== id),
-          // Clean up linked shifts and documents
-          shifts: state.shifts.filter((s) => s.doctorId !== id),
-          documents: state.documents.filter((d) => d.doctorId !== id),
-        }));
-        deleteDoctorFromSupabase(id).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      addUnit: (unitData) => {
-        const orgId = get().activeOrganizationId;
-        const newId = `unit-${Date.now()}`;
-        const newUnit: Unit = {
-          ...unitData,
-          id: newId,
-          organizationId: orgId,
-        };
-        set((state) => ({
-          units: [...state.units, newUnit]
-        }));
-        saveUnitToSupabase(newUnit).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      updateUnit: (updatedUnit) => {
-        set((state) => ({
-          units: state.units.map((u) => u.id === updatedUnit.id ? updatedUnit : u)
-        }));
-        saveUnitToSupabase(updatedUnit).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      deleteUnit: (id) => {
-        set((state) => ({
-          units: state.units.filter((u) => u.id !== id),
-          // Clean up linked shifts
-          shifts: state.shifts.filter((s) => s.unitId !== id),
-          // Update doctors that might be linked
-          doctors: state.doctors.map((doc) => {
-            if (doc.linkedUnits.includes(id)) {
-              return { ...doc, linkedUnits: doc.linkedUnits.filter((uid) => uid !== id) };
-            }
-            return doc;
-          }),
-        }));
-        deleteUnitFromSupabase(id).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      addShift: (shiftData) => {
-        const orgId = get().activeOrganizationId;
-        const newId = `shift-${Date.now()}`;
-        const newShift: Shift = {
-          ...shiftData,
-          id: newId,
-          organizationId: orgId,
-        };
-        set((state) => ({
-          shifts: [...state.shifts, newShift]
-        }));
-        saveShiftToSupabase(newShift).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      updateShift: (updatedShift) => {
-        set((state) => ({
-          shifts: state.shifts.map((s) => s.id === updatedShift.id ? updatedShift : s)
-        }));
-        saveShiftToSupabase(updatedShift).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      deleteShift: (id) => {
-        set((state) => ({
-          shifts: state.shifts.filter((s) => s.id !== id)
-        }));
-        deleteShiftFromSupabase(id).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      uploadDocument: (doctorId, type, fileName) => {
-        const orgId = get().activeOrganizationId;
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        let targetDoc: MedicalDocument | null = null;
-
-        set((state) => {
-          const existingDocIndex = state.documents.findIndex(
-            (d) => d.doctorId === doctorId && d.type === type
-          );
-
-          if (existingDocIndex >= 0) {
-            const updatedDocs = [...state.documents];
-            targetDoc = {
-              ...updatedDocs[existingDocIndex],
-              status: 'sent',
-              fileName,
-              uploadDate: todayStr,
-            };
-            updatedDocs[existingDocIndex] = targetDoc;
-            return { documents: updatedDocs };
-          } else {
-            targetDoc = {
-              id: `doc-${doctorId}-${type}-${Date.now()}`,
-              doctorId,
-              name: type.replace('_', ' ').toUpperCase(),
-              type,
-              status: 'sent',
-              fileName,
-              uploadDate: todayStr,
-              organizationId: orgId,
-            };
-            return { documents: [...state.documents, targetDoc] };
-          }
-        });
-
-        if (targetDoc) {
-          saveDocumentToSupabase(targetDoc).catch((err) => console.warn('[Supabase Sync Error]', err));
-        }
-      },
-
-      updateDocumentStatus: (documentId, status) => {
-        let updatedDoc: MedicalDocument | null = null;
-        set((state) => {
-          const docs = state.documents.map((d) => {
-            if (d.id === documentId) {
-              updatedDoc = { ...d, status };
-              return updatedDoc;
-            }
-            return d;
-          });
-          return { documents: docs };
-        });
-
-        if (updatedDoc) {
-          saveDocumentToSupabase(updatedDoc).catch((err) => console.warn('[Supabase Sync Error]', err));
-        }
-      },
-
-      updateOrganizationSettings: (orgId, updates) => {
-        let updatedOrg: Organization | null = null;
-        set((state) => ({
-          organizations: state.organizations.map((org) => {
-            if (org.id === orgId) {
-              updatedOrg = { ...org, ...updates };
-              return updatedOrg;
-            }
-            return org;
-          })
-        }));
-
-        if (updatedOrg) {
-          saveOrganizationToSupabase(updatedOrg).catch((err) => console.warn('[Supabase Sync Error]', err));
-        }
-      },
-
-      addOrganization: (orgData) => {
-        const newId = `org-${Date.now()}`;
-        const newOrg: Organization = {
-          ...orgData,
-          id: newId,
-          settings: orgData.settings || {
-            specialties: ['Clínico Geral'],
-            requiredDocuments: [
-              { type: 'rg_cnh', name: 'RG/CNH', required: true },
-              { type: 'diploma_medicina', name: 'Diploma de Medicina', required: true }
-            ]
-          }
-        };
-        set((state) => ({
-          organizations: [...state.organizations, newOrg]
-        }));
-        saveOrganizationToSupabase(newOrg).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      updateOrganization: (updatedOrg) => {
-        set((state) => ({
-          organizations: state.organizations.map((org) => org.id === updatedOrg.id ? updatedOrg : org)
-        }));
-        saveOrganizationToSupabase(updatedOrg).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      addUser: (userData) => {
-        const newId = `user-${Date.now()}`;
-        const newUser: UserAccount = {
-          ...userData,
-          id: newId,
-          createdAt: new Date().toISOString().split('T')[0]
-        };
-        set((state) => ({
-          users: [...state.users, newUser]
-        }));
-        saveUserToSupabase(newUser).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      updateUser: (updatedUser) => {
-        set((state) => {
-          const nextUsers = state.users.map((u) => u.id === updatedUser.id ? updatedUser : u);
-          const isCurrent = state.currentUser.id === updatedUser.id;
-          return {
-            users: nextUsers,
-            ...(isCurrent ? { currentUser: updatedUser } : {})
-          };
-        });
-        saveUserToSupabase(updatedUser).catch((err) => console.warn('[Supabase Sync Error]', err));
-      },
-
-      startSimulation: (orgId) => {
-        const org = get().organizations.find((o) => o.id === orgId);
-        if (org) {
-          set({
-            isSimulating: true,
-            simulatedOrganizationId: orgId,
-            activeOrganizationId: orgId
-          });
-        }
-      },
-
-      stopSimulation: () => {
-        set({
-          isSimulating: false,
-          simulatedOrganizationId: null,
-          activeOrganizationId: 'org-1'
-        });
-      },
-
-      resetToMockData: () => set({
-        activeOrganizationId: 'org-1',
-        organizations: mockOrganizations,
-        doctors: mockDoctors,
-        units: mockUnits,
-        documents: mockDocuments,
-        shifts: mockShifts,
-        users: mockUsers,
-        currentUser: mockUsers[0],
-        isSimulating: false,
-        simulatedOrganizationId: null,
-      }),
-
-      // Theme implementation
-      theme: 'dark',
-      setTheme: (theme) => set({ theme }),
+export const useStore = create<NVMedState>()(persist((set, get) => {
+  async function commit(work: () => Promise<void>) {
+    if (get().saving) return false;
+    set({ saving: true, error: null, notice: null });
+    try { await work(); set({ notice: 'Alteração salva no banco.' }); return true; }
+    catch (error) { set({ error: error instanceof Error ? error.message : 'Não foi possível salvar. Tente novamente.' }); return false; }
+    finally { set({ saving: false }); }
+  }
+  function orgId() {
+    const id = get().activeOrganizationId;
+    if (!id || !get().organizations.some(o => o.id === id)) throw new Error('Selecione uma empresa antes de continuar.');
+    return id;
+  }
+  return {
+    ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
+    saving: false, error: null, notice: null, theme: 'dark',
+    setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null, notice: null }),
+    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null, notice: null }),
+    syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
+    setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
+    addDoctor: input => commit(async () => {
+      const doctor = { ...input, id: crypto.randomUUID(), organizationId: orgId() };
+      // The database trigger creates required document rows in the same transaction.
+      await cloud.saveDoctorToSupabase(doctor);
+      set({ doctors: [...get().doctors, doctor] });
+      try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
+      catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
     }),
-    {
-      name: 'nv-med-storage', // name of the item in the local storage
-      skipHydration: true, // we will hydrate manually in a provider to avoid SSR mismatch
-    }
-  )
-);
+    updateDoctor: doctor => commit(async () => { await cloud.saveDoctorToSupabase(doctor); set({ doctors: get().doctors.map(d => d.id === doctor.id ? doctor : d) }); }),
+    deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
+    addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit); set({ units: [...get().units, unit] }); }),
+    updateUnit: unit => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }),
+    deleteUnit: id => commit(async () => { await cloud.deleteUnitFromSupabase(id); set({ units: get().units.filter(u => u.id !== id), shifts: get().shifts.filter(s => s.unitId !== id) }); }),
+    addShift: input => commit(async () => { const shift = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveShiftToSupabase(shift); set({ shifts: [...get().shifts, shift] }); }),
+    updateShift: shift => commit(async () => { await cloud.saveShiftToSupabase(shift); set({ shifts: get().shifts.map(s => s.id === shift.id ? shift : s) }); }),
+    deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
+    uploadDocument: (doctorId, type, file) => commit(async () => {
+      const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());
+      if (!doctor) throw new Error('Médico não encontrado nesta empresa.');
+      const previous = get().documents.find(d => d.doctorId === doctorId && d.type === type);
+      const uploaded = await cloud.uploadDocumentFileToSupabase(file, doctor.organizationId, doctorId);
+      const doc: MedicalDocument = { ...previous, ...uploaded, id: previous?.id || crypto.randomUUID(), doctorId, organizationId: doctor.organizationId, type, name: previous?.name || type, status: 'sent', uploadDate: new Date().toISOString().slice(0, 10) };
+      try { await cloud.saveDocumentToSupabase(doc); }
+      catch (error) { await createClient()?.storage.from('medical-documents').remove([uploaded.filePath]); throw error; }
+      set({ documents: [...get().documents.filter(d => d.id !== doc.id), doc] });
+    }),
+    updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const doc = { ...previous, status }; await cloud.saveDocumentToSupabase(doc); set({ documents: get().documents.map(d => d.id === id ? doc : d) }); }),
+    addOrganization: input => commit(async () => { const org = { ...input, id: crypto.randomUUID() }; await cloud.saveOrganizationToSupabase(org); set({ organizations: [...get().organizations, org], activeOrganizationId: org.id }); }),
+    updateOrganization: org => commit(async () => { await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === org.id ? org : o) }); }),
+    updateOrganizationSettings: (id, updates) => commit(async () => { const previous = get().organizations.find(o => o.id === id); if (!previous) throw new Error('Empresa não encontrada.'); const org = { ...previous, ...updates }; await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === id ? org : o) }); }),
+    addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }),
+    updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }),
+    startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
+    stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),
+  };
+}, { name: 'nv-med-preferences', skipHydration: true, partialize: state => ({ theme: state.theme }), merge: (saved, current) => ({ ...current, theme: (saved as { theme?: string })?.theme === 'light' ? 'light' : 'dark' }) }));

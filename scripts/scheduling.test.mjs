@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { countDoctors, shiftTouchesDay, hasConflict } from '../src/lib/scheduling.ts';
+const base = { id:'a', organizationId:'org', doctorId:'doctor', unitId:'unit', date:'2026-09-20', startTime:'07:00', endTime:'19:00', type:'onsite', status:'confirmed' };
+test('counts unique doctors and excludes cancelled shifts',()=>assert.equal(countDoctors([base,{...base,id:'b'},{...base,id:'c',doctorId:'other',status:'cancelled'}]),1));
+test('overnight shift contributes to both covered days',()=>{const s={...base,startTime:'19:00',endTime:'07:00'};assert.equal(shiftTouchesDay(s,'2026-09-20'),true);assert.equal(shiftTouchesDay(s,'2026-09-21'),true);assert.equal(shiftTouchesDay(s,'2026-09-22'),false);});
+test('midnight end does not cover the following day',()=>assert.equal(shiftTouchesDay({...base,startTime:'19:00',endTime:'00:00'},'2026-09-21'),false));
+test('overnight counts across month and year boundaries',()=>assert.equal(shiftTouchesDay({...base,date:'2026-12-31',startTime:'19:00',endTime:'07:00'},'2027-01-01'),true));
+test('adjacent shifts are allowed but overlap across midnight is rejected',()=>{const night={...base,startTime:'19:00',endTime:'07:00'};assert.equal(hasConflict({...base,id:'b',date:'2026-09-21'},[night]),false);assert.equal(hasConflict({...base,id:'b',date:'2026-09-21',startTime:'06:00'},[night]),true);});
+test('editing a shift does not conflict with itself',()=>assert.equal(hasConflict(base,[base]),false));
+test('cancellation and different doctors do not conflict',()=>{assert.equal(hasConflict({...base,id:'b',status:'cancelled'},[base]),false);assert.equal(hasConflict({...base,id:'b',doctorId:'other'},[base]),false);});

@@ -335,3 +335,14 @@ body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-bor
   box-shadow: var(--glow-primary);
   border-color: rgba(45, 212, 191, 0.3);
 }
+
+@layer components {
+  .nv-label { display: flex; flex-direction: column; gap: .5rem; font-size: .875rem; font-weight: 500; }
+  .nv-input { width: 100%; min-height: 44px; border: 1px solid var(--color-border); background: var(--color-input-bg); color: var(--color-text-primary); border-radius: .625rem; padding: .65rem .8rem; font-size: .875rem; }
+  .nv-input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  .nv-button, .nv-button-secondary { display: inline-flex; justify-content: center; align-items: center; gap: .5rem; min-height: 44px; padding: .65rem 1rem; border-radius: .625rem; font-size: .875rem; font-weight: 600; cursor: pointer; }
+  .nv-button { background: var(--color-primary); color: var(--color-text-inverse); }
+  .nv-button-secondary { border: 1px solid var(--color-border); color: var(--color-text-primary); background: var(--color-card-bg); }
+  button:disabled { opacity: .55; cursor: wait; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+}

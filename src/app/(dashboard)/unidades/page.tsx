@@ -91,10 +91,10 @@ function UnitsPageContent() {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    addUnit({
+    if (!await addUnit({
       name,
       cnpj,
       address,
@@ -105,7 +105,7 @@ function UnitsPageContent() {
       phone,
       status,
       specialties: selectedSpecs
-    });
+    })) return;
 
     // Reset Form
     setName('');
