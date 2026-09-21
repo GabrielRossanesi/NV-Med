@@ -28,6 +28,7 @@ interface NVMedState {
   deleteShift: (id: string) => Promise<boolean>;
   uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
+  updateDocument: (document: MedicalDocument) => Promise<boolean>;
   addOrganization: (org: Omit<Organization, 'id'>) => Promise<boolean>;
   updateOrganization: (org: Organization) => Promise<boolean>;
   deleteOrganization: (id: string, confirmation: string) => Promise<boolean>;
@@ -106,6 +107,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       set({ documents: [...get().documents.filter(d => d.id !== doc.id), doc] });
     }),
     updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const doc = { ...previous, status }; await cloud.saveDocumentToSupabase(doc); set({ documents: get().documents.map(d => d.id === id ? doc : d) }); }),
+    updateDocument: document => commit(async () => { await cloud.saveDocumentToSupabase(document); set({ documents: get().documents.map(item => item.id === document.id ? document : item) }); }),
     addOrganization: input => commit(async () => { const org = { ...input, id: crypto.randomUUID() }; await cloud.saveOrganizationToSupabase(org); set({ organizations: [...get().organizations, org], activeOrganizationId: org.id }); }),
     updateOrganization: org => commit(async () => { await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === org.id ? org : o) }); }),
     deleteOrganization: (id, confirmation) => commit(async () => {

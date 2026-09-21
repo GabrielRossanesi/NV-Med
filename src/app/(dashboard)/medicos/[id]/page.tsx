@@ -18,7 +18,8 @@ import {
   MapPin,
   Mail,
   Phone,
-  FileCheck
+  FileCheck,
+  FolderOpen
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -282,6 +283,9 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                 </h3>
                 <p className="text-[11px] text-text-muted">Verifique a validade e gerencie a documentação do CRM do médico.</p>
               </div>
+              <Link href={`/documentos/${doctor.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary transition hover:bg-state-hover">
+                <FolderOpen className="h-3.5 w-3.5" /> Abrir pasta
+              </Link>
             </div>
 
             {/* Checklist items */}

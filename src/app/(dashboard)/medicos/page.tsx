@@ -14,16 +14,20 @@ import {
   Eye,
   Trash2,
   UserCheck,
-  Users
+  Users,
+  AlertTriangle,
+  FileCheck2
 } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import Link from 'next/link';
+import { getDoctorCompliance } from '@/lib/documentCompliance';
 
 function DoctorsPageContent() {
   const {
     activeOrganizationId,
     organizations,
     doctors,
+    documents,
     units,
     addDoctor,
     deleteDoctor
@@ -38,11 +42,16 @@ function DoctorsPageContent() {
   const searchParams = useSearchParams();
   const urlSpecialty = searchParams?.get('especialidade') || searchParams?.get('specialty') || 'all';
   const urlStatus = searchParams?.get('status') || 'all';
+  const urlUnit = searchParams?.get('unitId') || 'all';
+  const urlDocumentStatus = searchParams?.get('documentStatus') || 'all';
 
   // Search & Filter state
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(urlStatus);
   const [specialtyFilter, setSpecialtyFilter] = useState<string>(urlSpecialty);
+  const [unitFilter, setUnitFilter] = useState<string>(urlUnit);
+  const [documentFilter, setDocumentFilter] = useState<string>(urlDocumentStatus);
+  const [referenceTime] = useState(() => Date.now());
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Sync state if search parameters or organization changes
@@ -79,6 +88,8 @@ function DoctorsPageContent() {
   const [status, setStatus] = useState<DoctorStatus>('active');
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
 
+  const orgDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
+
   // Filtered doctors list
   const filteredDoctors = orgDoctors.filter((doc) => {
     const matchesSearch =
@@ -88,8 +99,11 @@ function DoctorsPageContent() {
 
     const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
     const matchesSpecialty = specialtyFilter === 'all' || doc.specialty.toLowerCase() === specialtyFilter.toLowerCase();
+    const matchesUnit = unitFilter === 'all' || doc.linkedUnits.includes(unitFilter);
+    const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime);
+    const matchesDocuments = documentFilter === 'all' || (documentFilter === 'pending' ? documentSummary.pending > 0 || documentSummary.nearExpiry > 0 : documentSummary.compliant);
 
-    return matchesSearch && matchesStatus && matchesSpecialty;
+    return matchesSearch && matchesStatus && matchesSpecialty && matchesUnit && matchesDocuments;
   });
 
   const handleUnitToggle = (unitId: string) => {
@@ -169,7 +183,7 @@ function DoctorsPageContent() {
             Corpo Clínico (Médicos)
           </h2>
           <p className="text-sm text-text-muted mt-1">
-            Cadastro e credenciamento de médicos no tenant ativo.
+            Cadastro, vínculos e conformidade documental do corpo clínico da empresa ativa.
           </p>
         </div>
         <button
@@ -209,7 +223,7 @@ function DoctorsPageContent() {
       ) : (
         <>
           {/* Filters Bar */}
-          <div className="bg-card-bg p-4 rounded-xl border border-card-border flex flex-col md:flex-row items-center gap-4">
+          <div className="grid gap-3 rounded-xl border border-card-border bg-card-bg p-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_160px_170px]">
             {/* Search */}
             <div className="relative w-full md:flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
@@ -223,7 +237,7 @@ function DoctorsPageContent() {
             </div>
 
             {/* Specialty Filter */}
-            <div className="relative w-full md:w-48">
+            <div className="relative w-full">
               <select
                 value={specialtyFilter}
                 onChange={(e) => setSpecialtyFilter(e.target.value)}
@@ -239,7 +253,7 @@ function DoctorsPageContent() {
             </div>
 
             {/* Status Filter */}
-            <div className="relative w-full md:w-40">
+            <div className="relative w-full">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -251,10 +265,25 @@ function DoctorsPageContent() {
                 <option value="inactive">Inativo</option>
               </select>
             </div>
+
+            <div className="relative w-full">
+              <select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary transition">
+                <option value="all">Todas as unidades</option>
+                {orgUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select>
+            </div>
+
+            <div className="relative w-full">
+              <select value={documentFilter} onChange={(e) => setDocumentFilter(e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary transition">
+                <option value="all">Toda documentação</option>
+                <option value="pending">Com pendências</option>
+                <option value="compliant">Documentação regular</option>
+              </select>
+            </div>
           </div>
 
           {/* Active Filters Summary */}
-          {(statusFilter !== 'all' || specialtyFilter !== 'all' || search !== '') && (
+          {(statusFilter !== 'all' || specialtyFilter !== 'all' || unitFilter !== 'all' || documentFilter !== 'all' || search !== '') && (
             <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-in fade-in duration-200">
               <div className="text-xs text-text-secondary">
                 <span className="font-bold text-primary mr-1">Filtros Ativos:</span>
@@ -268,6 +297,16 @@ function DoctorsPageContent() {
                     Status: {statusFilter === 'active' ? 'Ativo' : statusFilter === 'pending' ? 'Pendente' : 'Inativo'}
                   </span>
                 )}
+                {unitFilter !== 'all' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Unidade: {orgUnits.find(unit => unit.id === unitFilter)?.name || 'Selecionada'}
+                  </span>
+                )}
+                {documentFilter !== 'all' && (
+                  <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5">
+                    Documentação: {documentFilter === 'pending' ? 'Com pendências' : 'Regular'}
+                  </span>
+                )}
                 {search !== '' && (
                   <span className="bg-card-bg border border-border px-2 py-0.5 rounded mr-1.5 font-medium inline-block my-0.5 font-mono">
                     Busca: &quot;{search}&quot;
@@ -278,6 +317,8 @@ function DoctorsPageContent() {
                 onClick={() => {
                   setStatusFilter('all');
                   setSpecialtyFilter('all');
+                  setUnitFilter('all');
+                  setDocumentFilter('all');
                   setSearch('');
                   window.history.pushState({}, '', '/medicos');
                 }}
@@ -299,6 +340,7 @@ function DoctorsPageContent() {
                     <th className="p-4">Especialidade</th>
                     <th className="p-4">Unidades Vinculadas</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4">Documentação</th>
                     <th className="p-4 text-center">Ações</th>
                   </tr>
                 </thead>
@@ -307,6 +349,7 @@ function DoctorsPageContent() {
                     filteredDoctors.map((doc) => {
                       // Find clinical names linked to this doctor
                       const linkedClinics = orgUnits.filter((u) => doc.linkedUnits.includes(u.id));
+                      const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime);
 
                       return (
                         <tr key={doc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/10 transition">
@@ -344,6 +387,12 @@ function DoctorsPageContent() {
                             {getStatusBadge(doc.status)}
                           </td>
                           <td className="p-4">
+                            <Link href={`/documentos/${doc.id}`} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition hover:opacity-80 ${documentSummary.compliant ? 'bg-success/10 text-success' : documentSummary.critical ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'}`}>
+                              {documentSummary.compliant ? <FileCheck2 className="h-3 w-3"/> : <AlertTriangle className="h-3 w-3"/>}
+                              {documentSummary.compliant ? 'Regular' : documentSummary.pending ? `${documentSummary.pending} pendente${documentSummary.pending === 1 ? '' : 's'}` : `${documentSummary.nearExpiry} vencendo`}
+                            </Link>
+                          </td>
+                          <td className="p-4">
                             <div className="flex items-center justify-center gap-2">
                               <Link
                                 href={`/medicos/${doc.id}`}
@@ -366,7 +415,7 @@ function DoctorsPageContent() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-text-muted">
+                      <td colSpan={7} className="p-8 text-center text-text-muted">
                         Nenhum médico encontrado com os filtros ativos.
                       </td>
                     </tr>
