@@ -338,16 +338,25 @@ export async function saveUnitToSupabase(unit: Unit) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
+  const { data: organization, error: organizationError } = await supabase
+    .from('organizations')
+    .select('name,cnpj')
+    .eq('id', unit.organizationId)
+    .single();
+  if (organizationError || !organization) throw new Error('Empresa responsável não encontrada.');
+  const companyCnpj = organization.cnpj?.trim();
+  if (!companyCnpj) throw new Error('Cadastre o CNPJ da empresa responsável antes de salvar a unidade.');
+
   const payload: DbUnit = {
     id: unit.id,
     organization_id: unit.organizationId,
     name: unit.name,
-    cnpj: unit.cnpj,
+    cnpj: companyCnpj,
     address: unit.address,
     city: unit.city,
     state: unit.state,
     type: unit.type,
-    manager: unit.manager,
+    manager: organization.name,
     phone: unit.phone,
     status: unit.status,
     specialties: unit.specialties

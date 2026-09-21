@@ -13,7 +13,6 @@ import {
   Eye,
   Trash2,
   Phone,
-  User,
   MapPin
 } from 'lucide-react';
 import Link from 'next/link';
@@ -25,7 +24,9 @@ function UnitsPageContent() {
     organizations,
     units,
     addUnit,
-    deleteUnit
+    deleteUnit,
+    updateOrganizationSettings,
+    saving
   } = useStore();
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
@@ -63,12 +64,11 @@ function UnitsPageContent() {
 
   // Form states for new Unit
   const [name, setName] = useState('');
-  const [cnpj, setCnpj] = useState('');
+  const [companyCnpj, setCompanyCnpj] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('SP');
   const [type, setType] = useState<UnitType>('hospital');
-  const [manager, setManager] = useState('');
   const [phone, setPhone] = useState('');
   const [status, setStatus] = useState<UnitStatus>('active');
   const [selectedSpecs, setSelectedSpecs] = useState<string[]>([]);
@@ -78,7 +78,7 @@ function UnitsPageContent() {
     const matchesSearch =
       unit.name.toLowerCase().includes(search.toLowerCase()) ||
       unit.city.toLowerCase().includes(search.toLowerCase()) ||
-      unit.cnpj.includes(search);
+      (activeOrg?.cnpj || '').includes(search);
 
     const matchesStatus = statusFilter === 'all' || unit.status === statusFilter;
 
@@ -91,17 +91,27 @@ function UnitsPageContent() {
     );
   };
 
+  const openCreateModal = () => {
+    setCompanyCnpj(activeOrg?.cnpj || '');
+    setIsModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedCompanyCnpj = companyCnpj.trim();
+    if (!activeOrg || !normalizedCompanyCnpj) return;
+    if (!activeOrg.cnpj?.trim()) {
+      if (!await updateOrganizationSettings(activeOrg.id, { cnpj: normalizedCompanyCnpj })) return;
+    }
 
     if (!await addUnit({
       name,
-      cnpj,
+      cnpj: normalizedCompanyCnpj,
       address,
       city,
       state,
       type,
-      manager,
+      manager: activeOrg.name,
       phone,
       status,
       specialties: selectedSpecs
@@ -109,12 +119,11 @@ function UnitsPageContent() {
 
     // Reset Form
     setName('');
-    setCnpj('');
+    setCompanyCnpj('');
     setAddress('');
     setCity('');
     setState('SP');
     setType('hospital');
-    setManager('');
     setPhone('');
     setStatus('active');
     setSelectedSpecs([]);
@@ -165,7 +174,7 @@ function UnitsPageContent() {
           </p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openCreateModal}
           className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
@@ -240,7 +249,7 @@ function UnitsPageContent() {
             </p>
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-sm mx-auto"
           >
             <Plus className="h-4 w-4" />
@@ -285,7 +294,7 @@ function UnitsPageContent() {
                       <div className="min-w-0">
                         <span className="text-[9px] uppercase font-bold text-text-muted tracking-wide">{getTypeLabel(unit.type)}</span>
                         <h3 className="text-sm font-bold text-text-primary mt-0.5 truncate">{unit.name}</h3>
-                        <p className="text-[10px] text-text-muted mt-0.5 font-mono">CNPJ: {unit.cnpj}</p>
+                        <p className="text-[10px] text-text-muted mt-0.5 font-mono">CNPJ: {activeOrg?.cnpj || 'Não informado'}</p>
                       </div>
                       {getStatusBadge(unit.status)}
                     </div>
@@ -297,8 +306,8 @@ function UnitsPageContent() {
                         <span className="truncate">{unit.address}, {unit.city} - {unit.state}</span>
                       </p>
                       <p className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-text-muted flex-shrink-0" />
-                        <span>Responsável: {unit.manager}</span>
+                        <Building2 className="h-4 w-4 text-text-muted flex-shrink-0" />
+                        <span>Empresa responsável: {activeOrg?.name || unit.manager}</span>
                       </p>
                       <p className="flex items-center gap-2">
                         <Phone className="h-4 w-4 text-text-muted flex-shrink-0" />
@@ -358,7 +367,7 @@ function UnitsPageContent() {
                   <Building2 className="h-4 w-4 text-primary" />
                   Cadastrar Nova Unidade
                 </h3>
-                <p className="text-[10px] text-text-muted mt-0.5">Informe as credenciais físicas da nova clínica ou hospital</p>
+                <p className="text-[10px] text-text-muted mt-0.5">Informe os dados físicos da nova clínica ou hospital</p>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -382,19 +391,35 @@ function UnitsPageContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-border bg-surface-muted/30 p-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">CNPJ</label>
+                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Empresa responsável</label>
                   <input
                     type="text"
-                    required
-                    value={cnpj}
-                    onChange={(e) => setCnpj(e.target.value)}
-                    placeholder="Ex: 00.000.000/0001-00"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    readOnly
+                    aria-readonly="true"
+                    value={activeOrg?.name || ''}
+                    className="w-full cursor-not-allowed rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs font-medium text-text-secondary"
                   />
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">CNPJ da empresa</label>
+                  <input
+                    type="text"
+                    required
+                    readOnly={Boolean(activeOrg?.cnpj?.trim())}
+                    aria-readonly={Boolean(activeOrg?.cnpj?.trim())}
+                    value={companyCnpj}
+                    onChange={(event) => setCompanyCnpj(event.target.value)}
+                    placeholder="Cadastre o CNPJ da empresa"
+                    className={`w-full rounded-lg border border-border px-3 py-2 font-mono text-xs text-text-secondary focus:outline-none focus:border-primary ${activeOrg?.cnpj?.trim() ? 'cursor-not-allowed bg-surface-muted' : 'bg-background'}`}
+                  />
+                </div>
+                <p className="sm:col-span-2 text-xs text-text-muted">{activeOrg?.cnpj?.trim() ? 'O CNPJ vem do cadastro da empresa e não pode ser alterado nesta unidade.' : 'Informe o CNPJ da empresa responsável. Ele também será salvo no cadastro da empresa.'}</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Tipo</label>
                   <select
@@ -408,18 +433,6 @@ function UnitsPageContent() {
                     <option value="upa">UPA</option>
                     <option value="lab">Laboratório</option>
                   </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Responsável</label>
-                  <input
-                    type="text"
-                    required
-                    value={manager}
-                    onChange={(e) => setManager(e.target.value)}
-                    placeholder="Nome do gestor ou diretor técnico"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
-                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -502,9 +515,10 @@ function UnitsPageContent() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200 cursor-pointer"
+                  disabled={saving || !companyCnpj.trim()}
+                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Salvar Unidade
+                  {saving ? 'Salvando…' : 'Salvar Unidade'}
                 </button>
               </div>
             </form>
