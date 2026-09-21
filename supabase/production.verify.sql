@@ -1,7 +1,7 @@
--- Run after 11_finance_module.sql inside a transaction; always rollback fixtures.
+-- Run after 12_user_additional_permissions.sql inside a transaction; always rollback fixtures.
 INSERT INTO auth.users(id,aud,role,email,created_at,updated_at) VALUES('10000000-0000-4000-8000-000000000001','authenticated','authenticated','nvmed-transaction-test@example.invalid',now(),now());
 INSERT INTO public.organizations(id,name,settings) VALUES('nv-test-a','Transaction test A','{"specialties":[],"requiredDocuments":[{"type":"rg_cnh","name":"RG","required":true}]}'),('nv-test-b','Transaction test B','{"specialties":[],"requiredDocuments":[]}');
-INSERT INTO public.user_accounts(id,auth_user_id,name,email,type,organization_id,role,status) VALUES('nv-test-user','10000000-0000-4000-8000-000000000001','Test','nvmed-transaction-test@example.invalid','tenant_user','nv-test-a','Gerente','active');
+INSERT INTO public.user_accounts(id,auth_user_id,name,email,type,organization_id,role,status,additional_permissions) VALUES('nv-test-user','10000000-0000-4000-8000-000000000001','Test','nvmed-transaction-test@example.invalid','tenant_user','nv-test-a','Jurídico','active','{"medicos":"edit","unidades":"edit","escala":"edit","financeiro":"edit"}');
 SELECT set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN
@@ -30,5 +30,5 @@ DO $$ BEGIN
  BEGIN PERFORM * FROM public.doctors; RAISE EXCEPTION 'FAIL: anonymous read'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
-SELECT 'PASS: tenant isolation, sectors, finance settlement, open positions, anonymous blocking, write permissions, profile protection, required documents, night overlap, adjacent shift and deletion' AS verification;
+SELECT 'PASS: tenant isolation, sectors, finance settlement, additional permissions, open positions, anonymous blocking, write permissions, profile protection, required documents, night overlap, adjacent shift and deletion' AS verification;
 ROLLBACK;

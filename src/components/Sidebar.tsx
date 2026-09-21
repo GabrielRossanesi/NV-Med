@@ -21,7 +21,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { ROLE_PERMISSIONS } from './AccessGuard';
+import { canViewPermission } from '@/lib/permissions';
 import UserAvatar from './UserAvatar';
 
 const operationalItems = [
@@ -57,11 +57,10 @@ export default function Sidebar() {
   } = useStore();
 
   const activeOrg = organizations.find((org) => org.id === activeOrganizationId) || organizations[0];
-  const permissions = ROLE_PERMISSIONS[`${currentUser.type}:${currentUser.role}`] || [];
   const items = [
     ...(currentUser.type === 'saas_admin' ? adminItems : []),
     ...operationalItems,
-  ].filter((item) => permissions.includes(item.permission));
+  ].filter((item) => canViewPermission(currentUser, item.permission));
 
   const switchOrganization = (organizationId: string) => {
     setActiveOrganizationId(organizationId);

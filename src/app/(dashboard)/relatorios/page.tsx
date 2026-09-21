@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { AlertTriangle, Banknote, Building2, CalendarRange, CheckCircle2, Download, FileSpreadsheet, ShieldCheck, Users } from 'lucide-react';
-import AccessGuard, { ROLE_PERMISSIONS } from '@/components/AccessGuard';
+import AccessGuard from '@/components/AccessGuard';
 import { downloadCsv } from '@/lib/csv';
 import { employmentLabels, localDate, paymentFrequencyLabels } from '@/lib/scheduling';
+import { canViewPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
 import type { Shift } from '@/types';
 
@@ -67,8 +68,7 @@ export default function ReportsPage() {
   const sectors = store.sectors.filter(item => item.organizationId === orgId);
   const doctors = store.doctors.filter(item => item.organizationId === orgId && (!unitId || item.linkedUnits.includes(unitId)));
   const documents = store.documents.filter(item => item.organizationId === orgId && doctors.some(doctor => doctor.id === item.doctorId));
-  const permissions = ROLE_PERMISSIONS[`${store.currentUser.type}:${store.currentUser.role}`] || [];
-  const canSeeFinancial = permissions.includes('financeiro');
+  const canSeeFinancial = canViewPermission(store.currentUser, 'financeiro');
   const bounds = periodBounds(reference, mode);
   const periodShifts = store.shifts
     .filter(item => item.organizationId === orgId && item.date >= bounds.start && item.date <= bounds.end && item.status !== 'cancelled')

@@ -132,6 +132,8 @@ export interface Shift {
   organizationId: string;
 }
 
+export type AdditionalPermissions = Record<string, 'view' | 'edit'>;
+
 export interface UserAccount {
   authUserId?: string;
   id: string;
@@ -145,4 +147,5 @@ export interface UserAccount {
   createdAt: string;
   lastActive?: string;
   avatar?: string;
+  additionalPermissions?: AdditionalPermissions;
 }

@@ -5,7 +5,8 @@ import { useStore } from '@/store/useStore';
 import AccessGuard from '@/components/AccessGuard';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import TemporaryPasswordDialog from '@/components/TemporaryPasswordDialog';
-import { UserAccount } from '@/types';
+import { AdditionalPermissions, UserAccount } from '@/types';
+import { ADDITIONAL_PERMISSION_MODULES, roleHasPermission, sanitizeAdditionalPermissions } from '@/lib/permissions';
 import { 
   Users, 
   Plus, 
@@ -45,6 +46,7 @@ export default function AdminUsersPage() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [role, setRole] = useState('Escalista');
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>('active');
+  const [additionalPermissions, setAdditionalPermissions] = useState<AdditionalPermissions>({});
   const canManageUsers = currentUser.role === 'CEO' || currentUser.role === 'Gerente';
 
   // Available roles by type
@@ -60,6 +62,7 @@ export default function AdminUsersPage() {
     setOrganizationId(organizations[0]?.id || null);
     setRole('Escalista');
     setStatus('active');
+    setAdditionalPermissions({});
     setIsModalOpen(true);
   };
 
@@ -72,6 +75,7 @@ export default function AdminUsersPage() {
     setOrganizationId(user.organizationId);
     setRole(user.role);
     setStatus(user.status);
+    setAdditionalPermissions(user.additionalPermissions || {});
     setIsModalOpen(true);
   };
 
@@ -80,9 +84,11 @@ export default function AdminUsersPage() {
     if (newType === 'saas_admin') {
       setOrganizationId(null);
       setRole('Gerente');
+      setAdditionalPermissions({});
     } else {
       setOrganizationId(organizations[0]?.id || null);
       setRole('Escalista');
+      setAdditionalPermissions({});
     }
   };
 
@@ -98,6 +104,7 @@ export default function AdminUsersPage() {
       organizationId: type === 'saas_admin' ? null : organizationId,
       role,
       status,
+      additionalPermissions: sanitizeAdditionalPermissions(additionalPermissions, type, role),
       avatar: '',
       lastActive: status === 'pending' ? undefined : (editingUser?.lastActive || (status === 'active' ? new Date().toISOString().split('T')[0] : undefined))
     };
@@ -306,7 +313,11 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="p-4">
                         <div className="font-medium text-text-secondary">{user.role}</div>
-                        <div className="text-[9px] text-text-muted mt-0.5">RBAC Herdado</div>
+                        <div className="text-[9px] text-text-muted mt-0.5">
+                          {Object.keys(user.additionalPermissions || {}).length
+                            ? `${Object.keys(user.additionalPermissions || {}).length} ${Object.keys(user.additionalPermissions || {}).length === 1 ? 'permissão adicional' : 'permissões adicionais'}`
+                            : 'Permissões do cargo'}
+                        </div>
                       </td>
                       <td className="p-4 space-y-1">
                         <div className="flex items-center gap-1.5 text-text-secondary font-mono">
@@ -490,7 +501,11 @@ export default function AdminUsersPage() {
                     <label className="block text-xs font-semibold text-text-muted uppercase mb-1">Cargo / Role</label>
                     <select
                       value={role}
-                      onChange={(e) => setRole(e.target.value)}
+                      onChange={(e) => {
+                        const nextRole = e.target.value;
+                        setRole(nextRole);
+                        setAdditionalPermissions(current => sanitizeAdditionalPermissions(current, type, nextRole));
+                      }}
                       className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
                     >
                       {type === 'saas_admin' ? (
@@ -500,6 +515,53 @@ export default function AdminUsersPage() {
                       )}
                     </select>
                   </div>
+
+                  {type === 'tenant_user' && (
+                    <section className="overflow-hidden rounded-2xl border border-border bg-surface-muted/25">
+                      <div className="border-b border-border px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-primary" />
+                          <h4 className="text-sm font-semibold text-text-primary">Permissões adicionais</h4>
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-text-muted">Libere exceções individuais além do acesso já concedido pelo cargo.</p>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {ADDITIONAL_PERMISSION_MODULES.map(module => {
+                          const inherited = roleHasPermission(type, role, module.key);
+                          const value = inherited ? 'inherited' : (additionalPermissions[module.key] || 'none');
+                          return (
+                            <div key={module.key} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_190px] sm:items-center">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-text-primary">{module.label}</p>
+                                <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">{module.description}</p>
+                              </div>
+                              <select
+                                aria-label={`Permissão adicional para ${module.label}`}
+                                value={value}
+                                disabled={inherited}
+                                onChange={event => {
+                                  const level = event.target.value;
+                                  setAdditionalPermissions(current => {
+                                    const next = { ...current };
+                                    if (level === 'view' || level === 'edit') next[module.key] = level;
+                                    else delete next[module.key];
+                                    return next;
+                                  });
+                                }}
+                                className="w-full rounded-xl border border-input-border bg-input-bg px-3 py-2 text-xs font-medium text-text-primary outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-70"
+                              >
+                                {inherited ? <option value="inherited">Permitido pelo cargo</option> : <>
+                                  <option value="none">Sem acesso adicional</option>
+                                  <option value="view">Somente visualizar</option>
+                                  <option value="edit">Visualizar e editar</option>
+                                </>}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
                 </div>
 
                 {/* Footer Buttons */}

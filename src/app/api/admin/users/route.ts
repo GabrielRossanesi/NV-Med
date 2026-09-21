@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mapUserFromDb } from '@/services/supabaseService';
+import { sanitizeAdditionalPermissions } from '@/lib/permissions';
 const tenantRoles = ['Diretor', 'Gerente', 'Coordenador de Escalas', 'Escalista', 'Financeiro', 'Jurídico'];
 const adminRoles = ['CEO', 'Gerente', 'Coordenador', 'Administrativo', 'Financeiro', 'Jurídico'];
 async function authorize(request: NextRequest) {
@@ -57,7 +58,7 @@ async function save(request: NextRequest, updating: boolean) {
       const { data: org } = await admin.from('organizations').select('id').eq('id', organizationId).single();
       if (!org) return NextResponse.json({ error: 'Selecione uma empresa válida.' }, { status: 400 });
     }
-    const payload = { name: name.trim(), email: email.trim().toLowerCase(), phone: typeof input.phone === 'string' ? input.phone.slice(0, 40) : '', type, organization_id: type === 'tenant_user' ? organizationId : null, role, status };
+    const payload = { name: name.trim(), email: email.trim().toLowerCase(), phone: typeof input.phone === 'string' ? input.phone.slice(0, 40) : '', type, organization_id: type === 'tenant_user' ? organizationId : null, role, status, additional_permissions: sanitizeAdditionalPermissions(input.additionalPermissions, type, role) };
     if (updating) {
       const { data: previous } = await admin.from('user_accounts').select('*').eq('id', input.id).single();
       if (!previous || previous.id === profile.id || (previous.type === 'saas_admin' && profile.role !== 'CEO')) return NextResponse.json({ error: 'Este perfil não pode ser alterado por você.' }, { status: 403 });

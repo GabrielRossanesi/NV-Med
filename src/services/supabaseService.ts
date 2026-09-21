@@ -138,6 +138,7 @@ interface DbUserAccount {
   avatar?: string;
   last_active?: string;
   created_at?: string;
+  additional_permissions?: UserAccount['additionalPermissions'];
 }
 
 function mapOrgFromDb(row: DbOrganization): Organization {
@@ -261,6 +262,7 @@ export function mapUserFromDb(row: DbUserAccount): UserAccount {
     status: (row.status as 'active' | 'pending' | 'inactive') || 'active',
     avatar: row.avatar || '',
     lastActive: row.last_active,
+    additionalPermissions: row.additional_permissions || {},
     createdAt: row.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]
   };
 }
