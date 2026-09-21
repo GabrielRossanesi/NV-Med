@@ -16,6 +16,7 @@ export default async function DashboardLayout({
   if (!client) redirect('/login');
   const { data: { user } } = await client.auth.getUser();
   if (!user) redirect('/login');
+  if (user.app_metadata?.must_change_password === true) redirect('/definir-senha?required=1');
   return (
     <StoreHydrator>
       <AppBackground />

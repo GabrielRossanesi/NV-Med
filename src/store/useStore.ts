@@ -32,6 +32,7 @@ interface NVMedState {
   addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>) => Promise<boolean>;
   updateUser: (user: UserAccount) => Promise<boolean>;
   deleteUser: (id: string, confirmation: string) => Promise<boolean>;
+  setUserTemporaryPassword: (id: string, password: string) => Promise<boolean>;
   startSimulation: (orgId: string) => void; stopSimulation: () => void;
   theme: 'light' | 'dark'; setTheme: (theme: 'light' | 'dark') => void;
   sidebarCollapsed: boolean; setSidebarCollapsed: (collapsed: boolean) => void;
@@ -114,6 +115,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }),
     updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }),
     deleteUser: (id, confirmation) => commit(async () => { const res = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível excluir o usuário.'); set({ users: get().users.filter(user => user.id !== id) }); }),
+    setUserTemporaryPassword: (id, password) => commit(async () => { const res = await fetch('/api/admin/users/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar a senha.'); }),
     updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }),
     startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
     stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),

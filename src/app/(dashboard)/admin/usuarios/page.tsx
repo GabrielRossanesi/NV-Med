@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AccessGuard from '@/components/AccessGuard';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import TemporaryPasswordDialog from '@/components/TemporaryPasswordDialog';
 import { UserAccount } from '@/types';
 import { 
   Users, 
@@ -18,11 +19,12 @@ import {
   CheckCircle, 
   XCircle, 
   AlertCircle,
-  Trash2
+  Trash2,
+  KeyRound
 } from 'lucide-react';
 
 export default function AdminUsersPage() {
-  const { users, organizations, currentUser, saving, addUser, updateUser, deleteUser } = useStore();
+  const { users, organizations, currentUser, saving, addUser, updateUser, deleteUser, setUserTemporaryPassword } = useStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -33,6 +35,7 @@ export default function AdminUsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserAccount | null>(null);
+  const [passwordUser, setPasswordUser] = useState<UserAccount | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -106,6 +109,10 @@ export default function AdminUsersPage() {
       })) return;
     } else {
       if (!await addUser(userData)) return;
+      const createdUser = useStore.getState().users.find(user => user.email.toLowerCase() === email.trim().toLowerCase());
+      setIsModalOpen(false);
+      if (createdUser) setPasswordUser(createdUser);
+      return;
     }
     setIsModalOpen(false);
   };
@@ -338,6 +345,16 @@ export default function AdminUsersPage() {
                           >
                             <Edit className="h-4 w-4" />
                           </button>}
+                          {user.id !== currentUser.id && canManageUsers && (currentUser.role === 'CEO' || user.type !== 'saas_admin') && (
+                            <button
+                              onClick={() => setPasswordUser(user)}
+                              className="p-2 text-text-secondary hover:text-primary hover:bg-surface-muted rounded-lg transition cursor-pointer"
+                              title="Definir senha temporária"
+                              aria-label={`Definir senha temporária de ${user.name}`}
+                            >
+                              <KeyRound className="h-4 w-4" />
+                            </button>
+                          )}
                           {user.status === 'pending' && (
                             <button
                               onClick={() => handleSimulateInvite(user)}
@@ -518,6 +535,14 @@ export default function AdminUsersPage() {
             busy={saving}
             onClose={() => setDeletingUser(null)}
             onConfirm={async (confirmation) => { if (await deleteUser(deletingUser.id, confirmation)) setDeletingUser(null); }}
+          />
+        )}
+        {passwordUser && (
+          <TemporaryPasswordDialog
+            user={passwordUser}
+            busy={saving}
+            onClose={() => setPasswordUser(null)}
+            onSave={(password) => setUserTemporaryPassword(passwordUser.id, password)}
           />
         )}
       </div>
