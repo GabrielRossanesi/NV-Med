@@ -17,7 +17,7 @@ export default function AdminPermissionsPage() {
     { key: 'escala', name: 'Escala de Plantões' },
     { key: 'configuracoes', name: 'Configurações da Empresa' },
     { key: 'relatorios', name: 'Relatórios operacionais' },
-    { key: 'financeiro', name: 'Valores financeiros' },
+    { key: 'financeiro', name: 'Financeiro e conciliação de pagamentos' },
   ];
 
   // Map representing checks for Client roles

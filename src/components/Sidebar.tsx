@@ -18,6 +18,7 @@ import {
   Settings,
   Shield,
   Users,
+  WalletCards,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { ROLE_PERMISSIONS } from './AccessGuard';
@@ -29,6 +30,7 @@ const operationalItems = [
   { name: 'Escalas', shortName: 'Escalas', href: '/escala', icon: CalendarDays, permission: 'escala' },
   { name: 'Unidades', shortName: 'Unidades', href: '/unidades', icon: Building2, permission: 'unidades' },
   { name: 'Documentos', shortName: 'Docs', href: '/documentos', icon: FileText, permission: 'documentos' },
+  { name: 'Financeiro', shortName: 'Financeiro', href: '/financeiro', icon: WalletCards, permission: 'financeiro' },
   { name: 'Relatórios', shortName: 'Relatórios', href: '/relatorios', icon: FileSpreadsheet, permission: 'relatorios' },
   { name: 'Configurações', shortName: 'Ajustes', href: '/configuracoes', icon: Settings, permission: 'configuracoes' },
 ];

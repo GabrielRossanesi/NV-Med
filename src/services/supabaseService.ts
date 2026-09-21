@@ -110,6 +110,8 @@ interface DbShift {
   employer_name?: string;
   payment_amount?: number | string;
   payment_status?: Shift['paymentStatus'];
+  payment_frequency?: Shift['paymentFrequency'];
+  paid_at?: string | null;
   id: string;
   organization_id: string;
   doctor_id?: string | null;
@@ -231,6 +233,8 @@ function mapShiftFromDb(row: DbShift): Shift {
     employerName: row.employer_name,
     paymentAmount: Number(row.payment_amount || 0),
     paymentStatus: row.payment_status || 'pending',
+    paymentFrequency: row.payment_frequency || 'on_delivery',
+    paidAt: row.paid_at || undefined,
     id: row.id,
     organizationId: row.organization_id,
     doctorId: row.doctor_id || undefined,
@@ -412,6 +416,8 @@ export async function saveShiftToSupabase(shift: Shift) {
     employer_name: shift.employerName,
     payment_amount: shift.paymentAmount || 0,
     payment_status: shift.paymentStatus || 'pending',
+    payment_frequency: shift.paymentFrequency || 'on_delivery',
+    paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
@@ -439,6 +445,8 @@ export async function saveShiftsToSupabase(shifts: Shift[]) {
     employer_name: shift.employerName,
     payment_amount: shift.paymentAmount || 0,
     payment_status: shift.paymentStatus || 'pending',
+    payment_frequency: shift.paymentFrequency || 'on_delivery',
+    paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
@@ -459,6 +467,41 @@ export async function deleteShiftFromSupabase(shiftId: string) {
 
   const { error } = await supabase.from('shifts').delete().eq('id', shiftId).select('id').single();
   if (error) throw new Error('Não foi possível excluir: ' + error.message);
+}
+
+export async function updateShiftPaymentInSupabase(shiftId: string, paymentStatus: Shift['paymentStatus']) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+
+  const { data, error } = await supabase.rpc('nv_update_shift_payment', {
+    target_id: shiftId,
+    next_status: paymentStatus,
+  });
+  if (error) throw new Error('Não foi possível atualizar o pagamento: ' + error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Plantão não encontrado nesta empresa.');
+  return mapShiftFromDb(row as DbShift);
+}
+
+export async function updateShiftFinancialsInSupabase(
+  shiftId: string,
+  paymentAmount: number,
+  paymentFrequency: NonNullable<Shift['paymentFrequency']>,
+  paymentStatus: NonNullable<Shift['paymentStatus']>,
+) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+
+  const { data, error } = await supabase.rpc('nv_update_shift_financials', {
+    target_id: shiftId,
+    next_amount: paymentAmount,
+    next_frequency: paymentFrequency,
+    next_status: paymentStatus,
+  });
+  if (error) throw new Error('Não foi possível atualizar os dados financeiros: ' + error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Plantão não encontrado nesta empresa.');
+  return mapShiftFromDb(row as DbShift);
 }
 
 export async function saveDocumentToSupabase(doc: MedicalDocument) {

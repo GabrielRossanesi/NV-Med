@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle, Banknote, Building2, CalendarRange, CheckCircle2, Download, FileSpreadsheet, ShieldCheck, Users } from 'lucide-react';
 import AccessGuard, { ROLE_PERMISSIONS } from '@/components/AccessGuard';
 import { downloadCsv } from '@/lib/csv';
-import { employmentLabels, localDate } from '@/lib/scheduling';
+import { employmentLabels, localDate, paymentFrequencyLabels } from '@/lib/scheduling';
 import { useStore } from '@/store/useStore';
 import type { Shift } from '@/types';
 
@@ -113,11 +113,11 @@ export default function ReportsPage() {
 
   function financialRow(item: Shift) {
     const doctor = store.doctors.find(value => value.id === item.doctorId); const unit = units.find(value => value.id === item.unitId); const sector = sectors.find(value => value.id === item.sectorId);
-    return [displayDate(item.date), item.startTime, item.endTime, doctor?.name, doctor ? `${doctor.crm}-${doctor.crmUf}` : '', unit?.name, sector?.name || item.sector, item.specialty, item.employmentType ? employmentLabels[item.employmentType] : '', item.employerName, (item.paymentAmount || 0).toFixed(2).replace('.', ','), item.paymentStatus === 'paid' ? 'Pago' : 'Pendente'];
+    return [displayDate(item.date), item.startTime, item.endTime, doctor?.name, doctor ? `${doctor.crm}-${doctor.crmUf}` : '', unit?.name, sector?.name || item.sector, item.specialty, item.employmentType ? employmentLabels[item.employmentType] : '', item.employerName, paymentFrequencyLabels[item.paymentFrequency || 'on_delivery'], (item.paymentAmount || 0).toFixed(2).replace('.', ','), item.paymentStatus === 'paid' ? 'Pago' : 'Pendente'];
   }
 
   function exportFinancial() {
-    downloadCsv(`financeiro-detalhado-${filenameBase}`, ['Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Valor (R$)', 'Pagamento'], financialShifts.map(financialRow)); exported('Financeiro detalhado');
+    downloadCsv(`financeiro-detalhado-${filenameBase}`, ['Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Pagamento'], financialShifts.map(financialRow)); exported('Financeiro detalhado');
   }
 
   function exportDoctorSummary() {

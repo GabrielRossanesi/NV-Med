@@ -22,7 +22,10 @@ interface NVMedState {
   updateSector: (sector: Sector) => Promise<boolean>; deleteSector: (id: string) => Promise<boolean>;
   addShift: (shift: Omit<Shift, 'id' | 'organizationId'>) => Promise<boolean>;
   addShifts: (shifts: Omit<Shift, 'id' | 'organizationId'>[]) => Promise<boolean>;
-  updateShift: (shift: Shift) => Promise<boolean>; deleteShift: (id: string) => Promise<boolean>;
+  updateShift: (shift: Shift) => Promise<boolean>;
+  updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
+  updateShiftFinancials: (id: string, amount: number, frequency: NonNullable<Shift['paymentFrequency']>, status: NonNullable<Shift['paymentStatus']>) => Promise<boolean>;
+  deleteShift: (id: string) => Promise<boolean>;
   uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
   addOrganization: (org: Omit<Organization, 'id'>) => Promise<boolean>;
@@ -79,6 +82,18 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     addShift: input => commit(async () => { const shift = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveShiftToSupabase(shift); set({ shifts: [...get().shifts, shift] }); }),
     addShifts: inputs => commit(async () => { const shifts = inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })); await cloud.saveShiftsToSupabase(shifts); set({ shifts: [...get().shifts, ...shifts] }); }),
     updateShift: shift => commit(async () => { await cloud.saveShiftToSupabase(shift); set({ shifts: get().shifts.map(s => s.id === shift.id ? shift : s) }); }),
+    updateShiftPayment: (id, status) => commit(async () => {
+      const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
+      if (!current) throw new Error('Plantão não encontrado nesta empresa.');
+      const updated = await cloud.updateShiftPaymentInSupabase(id, status);
+      set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
+    }),
+    updateShiftFinancials: (id, amount, frequency, status) => commit(async () => {
+      const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
+      if (!current) throw new Error('Plantão não encontrado nesta empresa.');
+      const updated = await cloud.updateShiftFinancialsInSupabase(id, amount, frequency, status);
+      set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
+    }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
     uploadDocument: (doctorId, type, file) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());

@@ -25,4 +25,4 @@ export async function proxy(request: NextRequest) {
   response.headers.set('Cache-Control', 'private, no-store');
   return response;
 }
-export const config = { matcher: ['/', '/login', '/definir-senha', '/auth/confirm', '/dashboard/:path*', '/escala/:path*', '/medicos/:path*', '/unidades/:path*', '/documentos/:path*', '/relatorios/:path*', '/configuracoes/:path*', '/perfil/:path*', '/empresas/:path*', '/admin/:path*'] };
+export const config = { matcher: ['/', '/login', '/definir-senha', '/auth/confirm', '/dashboard/:path*', '/escala/:path*', '/medicos/:path*', '/unidades/:path*', '/documentos/:path*', '/financeiro/:path*', '/relatorios/:path*', '/configuracoes/:path*', '/perfil/:path*', '/empresas/:path*', '/admin/:path*'] };

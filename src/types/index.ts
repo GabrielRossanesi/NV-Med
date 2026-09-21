@@ -108,6 +108,7 @@ export type ShiftType = 'onsite' | 'oncall' | 'telemedicine';
 export type ShiftStatus = 'open' | 'confirmed' | 'pending' | 'cancelled' | 'completed';
 export type EmploymentType = 'clt' | 'concursado' | 'pj';
 export type PaymentStatus = 'pending' | 'paid';
+export type PaymentFrequency = 'on_delivery' | 'monthly';
 
 export interface Shift {
   sectorId?: string;
@@ -117,6 +118,8 @@ export interface Shift {
   employerName?: string;
   paymentAmount?: number;
   paymentStatus?: PaymentStatus;
+  paymentFrequency?: PaymentFrequency;
+  paidAt?: string;
   id: string;
   doctorId?: string; // Empty while this staffing position is open
   unitId: string; // Linked Unit ID

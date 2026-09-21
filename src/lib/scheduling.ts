@@ -26,3 +26,4 @@ export function hasConflict(candidate: Shift, shifts: Shift[]) {
   });
 }
 export const employmentLabels = { clt: 'CLT', concursado: 'Concursado (prefeitura)', pj: 'PJ' };
+export const paymentFrequencyLabels = { on_delivery: 'À vista', monthly: 'Mensal' };
