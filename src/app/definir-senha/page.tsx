@@ -45,8 +45,19 @@ export default function SetPasswordPage() {
       const response = await fetch('/api/account/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a nova senha.');
-      await createClient()?.auth.refreshSession();
-      window.location.replace('/dashboard');
+      const client = createClient();
+      const { data: refreshed, error: refreshError } = client
+        ? await client.auth.refreshSession()
+        : { data: { user: null }, error: new Error('Cliente indisponível') };
+      if (refreshError || !refreshed.user) {
+        await client?.auth.signOut({ scope: 'local' });
+        window.location.replace('/login');
+        return;
+      }
+      if (refreshed.user.app_metadata?.must_change_password === true) {
+        throw new Error('A senha foi atualizada, mas a sessão não foi renovada. Entre novamente para continuar.');
+      }
+      window.location.replace('/escala');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Falha ao salvar.');
       setBusy(false);

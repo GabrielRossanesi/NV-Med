@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isStrongPassword } from '@/lib/passwordPolicy';
+import { completePasswordChangeMetadata } from '@/lib/passwordLifecycle';
 
 export async function PATCH(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin) return NextResponse.json({ error: 'Origem inválida.' }, { status: 403 });
@@ -19,12 +20,16 @@ export async function PATCH(request: NextRequest) {
     if (!admin) return NextResponse.json({ error: 'A atualização de senha não está configurada no servidor.' }, { status: 503 });
     const { data: authRecord, error: readError } = await admin.auth.admin.getUserById(user.id);
     if (readError || !authRecord.user) throw readError;
-    const appMetadata = { ...authRecord.user.app_metadata };
-    delete appMetadata.must_change_password;
-    delete appMetadata.temporary_password_set_at;
+    // GoTrue merges app_metadata updates. Omitting a key does not reliably clear
+    // the value already stored, so the first-login flag must be set explicitly.
+    const appMetadata = completePasswordChangeMetadata(authRecord.user.app_metadata);
     const { error: updateError } = await admin.auth.admin.updateUserById(user.id, { password: input.password, app_metadata: appMetadata });
     if (updateError) throw updateError;
-    return NextResponse.json({ updated: true });
+    const { data: refreshed, error: refreshError } = await client.auth.refreshSession();
+    return NextResponse.json({
+      updated: true,
+      sessionRefreshed: !refreshError && refreshed.user?.app_metadata?.must_change_password !== true,
+    });
   } catch {
     return NextResponse.json({ error: 'Não foi possível salvar a nova senha. Tente novamente.' }, { status: 500 });
   }
