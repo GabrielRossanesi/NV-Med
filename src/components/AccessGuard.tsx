@@ -9,20 +9,20 @@ import React from 'react';
 // Define the permissions for each role
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   // SaaS Admin Roles
-  'saas_admin:CEO': ['admin', 'empresas', 'usuarios', 'permissoes', 'simular_acesso', 'dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'configuracoes'],
-  'saas_admin:Gerente': ['admin', 'empresas', 'usuarios', 'simular_acesso', 'dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'configuracoes'],
-  'saas_admin:Coordenador': ['admin', 'empresas', 'usuarios', 'dashboard', 'medicos', 'unidades', 'documentos', 'escala'],
+  'saas_admin:CEO': ['admin', 'empresas', 'usuarios', 'permissoes', 'simular_acesso', 'dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'relatorios', 'financeiro', 'configuracoes'],
+  'saas_admin:Gerente': ['admin', 'empresas', 'usuarios', 'simular_acesso', 'dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'relatorios', 'financeiro', 'configuracoes'],
+  'saas_admin:Coordenador': ['admin', 'empresas', 'usuarios', 'dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'relatorios'],
   'saas_admin:Administrativo': ['admin', 'empresas', 'usuarios', 'dashboard', 'medicos', 'unidades'],
-  'saas_admin:Financeiro': ['admin', 'empresas', 'dashboard'],
+  'saas_admin:Financeiro': ['admin', 'empresas', 'dashboard', 'relatorios', 'financeiro'],
   'saas_admin:Jurídico': ['admin', 'empresas', 'dashboard'],
 
   // Tenant Roles
-  'tenant_user:Diretor': ['dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'configuracoes'],
-  'tenant_user:Gerente': ['dashboard', 'medicos', 'unidades', 'documentos', 'escala'],
-  'tenant_user:Coordenador de Escalas': ['dashboard', 'medicos', 'unidades', 'documentos', 'escala'],
-  'tenant_user:Escalista': ['dashboard', 'medicos', 'unidades', 'escala'],
-  'tenant_user:Financeiro': ['dashboard', 'escala'],
-  'tenant_user:Jurídico': ['dashboard', 'medicos', 'documentos'],
+  'tenant_user:Diretor': ['dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'relatorios', 'financeiro', 'configuracoes'],
+  'tenant_user:Gerente': ['dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'relatorios', 'financeiro'],
+  'tenant_user:Coordenador de Escalas': ['dashboard', 'medicos', 'unidades', 'documentos', 'escala', 'relatorios'],
+  'tenant_user:Escalista': ['dashboard', 'medicos', 'unidades', 'escala', 'relatorios'],
+  'tenant_user:Financeiro': ['dashboard', 'escala', 'relatorios', 'financeiro'],
+  'tenant_user:Jurídico': ['dashboard', 'medicos', 'documentos', 'relatorios'],
 };
 
 interface AccessGuardProps {

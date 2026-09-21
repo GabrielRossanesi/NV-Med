@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  FileSpreadsheet,
   Settings,
   Shield,
   Users,
@@ -28,6 +29,7 @@ const operationalItems = [
   { name: 'Escalas', shortName: 'Escalas', href: '/escala', icon: CalendarDays, permission: 'escala' },
   { name: 'Unidades', shortName: 'Unidades', href: '/unidades', icon: Building2, permission: 'unidades' },
   { name: 'Documentos', shortName: 'Docs', href: '/documentos', icon: FileText, permission: 'documentos' },
+  { name: 'Relatórios', shortName: 'Relatórios', href: '/relatorios', icon: FileSpreadsheet, permission: 'relatorios' },
   { name: 'Configurações', shortName: 'Ajustes', href: '/configuracoes', icon: Settings, permission: 'configuracoes' },
 ];
 

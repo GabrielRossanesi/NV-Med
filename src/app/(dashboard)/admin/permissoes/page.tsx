@@ -16,18 +16,19 @@ export default function AdminPermissionsPage() {
     { key: 'documentos', name: 'Documentos & Compliance' },
     { key: 'escala', name: 'Escala de Plantões' },
     { key: 'configuracoes', name: 'Configurações da Empresa' },
-    { key: 'financeiro', name: 'Financeiro / Relatórios' },
+    { key: 'relatorios', name: 'Relatórios operacionais' },
+    { key: 'financeiro', name: 'Valores financeiros' },
   ];
 
   // Map representing checks for Client roles
   // [role][module] -> boolean (true: allowed, false: blocked)
   const clientMatrix: Record<string, Record<string, boolean>> = {
-    'Diretor': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: true, financeiro: true },
-    'Gerente': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: false, financeiro: true },
-    'Coordenador de Escalas': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: false, financeiro: false },
-    'Escalista': { dashboard: true, medicos: true, unidades: true, documentos: false, escala: true, configuracoes: false, financeiro: false },
-    'Financeiro': { dashboard: true, medicos: true, unidades: true, documentos: false, escala: true, configuracoes: false, financeiro: true },
-    'Jurídico': { dashboard: true, medicos: true, unidades: false, documentos: true, escala: false, configuracoes: false, financeiro: false },
+    'Diretor': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: true, relatorios: true, financeiro: true },
+    'Gerente': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: false, relatorios: true, financeiro: true },
+    'Coordenador de Escalas': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: false, relatorios: true, financeiro: false },
+    'Escalista': { dashboard: true, medicos: true, unidades: true, documentos: false, escala: true, configuracoes: false, relatorios: true, financeiro: false },
+    'Financeiro': { dashboard: true, medicos: false, unidades: false, documentos: false, escala: true, configuracoes: false, relatorios: true, financeiro: true },
+    'Jurídico': { dashboard: true, medicos: true, unidades: false, documentos: true, escala: false, configuracoes: false, relatorios: true, financeiro: false },
   };
 
   // SaaS Admin Roles & SaaS Modules Permissions representation

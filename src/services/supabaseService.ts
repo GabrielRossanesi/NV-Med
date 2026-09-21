@@ -108,6 +108,8 @@ interface DbShift {
   specialty?: string;
   employment_type?: Shift['employmentType'];
   employer_name?: string;
+  payment_amount?: number | string;
+  payment_status?: Shift['paymentStatus'];
   id: string;
   organization_id: string;
   doctor_id?: string | null;
@@ -227,6 +229,8 @@ function mapShiftFromDb(row: DbShift): Shift {
     specialty: row.specialty,
     employmentType: row.employment_type,
     employerName: row.employer_name,
+    paymentAmount: Number(row.payment_amount || 0),
+    paymentStatus: row.payment_status || 'pending',
     id: row.id,
     organizationId: row.organization_id,
     doctorId: row.doctor_id || undefined,
@@ -397,6 +401,8 @@ export async function saveShiftToSupabase(shift: Shift) {
     specialty: shift.specialty,
     employment_type: shift.employmentType,
     employer_name: shift.employerName,
+    payment_amount: shift.paymentAmount || 0,
+    payment_status: shift.paymentStatus || 'pending',
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
@@ -422,6 +428,8 @@ export async function saveShiftsToSupabase(shifts: Shift[]) {
     specialty: shift.specialty,
     employment_type: shift.employmentType,
     employer_name: shift.employerName,
+    payment_amount: shift.paymentAmount || 0,
+    payment_status: shift.paymentStatus || 'pending',
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
