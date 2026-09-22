@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
-import { Organization } from '@/types';
+import { DocumentRequirement, Organization, Unit } from '@/types';
 import AccessGuard from '@/components/AccessGuard';
 import {
   Building,
@@ -9,21 +9,27 @@ import {
   CheckCircle,
   Plus,
   Briefcase,
-  Sun
+  Sun,
+  BellRing,
+  CalendarClock,
+  LockKeyhole
 } from 'lucide-react';
 import { useState } from 'react';
+import { getDocumentGovernance } from '@/lib/documentGovernance';
 
 interface SettingsFormProps {
   activeOrg: Organization;
   activeOrganizationId: string;
   updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => Promise<boolean>;
+  units: Unit[];
 
 }
 
 function SettingsForm({
   activeOrg,
   activeOrganizationId,
-  updateOrganizationSettings
+  updateOrganizationSettings,
+  units,
 }: SettingsFormProps) {
   const { theme, setTheme } = useStore();
 
@@ -35,6 +41,8 @@ function SettingsForm({
   const [address, setAddress] = useState(activeOrg?.address || '');
   const [newSpec, setNewSpec] = useState('');
   const [isSaved, setIsSaved] = useState(false);
+  const [documentGovernance, setDocumentGovernance] = useState(() => getDocumentGovernance(activeOrg));
+  const [documentRequirements, setDocumentRequirements] = useState<DocumentRequirement[]>(() => activeOrg.settings.requiredDocuments);
 
   const handleSaveOrgInfo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +84,28 @@ function SettingsForm({
         specialties: updatedSpecs
       }
     })) return;
+  };
+
+  const updateRequirement = (type: string, updates: Partial<DocumentRequirement>) => {
+    setDocumentRequirements(current => current.map(requirement => requirement.type === type ? { ...requirement, ...updates } : requirement));
+  };
+
+  const toggleScopeValue = (type: string, field: 'specialties' | 'unitIds', value: string) => {
+    const requirement = documentRequirements.find(item => item.type === type);
+    const current = requirement?.[field] || [];
+    updateRequirement(type, { [field]: current.includes(value) ? current.filter(item => item !== value) : [...current, value] });
+  };
+
+  const saveDocumentGovernance = async () => {
+    if (!await updateOrganizationSettings(activeOrganizationId, {
+      settings: {
+        ...activeOrg.settings,
+        requiredDocuments: documentRequirements,
+        documentGovernance,
+      },
+    })) return;
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 3000);
   };
 
 
@@ -211,6 +241,19 @@ function SettingsForm({
             </div>
           </div>
         </div>
+
+        <div className="rounded-xl border border-card-border bg-card-bg p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-text-primary"><ShieldCheck className="h-4 w-4 text-primary"/>Governança documental</h3><p className="mt-1 text-xs text-text-muted">Defina alertas, bloqueios e o escopo dos documentos exigidos.</p></div><button type="button" className="nv-button" onClick={saveDocumentGovernance}>Salvar regras</button></div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <label className="flex items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" className="mt-1" checked={documentGovernance.blockSchedulingOnCritical} onChange={event => setDocumentGovernance(current => ({ ...current, blockSchedulingOnCritical: event.target.checked }))}/><span><span className="flex items-center gap-1.5 text-sm font-semibold"><LockKeyhole size={14} className="text-danger"/>Bloquear escala crítica</span><span className="mt-1 block text-xs leading-relaxed text-text-muted">Impede novos plantões quando houver documento obrigatório vencido, reprovado ou ausente.</span></span></label>
+            <label className="flex items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" className="mt-1" checked={documentGovernance.internalNotifications} onChange={event => setDocumentGovernance(current => ({ ...current, internalNotifications: event.target.checked }))}/><span><span className="flex items-center gap-1.5 text-sm font-semibold"><BellRing size={14} className="text-primary"/>Notificações internas</span><span className="mt-1 block text-xs leading-relaxed text-text-muted">Mostra pendências e vencimentos no cabeçalho e no painel da empresa.</span></span></label>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-border p-4"><p className="flex items-center gap-2 text-sm font-semibold"><CalendarClock size={15} className="text-primary"/>Antecedência dos alertas</p><p className="mt-1 text-xs text-text-muted">Selecione quando um documento aprovado deve entrar na esteira de vencimento.</p><div className="mt-3 flex flex-wrap gap-2">{[90,60,30,7].map(day => { const active = documentGovernance.expiryAlertDays.includes(day); return <button type="button" key={day} onClick={() => setDocumentGovernance(current => ({ ...current, expiryAlertDays: active ? current.expiryAlertDays.filter(value => value !== day) : [...current.expiryAlertDays, day].sort((a,b)=>b-a) }))} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${active ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted hover:bg-state-hover'}`}>{day} dias</button>; })}</div></div>
+
+          <div className="mt-5 space-y-2"><p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Checklist obrigatório</p>{documentRequirements.map(requirement => <details key={requirement.type} className="rounded-xl border border-border bg-background/40"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3"><span className="text-sm font-semibold text-text-primary">{requirement.name}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${requirement.required ? 'bg-primary/10 text-primary' : 'bg-surface-muted text-text-muted'}`}>{requirement.required ? 'Obrigatório' : 'Opcional'}</span></summary><div className="space-y-4 border-t border-border px-4 py-4"><div className="flex flex-wrap gap-4 text-xs"><label className="flex items-center gap-2"><input type="checkbox" checked={requirement.required} onChange={event => updateRequirement(requirement.type,{required:event.target.checked})}/>Exigir documento</label><label className="flex items-center gap-2"><input type="checkbox" checked={requirement.blocking !== false} onChange={event => updateRequirement(requirement.type,{blocking:event.target.checked})}/>Pendência bloqueia escala</label><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(requirement.expiryRequired)} onChange={event => updateRequirement(requirement.type,{expiryRequired:event.target.checked})}/>Exigir validade</label></div><div><p className="text-[11px] font-semibold text-text-muted">Especialidades — vazio significa todas</p><div className="mt-2 flex flex-wrap gap-1.5">{activeOrg.settings.specialties.map(specialty => <button type="button" key={specialty} onClick={() => toggleScopeValue(requirement.type,'specialties',specialty)} className={`rounded-md border px-2 py-1 text-[11px] ${requirement.specialties?.includes(specialty) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted'}`}>{specialty}</button>)}</div></div><div><p className="text-[11px] font-semibold text-text-muted">Unidades — vazio significa todas</p><div className="mt-2 flex flex-wrap gap-1.5">{units.map(unit => <button type="button" key={unit.id} onClick={() => toggleScopeValue(requirement.type,'unitIds',unit.id)} className={`rounded-md border px-2 py-1 text-[11px] ${requirement.unitIds?.includes(unit.id) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted'}`}>{unit.name}</button>)}{!units.length && <span className="text-xs text-text-muted">Cadastre uma unidade para restringir o escopo.</span>}</div></div></div></details>)}</div>
+        </div>
       </div>
 
       {/* Right Column (Theme, Compliance & Demo tools) */}
@@ -283,8 +326,8 @@ function SettingsForm({
             {activeOrg.settings.requiredDocuments.map((doc, idx: number) => (
               <div key={idx} className="flex justify-between items-center text-xs pb-2 border-b border-border last:pb-0 last:border-b-0">
                 <span className="font-medium text-text-secondary">{doc.name}</span>
-                <span className="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                  Obrigatório
+                <span className={`rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${doc.required ? 'bg-primary/10 text-primary' : 'bg-surface-muted text-text-muted'}`}>
+                  {doc.required ? 'Obrigatório' : 'Opcional'}
                 </span>
               </div>
             ))}
@@ -299,10 +342,12 @@ export default function SettingsPage() {
   const {
     activeOrganizationId,
     organizations,
+    units,
     updateOrganizationSettings
   } = useStore();
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
+  const activeUnits = units.filter(unit => unit.organizationId === activeOrganizationId);
 
   return (
     <AccessGuard requiredPermission="configuracoes">
@@ -320,6 +365,7 @@ export default function SettingsPage() {
           activeOrg={activeOrg}
           activeOrganizationId={activeOrganizationId}
           updateOrganizationSettings={updateOrganizationSettings}
+          units={activeUnits}
         />}
       </div>
     </AccessGuard>

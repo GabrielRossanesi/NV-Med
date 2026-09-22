@@ -18,12 +18,25 @@ export interface Organization {
   lastActive?: string;
   settings: {
     specialties: string[];
-    requiredDocuments: {
-      type: string;
-      name: string;
-      required: boolean;
-    }[];
+    requiredDocuments: DocumentRequirement[];
+    documentGovernance?: DocumentGovernanceSettings;
   };
+}
+
+export interface DocumentRequirement {
+  type: string;
+  name: string;
+  required: boolean;
+  blocking?: boolean;
+  expiryRequired?: boolean;
+  specialties?: string[];
+  unitIds?: string[];
+}
+
+export interface DocumentGovernanceSettings {
+  expiryAlertDays: number[];
+  blockSchedulingOnCritical: boolean;
+  internalNotifications: boolean;
 }
 
 export type DoctorStatus = 'active' | 'pending' | 'inactive';
@@ -102,6 +115,27 @@ export interface MedicalDocument {
   expiryDate?: string; // YYYY-MM-DD
   fileName?: string;
   organizationId: string;
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  version?: number;
+}
+
+export type DocumentAuditAction = 'created' | 'file_uploaded' | 'file_replaced' | 'status_changed' | 'expiry_changed' | 'note_changed' | 'updated';
+
+export interface DocumentAuditEntry {
+  id: string;
+  organizationId: string;
+  doctorId: string;
+  documentId: string;
+  actorUserId?: string;
+  actorName: string;
+  action: DocumentAuditAction;
+  fromStatus?: DocumentStatus;
+  toStatus?: DocumentStatus;
+  note?: string;
+  changes: Record<string, unknown>;
+  createdAt: string;
 }
 
 export type ShiftType = 'onsite' | 'oncall' | 'telemedicine';

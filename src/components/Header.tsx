@@ -6,14 +6,18 @@ import { Bell, ChevronDown, EyeOff, LogOut, Moon, Sun, UserRound } from 'lucide-
 import { createClient } from '@/lib/supabase/client';
 import { useStore } from '@/store/useStore';
 import UserAvatar from './UserAvatar';
+import { documentIsCritical, documentIsNearExpiry } from '@/lib/documentCompliance';
+import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 
 export default function Header() {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [documentReferenceTime] = useState(() => Date.now());
   const profileMenu = useRef<HTMLDivElement>(null);
   const {
     activeOrganizationId,
     organizations,
     documents,
+    doctors,
     theme,
     setTheme,
     currentUser,
@@ -22,7 +26,10 @@ export default function Header() {
   } = useStore();
 
   const activeOrg = organizations.find((organization) => organization.id === activeOrganizationId) || organizations[0];
-  const alerts = documents.filter((document) => document.organizationId === activeOrganizationId && document.status !== 'approved').length;
+  const governance = getDocumentGovernance(activeOrg);
+  const organizationDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
+  const effectiveIds = new Set(doctors.filter(doctor => doctor.organizationId === activeOrganizationId).flatMap(doctor => applicableDocuments(doctor, organizationDocuments, activeOrg?.settings.requiredDocuments).map(document => document.id)));
+  const alerts = organizationDocuments.filter(document => effectiveIds.has(document.id) && (document.status !== 'approved' || documentIsCritical(document, documentReferenceTime) || documentIsNearExpiry(document, documentReferenceTime, Math.max(...governance.expiryAlertDays)))).length;
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -54,7 +61,7 @@ export default function Header() {
           </div>
         )}
 
-        {alerts > 0 && (
+        {governance.internalNotifications && alerts > 0 && (
           <Link href="/documentos" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition hover:bg-state-hover hover:text-text-primary" aria-label={`${alerts} pendências documentais`}>
             <Bell className="h-[18px] w-[18px]" />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-danger ring-2 ring-header-bg" />

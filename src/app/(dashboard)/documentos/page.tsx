@@ -6,6 +6,9 @@ import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, ChevronRight, FileText, FolderOpen, LayoutGrid, List, Search, ShieldCheck, Users } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import { doctorMatchesUnit, documentIsCritical, documentIsNearExpiry, documentNeedsAction, documentStatusClasses, documentStatusLabels, documentStatusOrder, getDoctorCompliance } from '@/lib/documentCompliance';
+import { getDocumentGovernance, requirementApplies } from '@/lib/documentGovernance';
+import { canEditPermission } from '@/lib/permissions';
+import type { DocumentStatus } from '@/types';
 import { useStore } from '@/store/useStore';
 
 type ViewMode = 'clinical' | 'files';
@@ -13,7 +16,8 @@ type ComplianceFilter = 'all' | 'pending' | 'critical' | 'review' | 'compliant';
 
 function DocumentCenter() {
   const searchParams = useSearchParams();
-  const { activeOrganizationId, doctors, documents, units } = useStore();
+  const store = useStore();
+  const { activeOrganizationId, doctors, documents, units, organizations, currentUser } = store;
   const [referenceTime] = useState(() => Date.now());
   const [view, setView] = useState<ViewMode>('clinical');
   const [search, setSearch] = useState('');
@@ -21,13 +25,20 @@ function DocumentCenter() {
   const [specialty, setSpecialty] = useState(searchParams.get('specialty') || '');
   const queryStatus = searchParams.get('status');
   const [compliance, setCompliance] = useState<ComplianceFilter>(queryStatus === 'critical' ? 'critical' : queryStatus === 'review' ? 'review' : queryStatus === 'not_sent' ? 'pending' : 'all');
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<DocumentStatus>('analyzing');
+  const [bulkNote, setBulkNote] = useState('');
   const doctorId = searchParams.get('doctorId') || '';
 
   const orgDoctors = useMemo(() => doctors.filter(doctor => doctor.organizationId === activeOrganizationId), [doctors, activeOrganizationId]);
   const orgDocuments = useMemo(() => documents.filter(document => document.organizationId === activeOrganizationId), [documents, activeOrganizationId]);
   const orgUnits = useMemo(() => units.filter(unit => unit.organizationId === activeOrganizationId), [units, activeOrganizationId]);
+  const activeOrganization = organizations.find(organization => organization.id === activeOrganizationId);
+  const requirements = useMemo(() => activeOrganization?.settings.requiredDocuments || [], [activeOrganization]);
+  const governance = getDocumentGovernance(activeOrganization);
+  const canEdit = canEditPermission(currentUser, 'documentos');
   const specialties = useMemo(() => [...new Set(orgDoctors.map(doctor => doctor.specialty))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [orgDoctors]);
-  const summaries = useMemo(() => new Map(orgDoctors.map(doctor => [doctor.id, getDoctorCompliance(doctor, orgDocuments, referenceTime)])), [orgDoctors, orgDocuments, referenceTime]);
+  const summaries = useMemo(() => new Map(orgDoctors.map(doctor => [doctor.id, getDoctorCompliance(doctor, orgDocuments, referenceTime, requirements, Math.max(...governance.expiryAlertDays))])), [orgDoctors, orgDocuments, referenceTime, requirements, governance.expiryAlertDays]);
 
   const matchesCompliance = (id: string) => {
     const summary = summaries.get(id);
@@ -49,9 +60,15 @@ function DocumentCenter() {
   const filteredDoctorIds = new Set(filteredDoctors.map(doctor => doctor.id));
   const filteredDocuments = orgDocuments
     .filter(document => filteredDoctorIds.has(document.doctorId))
+    .filter(document => {
+      if (!requirements.length) return true;
+      const doctor = orgDoctors.find(item => item.id === document.doctorId);
+      const requirement = requirements.find(item => item.type === document.type);
+      return Boolean(doctor && requirement && requirementApplies(requirement, doctor));
+    })
     .filter(document => compliance !== 'critical' || documentIsCritical(document))
     .filter(document => compliance !== 'review' || document.status === 'sent' || document.status === 'analyzing')
-    .filter(document => compliance !== 'pending' || documentNeedsAction(document) || documentIsNearExpiry(document, referenceTime))
+    .filter(document => compliance !== 'pending' || documentNeedsAction(document) || documentIsCritical(document, referenceTime) || documentIsNearExpiry(document, referenceTime, Math.max(...governance.expiryAlertDays)))
     .filter(document => compliance !== 'compliant' || document.status === 'approved')
     .sort((a, b) => documentStatusOrder[a.status] - documentStatusOrder[b.status] || a.name.localeCompare(b.name, 'pt-BR'));
 
@@ -59,6 +76,17 @@ function DocumentCenter() {
   const criticalDoctors = orgDoctors.filter(doctor => (summaries.get(doctor.id)?.critical || 0) > 0).length;
   const compliantDoctors = orgDoctors.filter(doctor => summaries.get(doctor.id)?.compliant).length;
   const resetFilters = () => { setSearch(''); setUnitId(''); setSpecialty(''); setCompliance('all'); window.history.replaceState({}, '', '/documentos'); };
+  const selectedSet = new Set(selectedDocumentIds);
+  const visibleIds = filteredDocuments.map(document => document.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedSet.has(id));
+  const toggleAllVisible = () => setSelectedDocumentIds(current => allVisibleSelected ? current.filter(id => !visibleIds.includes(id)) : [...new Set([...current, ...visibleIds])]);
+  const applyBulkAction = async () => {
+    if (!selectedDocumentIds.length) return;
+    if (await store.bulkUpdateDocuments(selectedDocumentIds, bulkStatus, bulkNote)) {
+      setSelectedDocumentIds([]);
+      setBulkNote('');
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -99,8 +127,8 @@ function DocumentCenter() {
         </section>
       ) : (
         <section className="overflow-hidden rounded-2xl border border-border bg-card-bg">
-          <header className="flex items-center justify-between border-b border-border px-4 py-3"><div><h2 className="text-sm font-semibold text-text-primary">Arquivos e requisitos</h2><p className="mt-0.5 text-xs text-text-muted">{filteredDocuments.length} itens documentais</p></div><FileText size={17} className="text-text-muted"/></header>
-          <div className="overflow-x-auto"><table className="w-full min-w-[920px] text-left text-sm"><thead className="border-b border-border bg-surface-muted/50 text-[10px] font-semibold uppercase tracking-wider text-text-muted"><tr><th className="px-4 py-3">Documento</th><th className="px-4 py-3">Médico</th><th className="px-4 py-3">Unidade</th><th className="px-4 py-3">Validade</th><th className="px-4 py-3">Situação</th><th className="px-4 py-3 text-right">Pasta</th></tr></thead><tbody className="divide-y divide-border">{filteredDocuments.map(document => { const doctor = orgDoctors.find(item => item.id === document.doctorId); const doctorUnits = orgUnits.filter(unit => doctor?.linkedUnits.includes(unit.id)); return <tr key={document.id} className="transition hover:bg-state-hover"><td className="px-4 py-3"><p className="font-medium text-text-primary">{document.name}</p><p className="mt-0.5 max-w-64 truncate text-xs text-text-muted">{document.fileName || 'Arquivo ainda não enviado'}</p></td><td className="px-4 py-3"><p className="font-medium text-text-primary">{doctor?.name || 'Médico'}</p><p className="mt-0.5 text-xs text-text-muted">{doctor?.specialty}</p></td><td className="px-4 py-3 text-xs text-text-secondary">{doctorUnits.map(unit => unit.name).join(' · ') || '—'}</td><td className="px-4 py-3 text-xs tabular-nums text-text-secondary">{document.expiryDate ? new Date(`${document.expiryDate}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem validade'}</td><td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${documentStatusClasses[document.status]}`}>{documentStatusLabels[document.status]}</span></td><td className="px-4 py-3 text-right"><Link href={`/documentos/${document.doctorId}`} className="text-xs font-semibold text-primary hover:underline">Abrir pasta</Link></td></tr>; })}</tbody></table></div>
+          <header className="flex flex-col gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="text-sm font-semibold text-text-primary">Arquivos e requisitos</h2><p className="mt-0.5 text-xs text-text-muted">{filteredDocuments.length} itens documentais · {selectedDocumentIds.length} selecionados</p></div>{canEdit && <div className="flex flex-wrap items-center gap-2"><select aria-label="Situação em lote" className="rounded-lg border border-input-border bg-input-bg px-3 py-2 text-xs" value={bulkStatus} onChange={event => setBulkStatus(event.target.value as DocumentStatus)}><option value="analyzing">Enviar para análise</option><option value="approved">Aprovar</option><option value="rejected">Reprovar</option><option value="expired">Marcar como vencido</option></select><input aria-label="Observação da ação em lote" className="rounded-lg border border-input-border bg-input-bg px-3 py-2 text-xs" placeholder={bulkStatus === 'rejected' ? 'Motivo obrigatório' : 'Observação opcional'} maxLength={1000} value={bulkNote} onChange={event => setBulkNote(event.target.value)}/><button type="button" className="nv-button" disabled={!selectedDocumentIds.length || store.saving || (bulkStatus === 'rejected' && !bulkNote.trim())} onClick={applyBulkAction}>{store.saving ? 'Salvando…' : 'Aplicar em lote'}</button></div>}</header>
+          <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b border-border bg-surface-muted/50 text-[10px] font-semibold uppercase tracking-wider text-text-muted"><tr>{canEdit && <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Selecionar documentos visíveis" checked={allVisibleSelected} onChange={toggleAllVisible}/></th>}<th className="px-4 py-3">Documento</th><th className="px-4 py-3">Médico</th><th className="px-4 py-3">Unidade</th><th className="px-4 py-3">Validade</th><th className="px-4 py-3">Situação</th><th className="px-4 py-3 text-right">Pasta</th></tr></thead><tbody className="divide-y divide-border">{filteredDocuments.map(document => { const doctor = orgDoctors.find(item => item.id === document.doctorId); const doctorUnits = orgUnits.filter(unit => doctor?.linkedUnits.includes(unit.id)); return <tr key={document.id} className="transition hover:bg-state-hover">{canEdit && <td className="px-4 py-3"><input type="checkbox" aria-label={`Selecionar ${document.name} de ${doctor?.name || 'médico'}`} checked={selectedSet.has(document.id)} onChange={() => setSelectedDocumentIds(current => current.includes(document.id) ? current.filter(id => id !== document.id) : [...current, document.id])}/></td>}<td className="px-4 py-3"><p className="font-medium text-text-primary">{document.name}</p><p className="mt-0.5 max-w-64 truncate text-xs text-text-muted">{document.fileName || 'Arquivo ainda não enviado'}</p></td><td className="px-4 py-3"><p className="font-medium text-text-primary">{doctor?.name || 'Médico'}</p><p className="mt-0.5 text-xs text-text-muted">{doctor?.specialty}</p></td><td className="px-4 py-3 text-xs text-text-secondary">{doctorUnits.map(unit => unit.name).join(' · ') || '—'}</td><td className="px-4 py-3 text-xs tabular-nums text-text-secondary">{document.expiryDate ? new Date(`${document.expiryDate}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem validade'}</td><td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${documentStatusClasses[document.status]}`}>{documentStatusLabels[document.status]}</span>{document.reviewNote && <p className="mt-1 max-w-48 truncate text-[11px] text-text-muted" title={document.reviewNote}>{document.reviewNote}</p>}</td><td className="px-4 py-3 text-right"><Link href={`/documentos/${document.doctorId}`} className="text-xs font-semibold text-primary hover:underline">Abrir pasta</Link></td></tr>; })}</tbody></table></div>
           {!filteredDocuments.length && <div className="py-16 text-center"><FileText className="mx-auto h-7 w-7 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum documento encontrado.</p></div>}
         </section>
       )}

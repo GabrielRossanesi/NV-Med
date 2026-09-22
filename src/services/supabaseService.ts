@@ -14,7 +14,8 @@ import {
   UnitType,
   UnitStatus,
   ShiftType,
-  ShiftStatus
+  ShiftStatus,
+  DocumentAuditEntry
 } from '@/types';
 
 // ==============================================================================
@@ -99,7 +100,26 @@ interface DbMedicalDocument {
   file_name?: string;
   file_url?: string;
   file_path?: string;
+  review_note?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  version?: number;
   created_at?: string;
+}
+
+interface DbDocumentAudit {
+  id: string;
+  organization_id: string;
+  doctor_id: string;
+  document_id: string;
+  actor_user_id?: string;
+  actor_name?: string;
+  action: DocumentAuditEntry['action'];
+  from_status?: DocumentStatus;
+  to_status?: DocumentStatus;
+  note?: string;
+  changes?: Record<string, unknown>;
+  created_at: string;
 }
 
 interface DbShift {
@@ -221,7 +241,28 @@ function mapDocumentFromDb(row: DbMedicalDocument): MedicalDocument {
     uploadDate: row.upload_date,
     expiryDate: row.expiry_date,
     fileName: row.file_name,
-    filePath: row.file_path
+    filePath: row.file_path,
+    reviewNote: row.review_note,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    version: row.version || 1,
+  };
+}
+
+function mapDocumentAuditFromDb(row: DbDocumentAudit): DocumentAuditEntry {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    doctorId: row.doctor_id,
+    documentId: row.document_id,
+    actorUserId: row.actor_user_id,
+    actorName: row.actor_name || 'Sistema',
+    action: row.action,
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    note: row.note,
+    changes: row.changes || {},
+    createdAt: row.created_at,
   };
 }
 
@@ -297,12 +338,21 @@ export async function fetchInitialDataFromSupabase() {
       if (data.length < 500) return result;
     }
   }
-  const [orgs, doctors, units, sectors, documents, shifts, users] = await Promise.all([
+  const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
     rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('shifts'),
-    currentUser.type === 'saas_admin' ? rows('user_accounts') : Promise.resolve([profile])
+    currentUser.type === 'saas_admin' ? rows('user_accounts') : Promise.resolve([profile]),
+    fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
-    units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb) };
+    units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb), documentAudits };
+}
+
+export async function fetchDocumentAuditLogsFromSupabase() {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase.from('document_audit_logs').select('*').order('created_at', { ascending: false }).limit(1000);
+  if (error) throw new Error('Não foi possível carregar o histórico documental.');
+  return (data as DbDocumentAudit[]).map(mapDocumentAuditFromDb);
 }
 
 // ==============================================================================
@@ -520,11 +570,34 @@ export async function saveDocumentToSupabase(doc: MedicalDocument) {
     upload_date: doc.uploadDate,
     expiry_date: doc.expiryDate,
     file_name: doc.fileName,
-    file_path: doc.filePath
+    file_path: doc.filePath,
+    review_note: doc.reviewNote,
   };
 
-  const { error } = await supabase.from('medical_documents').upsert(payload).select('id').single();
+  const { data, error } = await supabase.from('medical_documents').upsert(payload).select('*').single();
   if (error) throw new Error('Não foi possível salvar: ' + error.message);
+  return mapDocumentFromDb(data as DbMedicalDocument);
+}
+
+export async function saveDocumentsToSupabase(documents: MedicalDocument[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const payload = documents.map(doc => ({
+    id: doc.id,
+    organization_id: doc.organizationId,
+    doctor_id: doc.doctorId,
+    name: doc.name,
+    type: doc.type,
+    status: doc.status,
+    upload_date: doc.uploadDate,
+    expiry_date: doc.expiryDate,
+    file_name: doc.fileName,
+    file_path: doc.filePath,
+    review_note: doc.reviewNote,
+  }));
+  const { data, error } = await supabase.from('medical_documents').upsert(payload).select('*');
+  if (error) throw new Error('Não foi possível atualizar os documentos: ' + error.message);
+  return (data as DbMedicalDocument[]).map(mapDocumentFromDb);
 }
 
 export async function saveOrganizationToSupabase(org: Organization) {

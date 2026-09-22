@@ -3,10 +3,11 @@
 
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, AlertTriangle, ArrowLeft, Building2, CalendarClock, Download, ExternalLink, FileImage, FileText, FolderOpen, Grid2X2, List, LoaderCircle, ShieldCheck, Upload, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, Building2, CalendarClock, Download, ExternalLink, FileImage, FileText, FolderOpen, Grid2X2, History, List, LoaderCircle, ShieldCheck, Upload, X } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import { canEditPermission } from '@/lib/permissions';
 import { documentStatusClasses, documentStatusLabels, documentStatusOrder, getDoctorCompliance } from '@/lib/documentCompliance';
+import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 import { openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import type { DocumentStatus, DocumentType, MedicalDocument } from '@/types';
@@ -20,16 +21,22 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
   const [view, setView] = useState<FolderView>('grid');
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
   const [expiryDrafts, setExpiryDrafts] = useState<Record<string, string>>({});
+  const [statusDrafts, setStatusDrafts] = useState<Record<string, DocumentStatus>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [previewDocument, setPreviewDocument] = useState<MedicalDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
 
   const doctor = store.doctors.find(item => item.id === doctorId && item.organizationId === store.activeOrganizationId);
+  const activeOrganization = store.organizations.find(item => item.id === store.activeOrganizationId);
+  const requirements = useMemo(() => activeOrganization?.settings.requiredDocuments || [], [activeOrganization]);
+  const governance = getDocumentGovernance(activeOrganization);
   const organizationDocuments = useMemo(() => store.documents.filter(item => item.organizationId === store.activeOrganizationId), [store.documents, store.activeOrganizationId]);
-  const doctorDocuments = useMemo(() => organizationDocuments.filter(item => item.doctorId === doctorId).sort((a, b) => documentStatusOrder[a.status] - documentStatusOrder[b.status] || a.name.localeCompare(b.name, 'pt-BR')), [organizationDocuments, doctorId]);
+  const doctorDocuments = useMemo(() => doctor ? applicableDocuments(doctor, organizationDocuments, requirements).sort((a, b) => documentStatusOrder[a.status] - documentStatusOrder[b.status] || a.name.localeCompare(b.name, 'pt-BR')) : [], [organizationDocuments, doctor, requirements]);
   const linkedUnits = store.units.filter(unit => unit.organizationId === store.activeOrganizationId && doctor?.linkedUnits.includes(unit.id));
-  const summary = doctor ? getDoctorCompliance(doctor, organizationDocuments, referenceTime) : null;
+  const summary = doctor ? getDoctorCompliance(doctor, organizationDocuments, referenceTime, requirements, Math.max(...governance.expiryAlertDays)) : null;
+  const auditEntries = store.documentAudits.filter(entry => entry.organizationId === store.activeOrganizationId && entry.doctorId === doctorId);
   const canEdit = canEditPermission(store.currentUser, 'documentos');
 
   if (!doctor || !summary) {
@@ -58,8 +65,11 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
     await store.updateDocument({ ...document, expiryDate: expiryDate || undefined });
   };
 
-  const updateStatus = async (document: MedicalDocument, status: DocumentStatus) => {
-    await store.updateDocument({ ...document, status });
+  const saveReview = async (document: MedicalDocument) => {
+    const status = statusDrafts[document.id] || document.status;
+    const reviewNote = (noteDrafts[document.id] ?? document.reviewNote ?? '').trim();
+    if (status === 'rejected' && !reviewNote) return;
+    await store.updateDocument({ ...document, status, reviewNote: reviewNote || undefined });
   };
 
   const isImage = previewDocument?.fileName ? /\.(png|jpe?g)$/i.test(previewDocument.fileName) : false;
@@ -75,7 +85,7 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
           </div>
         </header>
 
-        {(summary.critical > 0 || summary.nearExpiry > 0) && <section className="flex items-start gap-3 rounded-2xl border border-danger/25 bg-danger/5 px-4 py-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger"/><div><h2 className="text-sm font-semibold text-text-primary">Atenção documental</h2><p className="mt-0.5 text-xs text-text-muted">{summary.critical > 0 ? `${summary.critical} documento(s) vencido(s), reprovado(s) ou ausente(s).` : ''}{summary.nearExpiry > 0 ? ` ${summary.nearExpiry} documento(s) vence(m) nos próximos 30 dias.` : ''}</p></div></section>}
+        {(summary.critical > 0 || summary.nearExpiry > 0) && <section className="flex items-start gap-3 rounded-2xl border border-danger/25 bg-danger/5 px-4 py-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger"/><div><h2 className="text-sm font-semibold text-text-primary">Atenção documental</h2><p className="mt-0.5 text-xs text-text-muted">{summary.critical > 0 ? `${summary.critical} documento(s) vencido(s), reprovado(s) ou ausente(s).` : ''}{summary.nearExpiry > 0 ? ` ${summary.nearExpiry} documento(s) vence(m) nos próximos ${Math.max(...governance.expiryAlertDays)} dias.` : ''}</p></div></section>}
 
         <section className="grid overflow-hidden rounded-2xl border border-border bg-card-bg sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1.4fr]">
           <div className="p-5"><p className="text-xs text-text-muted">Conformidade</p><p className="mt-2 text-2xl font-semibold tabular-nums">{summary.percentage}%</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-muted"><div className={`h-full rounded-full ${summary.compliant ? 'bg-success' : summary.critical ? 'bg-danger' : 'bg-warning'}`} style={{width:`${summary.percentage}%`}}/></div></div>
@@ -92,16 +102,21 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
             {doctorDocuments.map(document => {
               const selected = selectedFiles[document.type];
               const expiryValue = expiryDrafts[document.id] ?? document.expiryDate ?? '';
-              return <article key={document.id} className={`${view === 'grid' ? 'rounded-2xl border border-border bg-card-bg p-4 transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-medium' : 'grid gap-4 p-4 md:grid-cols-[minmax(220px,1.4fr)_160px_200px_auto] md:items-center'} group`}>
-                <button type="button" disabled={!document.filePath} onClick={() => preview(document)} className={`flex w-full min-w-0 items-start gap-3 text-left ${document.filePath ? 'cursor-pointer' : 'cursor-default'}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${document.status === 'approved' ? 'bg-success/10 text-success' : document.status === 'expired' || document.status === 'rejected' ? 'bg-danger/10 text-danger' : 'bg-surface-muted text-text-muted'}`}>{document.fileName && /\.(png|jpe?g)$/i.test(document.fileName) ? <FileImage size={19}/> : <FileText size={19}/>}</span><span className="min-w-0"><span className="block truncate text-sm font-semibold text-text-primary group-hover:text-primary">{document.name}</span><span className="mt-1 block truncate text-xs text-text-muted">{document.fileName || 'Arquivo não enviado'}</span>{document.uploadDate && <span className="mt-1 block text-[10px] text-text-muted">Enviado em {new Date(`${document.uploadDate}T12:00:00`).toLocaleDateString('pt-BR')}</span>}</span></button>
+              const reviewStatus = statusDrafts[document.id] || document.status;
+              const reviewNote = noteDrafts[document.id] ?? document.reviewNote ?? '';
+              const reviewChanged = reviewStatus !== document.status || reviewNote !== (document.reviewNote || '');
+              return <article key={document.id} className={`${view === 'grid' ? 'rounded-2xl border border-border bg-card-bg p-4 transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-medium' : 'grid gap-4 p-4 md:grid-cols-[minmax(220px,1.3fr)_140px_190px_minmax(250px,1fr)] md:items-start'} group`}>
+                <button type="button" disabled={!document.filePath} onClick={() => preview(document)} className={`flex w-full min-w-0 items-start gap-3 text-left ${document.filePath ? 'cursor-pointer' : 'cursor-default'}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${document.status === 'approved' ? 'bg-success/10 text-success' : document.status === 'expired' || document.status === 'rejected' ? 'bg-danger/10 text-danger' : 'bg-surface-muted text-text-muted'}`}>{document.fileName && /\.(png|jpe?g)$/i.test(document.fileName) ? <FileImage size={19}/> : <FileText size={19}/>}</span><span className="min-w-0"><span className="block truncate text-sm font-semibold text-text-primary group-hover:text-primary">{document.name}</span><span className="mt-1 block truncate text-xs text-text-muted">{document.fileName || 'Arquivo não enviado'}</span>{document.uploadDate && <span className="mt-1 block text-[10px] text-text-muted">Enviado em {new Date(`${document.uploadDate}T12:00:00`).toLocaleDateString('pt-BR')} · versão {document.version || 1}</span>}</span></button>
                 <div className={view === 'grid' ? 'mt-4 flex items-center justify-between border-t border-border pt-3' : ''}><span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${documentStatusClasses[document.status]}`}>{documentStatusLabels[document.status]}</span>{view === 'grid' && document.filePath && <ExternalLink size={14} className="text-text-muted"/>}</div>
                 <div className={view === 'grid' ? 'mt-3' : ''}><label className="nv-label">Validade<input type="date" className="nv-input disabled:opacity-60" disabled={!canEdit} value={expiryValue} onChange={event => setExpiryDrafts(current => ({...current,[document.id]:event.target.value}))}/></label>{canEdit && expiryValue !== (document.expiryDate || '') && <button type="button" disabled={store.saving} onClick={() => saveExpiry(document)} className="mt-2 text-xs font-semibold text-primary hover:underline">Salvar validade</button>}</div>
-                {canEdit && <div className={`${view === 'grid' ? 'mt-3 border-t border-border pt-3' : ''} flex flex-wrap items-center gap-2`}><select aria-label={`Situação de ${document.name}`} className="rounded-lg border border-input-border bg-input-bg px-2.5 py-2 text-xs text-text-primary" value={document.status} onChange={event => updateStatus(document, event.target.value as DocumentStatus)}><option value="not_sent">Não enviado</option><option value="sent">Recebido</option><option value="analyzing">Em análise</option><option value="approved">Aprovado</option><option value="rejected">Reprovado</option><option value="expired">Vencido</option></select><label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card-bg px-2.5 py-2 text-xs font-semibold text-text-secondary transition hover:bg-state-hover"><Upload size={13}/>{selected ? 'Trocar arquivo' : document.filePath ? 'Substituir' : 'Selecionar'}<input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={event => { const file=event.target.files?.[0]; if(file) setSelectedFiles(current=>({...current,[document.type]:file})); }}/></label>{selected && <button type="button" disabled={store.saving} onClick={() => upload(document)} className="rounded-lg bg-primary px-2.5 py-2 text-xs font-semibold text-text-inverse">Enviar</button>}</div>}
+                {canEdit && <div className={`${view === 'grid' ? 'mt-3 border-t border-border pt-3' : ''} space-y-2`}><div className="flex flex-wrap items-center gap-2"><select aria-label={`Situação de ${document.name}`} className="rounded-lg border border-input-border bg-input-bg px-2.5 py-2 text-xs text-text-primary" value={reviewStatus} onChange={event => setStatusDrafts(current => ({...current,[document.id]:event.target.value as DocumentStatus}))}><option value="not_sent">Não enviado</option><option value="sent">Recebido</option><option value="analyzing">Em análise</option><option value="approved">Aprovado</option><option value="rejected">Reprovado</option><option value="expired">Vencido</option></select><label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card-bg px-2.5 py-2 text-xs font-semibold text-text-secondary transition hover:bg-state-hover"><Upload size={13}/>{selected ? 'Trocar arquivo' : document.filePath ? 'Substituir' : 'Selecionar'}<input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={event => { const file=event.target.files?.[0]; if(file) setSelectedFiles(current=>({...current,[document.type]:file})); }}/></label>{selected && <button type="button" disabled={store.saving} onClick={() => upload(document)} className="rounded-lg bg-primary px-2.5 py-2 text-xs font-semibold text-text-inverse">Enviar</button>}</div><textarea aria-label={`Observação de ${document.name}`} className="nv-input min-h-16 text-xs" maxLength={1000} placeholder={reviewStatus === 'rejected' ? 'Informe o motivo da reprovação' : 'Observação da análise (opcional)'} value={reviewNote} onChange={event => setNoteDrafts(current => ({...current,[document.id]:event.target.value}))}/>{reviewChanged && <button type="button" className="text-xs font-semibold text-primary hover:underline disabled:opacity-50" disabled={store.saving || (reviewStatus === 'rejected' && !reviewNote.trim())} onClick={() => saveReview(document)}>Salvar análise</button>}</div>}
               </article>;
             })}
             {!doctorDocuments.length && <div className="col-span-full rounded-2xl border border-dashed border-border py-16 text-center"><FolderOpen className="mx-auto h-7 w-7 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum requisito documental configurado.</p></div>}
           </div>
         </section>
+
+        <section className="overflow-hidden rounded-2xl border border-border bg-card-bg"><header className="flex items-center gap-2 border-b border-border px-4 py-3"><History size={16} className="text-primary"/><div><h2 className="text-sm font-semibold">Histórico e auditoria</h2><p className="mt-0.5 text-xs text-text-muted">Alterações de arquivo, situação, validade e observações.</p></div></header><div className="divide-y divide-border">{auditEntries.slice(0, 30).map(entry => { const document = doctorDocuments.find(item => item.id === entry.documentId); const previousFilePath = typeof entry.changes.previousFilePath === 'string' ? entry.changes.previousFilePath : ''; const actionLabels = { created: 'Requisito criado', file_uploaded: 'Arquivo enviado', file_replaced: 'Arquivo substituído', status_changed: 'Situação alterada', expiry_changed: 'Validade alterada', note_changed: 'Observação atualizada', updated: 'Documento atualizado' }; return <article key={entry.id} className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto] md:items-center"><div><p className="text-sm font-medium text-text-primary">{document?.name || 'Documento'}</p><p className="mt-0.5 text-xs text-text-muted">{actionLabels[entry.action]} por {entry.actorName}</p></div><div>{entry.fromStatus && entry.toStatus && entry.fromStatus !== entry.toStatus && <p className="text-xs text-text-secondary">{documentStatusLabels[entry.fromStatus]} → {documentStatusLabels[entry.toStatus]}</p>}{entry.note && <p className="mt-1 text-xs text-text-muted">“{entry.note}”</p>}{previousFilePath && document && <button type="button" className="mt-1 text-xs font-semibold text-primary hover:underline" onClick={() => preview({ ...document, filePath: previousFilePath, fileName: typeof entry.changes.previousFileName === 'string' ? entry.changes.previousFileName : 'Versão anterior' })}>Abrir versão anterior</button>}</div><time className="text-xs tabular-nums text-text-muted">{new Date(entry.createdAt).toLocaleString('pt-BR')}</time></article>; })}{!auditEntries.length && <p className="px-4 py-8 text-center text-sm text-text-muted">O histórico aparecerá após a primeira alteração realizada com a nova auditoria.</p>}</div></section>
 
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-xs text-text-muted"><span className="flex items-center gap-1.5"><CalendarClock size={14}/>Validades devem ser revisadas durante o credenciamento e antes da escala.</span><Link href={`/medicos/${doctor.id}`} className="font-semibold text-primary hover:underline">Abrir perfil completo do médico</Link></footer>
       </div>

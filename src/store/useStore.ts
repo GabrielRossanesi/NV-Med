@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount } from '@/types';
+import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { createClient } from '@/lib/supabase/client';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
-const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], shifts: [] as Shift[], users: [] as UserAccount[] };
+const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
 interface NVMedState {
-  activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; shifts: Shift[];
+  activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
   currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
   saving: boolean; error: string | null; notice: string | null;
   clearFeedback: () => void; clearSession: () => void;
@@ -29,6 +29,7 @@ interface NVMedState {
   uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
   updateDocument: (document: MedicalDocument) => Promise<boolean>;
+  bulkUpdateDocuments: (documentIds: string[], status: DocumentStatus, reviewNote?: string) => Promise<boolean>;
   addOrganization: (org: Omit<Organization, 'id'>) => Promise<boolean>;
   updateOrganization: (org: Organization) => Promise<boolean>;
   deleteOrganization: (id: string, confirmation: string) => Promise<boolean>;
@@ -55,6 +56,10 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     const id = get().activeOrganizationId;
     if (!id || !get().organizations.some(o => o.id === id)) throw new Error('Selecione uma empresa antes de continuar.');
     return id;
+  }
+  async function refreshDocumentAudits() {
+    try { set({ documentAudits: await cloud.fetchDocumentAuditLogsFromSupabase() }); }
+    catch { /* The audit migration may not have been applied yet. */ }
   }
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
@@ -102,12 +107,24 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const previous = get().documents.find(d => d.doctorId === doctorId && d.type === type);
       const uploaded = await cloud.uploadDocumentFileToSupabase(file, doctor.organizationId, doctorId);
       const doc: MedicalDocument = { ...previous, ...uploaded, id: previous?.id || crypto.randomUUID(), doctorId, organizationId: doctor.organizationId, type, name: previous?.name || type, status: 'sent', uploadDate: new Date().toISOString().slice(0, 10) };
-      try { await cloud.saveDocumentToSupabase(doc); }
+      let saved: MedicalDocument;
+      try { saved = await cloud.saveDocumentToSupabase(doc); }
       catch (error) { await createClient()?.storage.from('medical-documents').remove([uploaded.filePath]); throw error; }
-      set({ documents: [...get().documents.filter(d => d.id !== doc.id), doc] });
+      set({ documents: [...get().documents.filter(d => d.id !== saved.id), saved] });
+      await refreshDocumentAudits();
     }),
-    updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const doc = { ...previous, status }; await cloud.saveDocumentToSupabase(doc); set({ documents: get().documents.map(d => d.id === id ? doc : d) }); }),
-    updateDocument: document => commit(async () => { await cloud.saveDocumentToSupabase(document); set({ documents: get().documents.map(item => item.id === document.id ? document : item) }); }),
+    updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const saved = await cloud.saveDocumentToSupabase({ ...previous, status }); set({ documents: get().documents.map(d => d.id === id ? saved : d) }); await refreshDocumentAudits(); }),
+    updateDocument: document => commit(async () => { const saved = await cloud.saveDocumentToSupabase(document); set({ documents: get().documents.map(item => item.id === document.id ? saved : item) }); await refreshDocumentAudits(); }),
+    bulkUpdateDocuments: (documentIds, status, reviewNote) => commit(async () => {
+      const idSet = new Set(documentIds);
+      const selected = get().documents.filter(document => idSet.has(document.id) && document.organizationId === orgId());
+      if (!selected.length) throw new Error('Selecione ao menos um documento desta empresa.');
+      if (status === 'rejected' && !reviewNote?.trim()) throw new Error('Informe o motivo da reprovação.');
+      const saved = await cloud.saveDocumentsToSupabase(selected.map(document => ({ ...document, status, reviewNote: reviewNote?.trim() || document.reviewNote })));
+      const savedMap = new Map(saved.map(document => [document.id, document]));
+      set({ documents: get().documents.map(document => savedMap.get(document.id) || document) });
+      await refreshDocumentAudits();
+    }),
     addOrganization: input => commit(async () => { const org = { ...input, id: crypto.randomUUID() }; await cloud.saveOrganizationToSupabase(org); set({ organizations: [...get().organizations, org], activeOrganizationId: org.id }); }),
     updateOrganization: org => commit(async () => { await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === org.id ? org : o) }); }),
     deleteOrganization: (id, confirmation) => commit(async () => {
@@ -121,6 +138,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         units: get().units.filter(item => item.organizationId !== id),
         sectors: get().sectors.filter(item => item.organizationId !== id),
         documents: get().documents.filter(item => item.organizationId !== id),
+        documentAudits: get().documentAudits.filter(item => item.organizationId !== id),
         shifts: get().shifts.filter(item => item.organizationId !== id),
         users: get().users.filter(item => item.organizationId !== id),
         activeOrganizationId: get().activeOrganizationId === id ? organizations[0]?.id || '' : get().activeOrganizationId,
@@ -137,4 +155,14 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
     stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),
   };
-}, { name: 'nv-med-preferences', skipHydration: true, partialize: state => ({ theme: state.theme }), merge: (saved, current) => ({ ...current, theme: (saved as { theme?: string })?.theme === 'light' ? 'light' : 'dark', sidebarCollapsed: true }) }));
+}, {
+  name: 'nv-med-preferences',
+  skipHydration: true,
+  partialize: state => ({ theme: state.theme, activeOrganizationId: state.activeOrganizationId }),
+  merge: (saved, current) => ({
+    ...current,
+    theme: (saved as { theme?: string })?.theme === 'light' ? 'light' : 'dark',
+    activeOrganizationId: (saved as { activeOrganizationId?: string })?.activeOrganizationId || '',
+    sidebarCollapsed: true,
+  }),
+}));

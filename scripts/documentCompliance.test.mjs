@@ -34,3 +34,13 @@ test('flags approved documents expiring within thirty days', () => {
   assert.equal(documentIsNearExpiry({ ...base, id: 'near', status: 'approved', expiryDate: '2026-10-15' }, reference), true);
   assert.equal(documentIsNearExpiry({ ...base, id: 'later', status: 'approved', expiryDate: '2026-11-15' }, reference), false);
 });
+
+test('treats an approved document with a past expiry date as non-compliant', () => {
+  const reference = Date.parse('2026-09-21T12:00:00');
+  const expiredByDate = { ...base, id: 'expired-date', status: 'approved', expiryDate: '2026-09-20' };
+  assert.equal(documentIsCritical(expiredByDate, reference), true);
+  const summary = getDoctorCompliance(doctor, [expiredByDate], reference);
+  assert.equal(summary.approved, 0);
+  assert.equal(summary.critical, 1);
+  assert.equal(summary.compliant, false);
+});

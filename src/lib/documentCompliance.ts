@@ -1,4 +1,4 @@
-import type { DocumentStatus, Doctor, MedicalDocument } from '@/types';
+import type { DocumentRequirement, DocumentStatus, Doctor, MedicalDocument } from '@/types';
 
 export const documentStatusLabels: Record<DocumentStatus, string> = {
   approved: 'Aprovado',
@@ -31,8 +31,9 @@ export function documentNeedsAction(document: MedicalDocument) {
   return document.status !== 'approved';
 }
 
-export function documentIsCritical(document: MedicalDocument) {
-  return document.status === 'expired' || document.status === 'rejected' || document.status === 'not_sent';
+export function documentIsCritical(document: MedicalDocument, referenceTime = Date.now()) {
+  const expiredByDate = Boolean(document.expiryDate) && new Date(`${document.expiryDate}T12:00:00`).getTime() < referenceTime;
+  return document.status === 'expired' || document.status === 'rejected' || document.status === 'not_sent' || expiredByDate;
 }
 
 export function documentIsNearExpiry(document: MedicalDocument, referenceTime = Date.now(), days = 30) {
@@ -42,12 +43,23 @@ export function documentIsNearExpiry(document: MedicalDocument, referenceTime = 
   return remainingDays >= 0 && remainingDays <= days;
 }
 
-export function getDoctorCompliance(doctor: Pick<Doctor, 'id'>, documents: MedicalDocument[], referenceTime = Date.now()) {
-  const doctorDocuments = documents.filter(document => document.doctorId === doctor.id);
-  const approved = doctorDocuments.filter(document => document.status === 'approved').length;
-  const critical = doctorDocuments.filter(documentIsCritical).length;
+export function getDoctorCompliance(
+  doctor: Pick<Doctor, 'id' | 'specialty' | 'linkedUnits'>,
+  documents: MedicalDocument[],
+  referenceTime = Date.now(),
+  requirements?: DocumentRequirement[],
+  nearExpiryDays = 30,
+) {
+  const scopedTypes = requirements?.length ? new Set(requirements
+    .filter(requirement => requirement.required)
+    .filter(requirement => !requirement.specialties?.length || requirement.specialties.includes(doctor.specialty))
+    .filter(requirement => !requirement.unitIds?.length || doctor.linkedUnits.some(unitId => requirement.unitIds?.includes(unitId)))
+    .map(requirement => requirement.type)) : null;
+  const doctorDocuments = documents.filter(document => document.doctorId === doctor.id && (!scopedTypes || scopedTypes.has(document.type)));
+  const approved = doctorDocuments.filter(document => document.status === 'approved' && !documentIsCritical(document, referenceTime)).length;
+  const critical = doctorDocuments.filter(document => documentIsCritical(document, referenceTime)).length;
   const review = doctorDocuments.filter(document => document.status === 'sent' || document.status === 'analyzing').length;
-  const nearExpiry = doctorDocuments.filter(document => documentIsNearExpiry(document, referenceTime)).length;
+  const nearExpiry = doctorDocuments.filter(document => documentIsNearExpiry(document, referenceTime, nearExpiryDays)).length;
   const pending = doctorDocuments.length - approved;
   const percentage = doctorDocuments.length ? Math.round((approved / doctorDocuments.length) * 100) : 0;
   return {
@@ -58,7 +70,7 @@ export function getDoctorCompliance(doctor: Pick<Doctor, 'id'>, documents: Medic
     nearExpiry,
     pending,
     percentage,
-    compliant: doctorDocuments.length > 0 && pending === 0 && nearExpiry === 0,
+    compliant: doctorDocuments.length > 0 && pending === 0 && critical === 0 && nearExpiry === 0,
   };
 }
 

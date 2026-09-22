@@ -6,6 +6,8 @@ import AccessGuard from '@/components/AccessGuard';
 import { downloadCsv } from '@/lib/csv';
 import { employmentLabels, localDate, paymentFrequencyLabels } from '@/lib/scheduling';
 import { canViewPermission } from '@/lib/permissions';
+import { documentIsCritical, documentIsNearExpiry } from '@/lib/documentCompliance';
+import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 import { useStore } from '@/store/useStore';
 import type { Shift } from '@/types';
 
@@ -62,8 +64,10 @@ export default function ReportsPage() {
   const [reference, setReference] = useState(localDate());
   const [unitId, setUnitId] = useState('');
   const [lastExport, setLastExport] = useState('');
+  const [documentReferenceTime] = useState(() => Date.now());
   const orgId = store.activeOrganizationId;
   const organization = store.organizations.find(item => item.id === orgId);
+  const documentGovernance = getDocumentGovernance(organization);
   const units = store.units.filter(item => item.organizationId === orgId);
   const sectors = store.sectors.filter(item => item.organizationId === orgId);
   const doctors = store.doctors.filter(item => item.organizationId === orgId && (!unitId || item.linkedUnits.includes(unitId)));
@@ -80,8 +84,8 @@ export default function ReportsPage() {
   const pendingAmount = totalAmount - paidAmount;
 
   const compliance = doctors.map(doctor => {
-    const doctorDocuments = documents.filter(item => item.doctorId === doctor.id);
-    const pending = doctorDocuments.filter(item => item.status !== 'approved');
+    const doctorDocuments = applicableDocuments(doctor, documents, organization?.settings.requiredDocuments);
+    const pending = doctorDocuments.filter(item => item.status !== 'approved' || documentIsCritical(item, documentReferenceTime) || documentIsNearExpiry(item, documentReferenceTime, Math.max(...documentGovernance.expiryAlertDays)));
     return { doctor, documents: doctorDocuments, pending, regular: doctorDocuments.length > 0 && pending.length === 0 };
   });
   const regularDoctors = compliance.filter(item => item.regular).length;

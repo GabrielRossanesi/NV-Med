@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { localDate, shiftTouchesDay } from '@/lib/scheduling';
-import { documentIsNearExpiry, documentStatusLabels } from '@/lib/documentCompliance';
+import { documentIsCritical, documentIsNearExpiry, documentStatusLabels, getDoctorCompliance } from '@/lib/documentCompliance';
+import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 
 export default function DashboardPage() {
   const { activeOrganizationId, organizations, doctors, units, sectors, shifts, documents } = useStore();
@@ -31,11 +32,17 @@ export default function DashboardPage() {
   const orgShifts = shifts.filter((s) => s.organizationId === activeOrganizationId);
   const orgSectors = sectors.filter((s) => s.organizationId === activeOrganizationId && s.status === 'active');
   const orgDocs = documents.filter((d) => d.organizationId === activeOrganizationId);
+  const documentGovernance = getDocumentGovernance(activeOrg);
+  const requirements = activeOrg?.settings.requiredDocuments || [];
+  const maxAlertDays = Math.max(...documentGovernance.expiryAlertDays);
+  const applicableDocumentIds = new Set(orgDoctors.flatMap(doctor => applicableDocuments(doctor, orgDocs, requirements).map(document => document.id)));
+  const effectiveDocs = orgDocs.filter(document => applicableDocumentIds.has(document.id));
+  const doctorCompliance = new Map(orgDoctors.map(doctor => [doctor.id, getDoctorCompliance(doctor, orgDocs, documentReferenceTime, requirements, maxAlertDays)]));
 
   // Compute metrics
   const totalDoctors = orgDoctors.length;
   const activeDoctors = orgDoctors.filter((d) => d.status === 'active').length;
-  const pendingDocsCount = orgDocs.filter((document) => document.status !== 'approved' || documentIsNearExpiry(document, documentReferenceTime)).length;
+  const pendingDocsCount = effectiveDocs.filter((document) => document.status !== 'approved' || documentIsCritical(document, documentReferenceTime) || documentIsNearExpiry(document, documentReferenceTime, maxAlertDays)).length;
   const totalUnits = orgUnits.length;
   
   const today = localDate();
@@ -53,8 +60,8 @@ export default function DashboardPage() {
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .slice(0, 5);
 
-  const pendingDocumentItems = orgDocs
-    .filter((document) => document.status !== 'approved' || documentIsNearExpiry(document, documentReferenceTime))
+  const pendingDocumentItems = effectiveDocs
+    .filter((document) => document.status !== 'approved' || documentIsCritical(document, documentReferenceTime) || documentIsNearExpiry(document, documentReferenceTime, maxAlertDays))
     .sort((a, b) => {
       const priority = { expired: 0, rejected: 1, not_sent: 2, sent: 3, analyzing: 4, approved: 5 };
       return priority[a.status] - priority[b.status];
@@ -66,14 +73,15 @@ export default function DashboardPage() {
   const documentStages = [
     { label: 'Envio pendente', status: 'not_sent', count: filteredPendingDocumentItems.filter((item) => item.status === 'not_sent').length },
     { label: 'Em conferência', status: 'review', count: filteredPendingDocumentItems.filter((item) => item.status === 'sent' || item.status === 'analyzing').length },
-    { label: 'Ação necessária', status: 'critical', count: filteredPendingDocumentItems.filter((item) => item.status === 'expired' || item.status === 'rejected' || documentIsNearExpiry(item, documentReferenceTime)).length },
+    { label: 'Ação necessária', status: 'critical', count: filteredPendingDocumentItems.filter((item) => documentIsCritical(item, documentReferenceTime) || documentIsNearExpiry(item, documentReferenceTime, maxAlertDays)).length },
   ];
 
   // Specialties breakdown (doctors per specialty)
   const specialtiesBreakdown = activeOrg?.settings.specialties
     .map((spec) => {
       const count = orgDoctors.filter((d) => d.specialty === spec).length;
-      return { name: spec, count };
+      const regular = orgDoctors.filter(doctor => doctor.specialty === spec && doctorCompliance.get(doctor.id)?.compliant).length;
+      return { name: spec, count, compliance: count ? Math.round((regular / count) * 100) : 0 };
     })
     .sort((a, b) => b.count - a.count) || [];
 
@@ -81,7 +89,9 @@ export default function DashboardPage() {
   const unitsBreakdown = orgUnits
     .map((unit) => {
       const count = orgShifts.filter((s) => s.unitId === unit.id && s.date.includes(month)).length;
-      return { name: unit.name, count };
+      const linkedDoctors = orgDoctors.filter(doctor => doctor.linkedUnits.includes(unit.id));
+      const regular = linkedDoctors.filter(doctor => doctorCompliance.get(doctor.id)?.compliant).length;
+      return { name: unit.name, count, compliance: linkedDoctors.length ? Math.round((regular / linkedDoctors.length) * 100) : 0 };
     })
     .sort((a, b) => b.count - a.count) || [];
 
@@ -303,6 +313,7 @@ export default function DashboardPage() {
                         <span className="font-medium text-text-secondary truncate pr-4 group-hover:text-primary transition-colors">{ub.name}</span>
                         <span className="font-bold text-text-primary flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
                       </div>
+                      <p className="text-[10px] text-text-muted">Conformidade documental: <span className={ub.compliance === 100 ? 'font-semibold text-success' : 'font-semibold text-warning'}>{ub.compliance}%</span></p>
                       <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-all duration-500"
@@ -349,8 +360,8 @@ export default function DashboardPage() {
               <div className="flex gap-3 overflow-x-auto p-4">
                 {filteredPendingDocumentItems.slice(0, 8).map((document) => {
                   const doctor = orgDoctors.find((item) => item.id === document.doctorId);
-                  const critical = document.status === 'expired' || document.status === 'rejected';
-                  const nearExpiry = documentIsNearExpiry(document, documentReferenceTime);
+                  const critical = documentIsCritical(document, documentReferenceTime);
+                  const nearExpiry = documentIsNearExpiry(document, documentReferenceTime, maxAlertDays);
                   return (
                     <Link key={document.id} href={`/documentos/${document.doctorId}`} className="min-w-[220px] border-l-2 border-border px-3 py-1 transition hover:border-primary">
                       <p className="truncate text-xs font-semibold text-text-primary">{doctor?.name || 'Médico'}</p>
@@ -377,9 +388,7 @@ export default function DashboardPage() {
                       <div className="h-2 w-2 rounded-full bg-primary group-hover/spec:scale-125 transition-transform" />
                       <span className="font-medium text-text-secondary group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">{sb.name}</span>
                     </div>
-                    <span className="font-bold text-text-primary bg-surface-muted px-2 py-0.5 rounded group-hover/spec:bg-primary/10 group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">
-                      {sb.count}
-                    </span>
+                    <span className="text-right"><span className="block font-bold text-text-primary">{sb.count}</span><span className={`text-[9px] ${sb.compliance === 100 ? 'text-success' : 'text-warning'}`}>{sb.compliance}% regular</span></span>
                   </Link>
                 ))}
                 {specialtiesBreakdown.length === 0 && (

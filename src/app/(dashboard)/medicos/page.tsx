@@ -21,6 +21,7 @@ import {
 import AccessGuard from '@/components/AccessGuard';
 import Link from 'next/link';
 import { getDoctorCompliance } from '@/lib/documentCompliance';
+import { getDocumentGovernance } from '@/lib/documentGovernance';
 
 function DoctorsPageContent() {
   const {
@@ -34,6 +35,7 @@ function DoctorsPageContent() {
   } = useStore();
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
+  const documentGovernance = getDocumentGovernance(activeOrg);
   const orgUnits = units.filter((u) => u.organizationId === activeOrganizationId);
   
   // Filter doctors by active organization
@@ -100,7 +102,7 @@ function DoctorsPageContent() {
     const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
     const matchesSpecialty = specialtyFilter === 'all' || doc.specialty.toLowerCase() === specialtyFilter.toLowerCase();
     const matchesUnit = unitFilter === 'all' || doc.linkedUnits.includes(unitFilter);
-    const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime);
+    const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime, activeOrg?.settings.requiredDocuments, Math.max(...documentGovernance.expiryAlertDays));
     const matchesDocuments = documentFilter === 'all' || (documentFilter === 'pending' ? documentSummary.pending > 0 || documentSummary.nearExpiry > 0 : documentSummary.compliant);
 
     return matchesSearch && matchesStatus && matchesSpecialty && matchesUnit && matchesDocuments;
@@ -349,7 +351,7 @@ function DoctorsPageContent() {
                     filteredDoctors.map((doc) => {
                       // Find clinical names linked to this doctor
                       const linkedClinics = orgUnits.filter((u) => doc.linkedUnits.includes(u.id));
-                      const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime);
+                      const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime, activeOrg?.settings.requiredDocuments, Math.max(...documentGovernance.expiryAlertDays));
 
                       return (
                         <tr key={doc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/10 transition">
