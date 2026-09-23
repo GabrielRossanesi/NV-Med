@@ -616,11 +616,8 @@ export async function saveDocumentsToSupabase(documents: MedicalDocument[]) {
   return (data as DbMedicalDocument[]).map(mapDocumentFromDb);
 }
 
-export async function saveOrganizationToSupabase(org: Organization) {
-  const supabase = createClient();
-  if (!supabase) throw new Error('Conexão não configurada.');
-
-  const payload: DbOrganization = {
+function mapOrganizationToDb(org: Organization): DbOrganization {
+  return {
     id: org.id,
     name: org.name,
     razao_social: org.razaoSocial,
@@ -637,9 +634,33 @@ export async function saveOrganizationToSupabase(org: Organization) {
     settings: org.settings,
     last_active: org.lastActive
   };
+}
 
-  const { error } = await supabase.from('organizations').upsert(payload).select('id').single();
-  if (error) throw new Error('Não foi possível salvar: ' + error.message);
+export async function createOrganizationInSupabase(org: Organization) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+
+  const { error } = await supabase
+    .from('organizations')
+    .insert(mapOrganizationToDb(org))
+    .select('id')
+    .single();
+  if (error) throw new Error('Não foi possível criar a empresa: ' + error.message);
+}
+
+export async function updateOrganizationInSupabase(org: Organization) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+
+  const changes: Partial<DbOrganization> = mapOrganizationToDb(org);
+  delete changes.id;
+  const { error } = await supabase
+    .from('organizations')
+    .update(changes)
+    .eq('id', org.id)
+    .select('id')
+    .single();
+  if (error) throw new Error('Não foi possível atualizar a empresa: ' + error.message);
 }
 
 // ==============================================================================

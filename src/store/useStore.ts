@@ -125,8 +125,8 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       set({ documents: get().documents.map(document => savedMap.get(document.id) || document) });
       await refreshDocumentAudits();
     }),
-    addOrganization: input => commit(async () => { const org = { ...input, id: crypto.randomUUID() }; await cloud.saveOrganizationToSupabase(org); set({ organizations: [...get().organizations, org], activeOrganizationId: org.id }); }),
-    updateOrganization: org => commit(async () => { await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === org.id ? org : o) }); }),
+    addOrganization: input => commit(async () => { const org = { ...input, id: crypto.randomUUID() }; await cloud.createOrganizationInSupabase(org); set({ organizations: [...get().organizations, org], activeOrganizationId: org.id }); }),
+    updateOrganization: org => commit(async () => { await cloud.updateOrganizationInSupabase(org); set({ organizations: get().organizations.map(o => o.id === org.id ? org : o) }); }),
     deleteOrganization: (id, confirmation) => commit(async () => {
       const res = await fetch('/api/admin/organizations', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) });
       const result = await res.json();
@@ -146,7 +146,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         simulatedOrganizationId: get().simulatedOrganizationId === id ? null : get().simulatedOrganizationId,
       });
     }),
-    updateOrganizationSettings: (id, updates) => commit(async () => { const previous = get().organizations.find(o => o.id === id); if (!previous) throw new Error('Empresa não encontrada.'); const org = { ...previous, ...updates }; await cloud.saveOrganizationToSupabase(org); set({ organizations: get().organizations.map(o => o.id === id ? org : o) }); }),
+    updateOrganizationSettings: (id, updates) => commit(async () => { const previous = get().organizations.find(o => o.id === id); if (!previous) throw new Error('Empresa não encontrada.'); const org = { ...previous, ...updates }; await cloud.updateOrganizationInSupabase(org); set({ organizations: get().organizations.map(o => o.id === id ? org : o) }); }),
     addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }),
     updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }),
     deleteUser: (id, confirmation) => commit(async () => { const res = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível excluir o usuário.'); set({ users: get().users.filter(user => user.id !== id) }); }),
