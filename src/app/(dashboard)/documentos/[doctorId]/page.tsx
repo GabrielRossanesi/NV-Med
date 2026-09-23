@@ -3,14 +3,15 @@
 
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, AlertTriangle, ArrowLeft, Building2, CalendarClock, Download, ExternalLink, FileImage, FileText, FolderOpen, Grid2X2, History, List, LoaderCircle, ShieldCheck, Upload, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, BriefcaseBusiness, Building2, CalendarClock, Download, ExternalLink, FileImage, FileText, FolderOpen, Grid2X2, History, List, LoaderCircle, ShieldCheck, Upload, X } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import { canEditPermission } from '@/lib/permissions';
 import { documentStatusClasses, documentStatusLabels, documentStatusOrder, getDoctorCompliance } from '@/lib/documentCompliance';
 import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
+import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
-import type { DocumentStatus, DocumentType, MedicalDocument } from '@/types';
+import type { DoctorContractModel, DocumentStatus, DocumentType, MedicalDocument } from '@/types';
 
 type FolderView = 'grid' | 'list';
 
@@ -39,6 +40,7 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
   const summary = doctor ? getDoctorCompliance(doctor, organizationDocuments, referenceTime, requirements, Math.max(...governance.expiryAlertDays)) : null;
   const auditEntries = store.documentAudits.filter(entry => entry.organizationId === store.activeOrganizationId && entry.doctorId === doctorId);
   const canEdit = canEditPermission(store.currentUser, 'documentos');
+  const canEditDoctor = canEditPermission(store.currentUser, 'medicos');
 
   if (!doctor || !summary) {
     return <AccessGuard requiredPermission="documentos"><div className="py-20 text-center"><AlertCircle className="mx-auto h-9 w-9 text-danger"/><h1 className="mt-4 text-lg font-semibold">Pasta não encontrada</h1><p className="mt-1 text-sm text-text-muted">O médico não pertence à empresa ativa ou foi removido.</p><Link href="/documentos" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"><ArrowLeft size={15}/>Voltar para documentos</Link></div></AccessGuard>;
@@ -81,7 +83,7 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
         <header>
           <Link href="/documentos" className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted transition hover:text-primary"><ArrowLeft size={14}/>Voltar para documentação</Link>
           <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0"><div className="flex items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-semibold ${summary.critical ? 'bg-danger/10 text-danger' : summary.pending ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>{doctor.name.split(' ').filter(Boolean).slice(0,2).map(part => part[0]).join('')}</span><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Pasta documental</p><h1 className="mt-1 truncate text-2xl font-bold tracking-tight text-text-primary">{doctor.name}</h1></div></div><p className="mt-3 text-sm text-text-muted">CRM {doctor.crm}-{doctor.crmUf} · {doctor.specialty}</p></div>
+            <div className="min-w-0"><div className="flex items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-semibold ${summary.critical ? 'bg-danger/10 text-danger' : summary.pending ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>{doctor.name.split(' ').filter(Boolean).slice(0,2).map(part => part[0]).join('')}</span><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Pasta documental</p><h1 className="mt-1 truncate text-2xl font-bold tracking-tight text-text-primary">{doctor.name}</h1></div></div><p className="mt-3 text-sm text-text-muted">CRM {doctor.crm}-{doctor.crmUf}{doctor.rqe ? ` · RQE ${doctor.rqe}` : ''} · {doctor.specialty}</p></div>
             <div className="inline-flex self-start rounded-xl border border-border bg-card-bg p-1"><button type="button" onClick={() => setView('grid')} aria-label="Visualização em grade" className={`rounded-lg p-2.5 transition ${view === 'grid' ? 'bg-primary text-text-inverse' : 'text-text-muted hover:bg-state-hover'}`}><Grid2X2 size={16}/></button><button type="button" onClick={() => setView('list')} aria-label="Visualização em lista" className={`rounded-lg p-2.5 transition ${view === 'list' ? 'bg-primary text-text-inverse' : 'text-text-muted hover:bg-state-hover'}`}><List size={16}/></button></div>
           </div>
         </header>
@@ -93,6 +95,14 @@ export default function DoctorDocumentsPage({ params }: { params: Promise<{ doct
           <div className="border-t border-border p-5 sm:border-l sm:border-t-0"><p className="text-xs text-text-muted">Aprovados</p><p className="mt-2 text-2xl font-semibold text-success">{summary.approved}<span className="text-sm font-normal text-text-muted">/{summary.total}</span></p></div>
           <div className="border-t border-border p-5 xl:border-l xl:border-t-0"><p className="text-xs text-text-muted">Pendentes</p><p className={`mt-2 text-2xl font-semibold ${summary.pending ? 'text-warning' : 'text-success'}`}>{summary.pending}</p></div>
           <div className="border-t border-border p-5 sm:border-l xl:border-t-0"><p className="text-xs text-text-muted">Unidades vinculadas</p><div className="mt-2 flex flex-wrap gap-1.5">{linkedUnits.map(unit => <span key={unit.id} className="inline-flex items-center gap-1 rounded-md bg-surface-muted px-2 py-1 text-[11px] font-medium text-text-secondary"><Building2 size={12}/>{unit.name}</span>)}{!linkedUnits.length && <span className="text-xs text-text-muted">Nenhuma unidade</span>}</div></div>
+        </section>
+
+        <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card-bg p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><BriefcaseBusiness size={18}/></span><div><h2 className="text-sm font-semibold text-text-primary">Vínculo contratual</h2><p className="mt-1 text-xs text-text-muted">Classificação operacional e confirmação do contrato deste médico.</p></div></div>
+          <div className="grid gap-3 sm:grid-cols-[210px_minmax(220px,1fr)] lg:min-w-[500px]">
+            <label className="nv-label">Participação<select className="nv-input disabled:cursor-not-allowed disabled:opacity-65" disabled={!canEditDoctor || store.saving} value={doctor.contractModel || 'pf'} onChange={event => store.updateDoctor({...doctor, contractModel:event.target.value as DoctorContractModel})}>{Object.entries(doctorContractModelLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${doctor.contractSigned ? 'border-success/30 bg-success/5' : 'border-warning/30 bg-warning/5'} ${canEditDoctor ? 'cursor-pointer' : 'cursor-default opacity-75'}`}><input type="checkbox" disabled={!canEditDoctor || store.saving} checked={Boolean(doctor.contractSigned)} onChange={event => store.updateDoctor({...doctor, contractSigned:event.target.checked})} className="h-4 w-4 rounded border-border text-primary focus:ring-primary"/><span><span className="block text-xs font-semibold text-text-primary">Contrato assinado</span><span className={`mt-0.5 block text-[10px] ${doctor.contractSigned ? 'text-success' : 'text-warning'}`}>{doctor.contractSigned ? 'Formalização concluída' : 'Aguardando assinatura'}</span></span></label>
+          </div>
         </section>
 
         {!canEdit && <p className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-text-secondary"><ShieldCheck size={16} className="text-primary"/>Acesso somente para consulta. Arquivos, validade e situação não podem ser alterados.</p>}

@@ -50,12 +50,15 @@ interface DbDoctor {
   name: string;
   crm: string;
   crm_uf: string;
+  rqe?: string;
   cpf?: string;
   phone?: string;
   email?: string;
   specialty: string;
   address?: string;
   status: string;
+  contract_model?: Doctor['contractModel'];
+  contract_signed?: boolean;
   linked_units?: string[];
   created_at?: string;
 }
@@ -189,12 +192,15 @@ function mapDoctorFromDb(row: DbDoctor): Doctor {
     name: row.name,
     crm: row.crm,
     crmUf: row.crm_uf,
+    rqe: row.rqe || '',
     cpf: row.cpf || '',
     phone: row.phone || '',
     email: row.email || '',
     specialty: row.specialty,
     address: row.address || '',
     status: (row.status as DoctorStatus) || 'active',
+    contractModel: row.contract_model || 'pf',
+    contractSigned: row.contract_signed || false,
     linkedUnits: row.linked_units || []
   };
 }
@@ -369,12 +375,15 @@ export async function saveDoctorToSupabase(doctor: Doctor) {
     name: doctor.name,
     crm: doctor.crm,
     crm_uf: doctor.crmUf,
+    rqe: doctor.rqe,
     cpf: doctor.cpf,
     phone: doctor.phone,
     email: doctor.email,
     specialty: doctor.specialty,
     address: doctor.address,
     status: doctor.status,
+    contract_model: doctor.contractModel,
+    contract_signed: doctor.contractSigned,
     linked_units: doctor.linkedUnits
   };
 

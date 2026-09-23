@@ -40,18 +40,22 @@ export interface DocumentGovernanceSettings {
 }
 
 export type DoctorStatus = 'active' | 'pending' | 'inactive';
+export type DoctorContractModel = 'scp' | 'pj' | 'pf';
 
 export interface Doctor {
   id: string;
   name: string;
   crm: string;
   crmUf: string;
+  rqe?: string;
   cpf: string;
   phone: string;
   email: string;
   specialty: string;
   address: string;
   status: DoctorStatus;
+  contractModel?: DoctorContractModel;
+  contractSigned?: boolean;
   linkedUnits: string[]; // Array of Unit IDs
   organizationId: string;
 }

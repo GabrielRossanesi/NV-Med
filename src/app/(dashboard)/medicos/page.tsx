@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useStore } from '@/store/useStore';
 import { useSearchParams } from 'next/navigation';
-import { DoctorStatus } from '@/types';
+import { DoctorContractModel, DoctorStatus } from '@/types';
 import {
   Search,
   Plus,
@@ -22,6 +22,7 @@ import AccessGuard from '@/components/AccessGuard';
 import Link from 'next/link';
 import { getDoctorCompliance } from '@/lib/documentCompliance';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
+import { doctorContractModelLabels, doctorContractModelShortLabels } from '@/lib/doctorProfile';
 
 function DoctorsPageContent() {
   const {
@@ -82,12 +83,15 @@ function DoctorsPageContent() {
   const [name, setName] = useState('');
   const [crm, setCrm] = useState('');
   const [crmUf, setCrmUf] = useState('SP');
+  const [rqe, setRqe] = useState('');
   const [cpf, setCpf] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [specialty, setSpecialty] = useState(activeOrg?.settings.specialties[0] || '');
   const [address, setAddress] = useState('');
   const [status, setStatus] = useState<DoctorStatus>('active');
+  const [contractModel, setContractModel] = useState<DoctorContractModel>('pf');
+  const [contractSigned, setContractSigned] = useState(false);
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
 
   const orgDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
@@ -97,6 +101,7 @@ function DoctorsPageContent() {
     const matchesSearch =
       doc.name.toLowerCase().includes(search.toLowerCase()) ||
       doc.crm.includes(search) ||
+      (doc.rqe || '').includes(search) ||
       doc.specialty.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
@@ -121,12 +126,15 @@ function DoctorsPageContent() {
       name,
       crm,
       crmUf,
+      rqe: rqe.trim() || undefined,
       cpf,
       phone,
       email,
       specialty,
       address,
       status,
+      contractModel,
+      contractSigned,
       linkedUnits: selectedUnits
     })) return;
 
@@ -134,12 +142,15 @@ function DoctorsPageContent() {
     setName('');
     setCrm('');
     setCrmUf('SP');
+    setRqe('');
     setCpf('');
     setPhone('');
     setEmail('');
     setSpecialty(activeOrg?.settings.specialties[0] || '');
     setAddress('');
     setStatus('active');
+    setContractModel('pf');
+    setContractSigned(false);
     setSelectedUnits([]);
     setIsModalOpen(false);
   };
@@ -231,7 +242,7 @@ function DoctorsPageContent() {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
               <input
                 type="text"
-                placeholder="Buscar por nome, CRM ou especialidade..."
+                placeholder="Buscar por nome, CRM, RQE ou especialidade..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
@@ -340,6 +351,7 @@ function DoctorsPageContent() {
                     <th className="p-4">Médico</th>
                     <th className="p-4">CRM / UF</th>
                     <th className="p-4">Especialidade</th>
+                    <th className="p-4">Contratação</th>
                     <th className="p-4">Unidades Vinculadas</th>
                     <th className="p-4">Status</th>
                     <th className="p-4">Documentação</th>
@@ -367,10 +379,17 @@ function DoctorsPageContent() {
                             </div>
                           </td>
                           <td className="p-4 font-mono font-medium text-text-primary">
-                            {doc.crm} / {doc.crmUf}
+                            <span className="block">{doc.crm} / {doc.crmUf}</span>
+                            {doc.rqe && <span className="mt-1 block text-[10px] font-sans font-normal text-text-muted">RQE {doc.rqe}</span>}
                           </td>
                           <td className="p-4 text-text-secondary">
                             {doc.specialty}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex flex-col items-start gap-1.5">
+                              <span className="rounded-md bg-surface-muted px-2 py-1 text-[10px] font-bold text-text-secondary">{doctorContractModelShortLabels[doc.contractModel || 'pf']}</span>
+                              <span className={`text-[10px] font-semibold ${doc.contractSigned ? 'text-success' : 'text-warning'}`}>{doc.contractSigned ? 'Contrato assinado' : 'Contrato pendente'}</span>
+                            </div>
                           </td>
                           <td className="p-4">
                             <div className="flex flex-wrap gap-1 max-w-xs">
@@ -417,7 +436,7 @@ function DoctorsPageContent() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-text-muted">
+                      <td colSpan={8} className="p-8 text-center text-text-muted">
                         Nenhum médico encontrado com os filtros ativos.
                       </td>
                     </tr>
@@ -511,6 +530,19 @@ function DoctorsPageContent() {
                   </select>
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">RQE <span className="font-medium normal-case tracking-normal">(opcional)</span></label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={20}
+                    value={rqe}
+                    onChange={(e) => setRqe(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Ex: 123456"
+                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  />
+                </div>
+
                 {/* CPF */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">CPF</label>
@@ -563,6 +595,30 @@ function DoctorsPageContent() {
                     <option value="inactive">Inativo (Bloqueado)</option>
                   </select>
                 </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Modelo de contratação</label>
+                  <select
+                    value={contractModel}
+                    onChange={(e) => setContractModel(e.target.value as DoctorContractModel)}
+                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  >
+                    {Object.entries(doctorContractModelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-3 transition hover:border-primary/40">
+                  <input
+                    type="checkbox"
+                    checked={contractSigned}
+                    onChange={(e) => setContractSigned(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span>
+                    <span className="block text-xs font-semibold text-text-primary">Contrato já assinado</span>
+                    <span className="mt-0.5 block text-[10px] leading-relaxed text-text-muted">Marque quando o instrumento contratual do médico já estiver formalizado.</span>
+                  </span>
+                </label>
               </div>
 
               {/* Residential address */}

@@ -8,6 +8,7 @@ import { employmentLabels, localDate, paymentFrequencyLabels } from '@/lib/sched
 import { canViewPermission } from '@/lib/permissions';
 import { documentIsCritical, documentIsNearExpiry } from '@/lib/documentCompliance';
 import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
+import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { useStore } from '@/store/useStore';
 import type { Shift } from '@/types';
 
@@ -108,11 +109,11 @@ export default function ReportsPage() {
   }
 
   function exportDoctors() {
-    downloadCsv(`medicos-${safeName(organization?.name || 'empresa')}`, ['Médico', 'CRM', 'UF', 'Especialidade', 'Status', 'E-mail', 'Telefone', 'Unidades vinculadas'], doctors.map(doctor => [doctor.name, doctor.crm, doctor.crmUf, doctor.specialty, doctor.status === 'active' ? 'Ativo' : doctor.status === 'pending' ? 'Pendente' : 'Inativo', doctor.email, doctor.phone, doctor.linkedUnits.map(id => units.find(unit => unit.id === id)?.name).filter(Boolean).join(' | ')])); exported('Médicos');
+    downloadCsv(`medicos-${safeName(organization?.name || 'empresa')}`, ['Médico', 'CRM', 'UF', 'RQE', 'Especialidade', 'Contratação', 'Contrato', 'Status', 'E-mail', 'Telefone', 'Unidades vinculadas'], doctors.map(doctor => [doctor.name, doctor.crm, doctor.crmUf, doctor.rqe || '', doctor.specialty, doctorContractModelLabels[doctor.contractModel || 'pf'], doctor.contractSigned ? 'Assinado' : 'Pendente', doctor.status === 'active' ? 'Ativo' : doctor.status === 'pending' ? 'Pendente' : 'Inativo', doctor.email, doctor.phone, doctor.linkedUnits.map(id => units.find(unit => unit.id === id)?.name).filter(Boolean).join(' | ')])); exported('Médicos');
   }
 
   function exportCompliance() {
-    downloadCsv(`conformidade-documental-${safeName(organization?.name || 'empresa')}`, ['Médico', 'CRM', 'Especialidade', 'Conformidade', 'Pendências', 'Documentos pendentes', 'Documentos aprovados', 'Total de documentos'], compliance.map(item => [item.doctor.name, `${item.doctor.crm}-${item.doctor.crmUf}`, item.doctor.specialty, item.regular ? 'Regular' : 'Pendente', item.pending.length, item.pending.map(document => `${document.name} (${documentStatusLabels[document.status]})`).join(' | ') || 'Nenhuma', item.documents.filter(document => document.status === 'approved').length, item.documents.length])); exported('Conformidade documental');
+    downloadCsv(`conformidade-documental-${safeName(organization?.name || 'empresa')}`, ['Médico', 'CRM', 'RQE', 'Especialidade', 'Contratação', 'Contrato', 'Conformidade', 'Pendências', 'Documentos pendentes', 'Documentos aprovados', 'Total de documentos'], compliance.map(item => [item.doctor.name, `${item.doctor.crm}-${item.doctor.crmUf}`, item.doctor.rqe || '', item.doctor.specialty, doctorContractModelLabels[item.doctor.contractModel || 'pf'], item.doctor.contractSigned ? 'Assinado' : 'Pendente', item.regular ? 'Regular' : 'Pendente', item.pending.length, item.pending.map(document => `${document.name} (${documentStatusLabels[document.status]})`).join(' | ') || 'Nenhuma', item.documents.filter(document => document.status === 'approved').length, item.documents.length])); exported('Conformidade documental');
   }
 
   function financialRow(item: Shift) {

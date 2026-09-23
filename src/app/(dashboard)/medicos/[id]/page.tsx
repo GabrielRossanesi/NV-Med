@@ -22,6 +22,7 @@ import {
   FolderOpen
 } from 'lucide-react';
 import Link from 'next/link';
+import { doctorContractModelLabels } from '@/lib/doctorProfile';
 
 export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -182,7 +183,17 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                 <div>
                   <span className="block text-[10px] text-text-muted uppercase font-bold">Documentos Pessoais</span>
                   <span className="font-mono">CRM: {doctor.crm}-{doctor.crmUf}</span>
+                  <span className="block font-mono mt-0.5">RQE: {doctor.rqe || 'Não informado'}</span>
                   <span className="block font-mono mt-0.5">CPF: {doctor.cpf}</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <FileCheck className="h-4 w-4 text-text-muted flex-shrink-0" />
+                <div>
+                  <span className="block text-[10px] text-text-muted uppercase font-bold">Contratação</span>
+                  <span>{doctorContractModelLabels[doctor.contractModel || 'pf']}</span>
+                  <span className={`mt-0.5 block font-semibold ${doctor.contractSigned ? 'text-success' : 'text-warning'}`}>{doctor.contractSigned ? 'Contrato assinado' : 'Contrato pendente'}</span>
                 </div>
               </div>
 
