@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Activity, Check, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getPasswordChecks, isStrongPassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '@/lib/passwordPolicy';
+import { withAbortTimeout, withPromiseTimeout } from '@/lib/requestTimeout';
 
 const labels: Record<keyof ReturnType<typeof getPasswordChecks>, string> = {
   length: `${PASSWORD_MIN_LENGTH} a ${PASSWORD_MAX_LENGTH} caracteres`, lowercase: 'Letra minúscula', uppercase: 'Letra maiúscula', number: 'Número', symbol: 'Símbolo', noWhitespace: 'Sem espaços',
@@ -16,6 +17,7 @@ export default function SetPasswordPage() {
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState('');
   const checks = getPasswordChecks(password);
 
   useEffect(() => {
@@ -29,8 +31,8 @@ export default function SetPasswordPage() {
         if (exchangeError) { setError('Link inválido ou expirado. Solicite outro na tela de login.'); return; }
       }
       const { data } = await client.auth.getUser();
-      if (!data.user) setError('Abra o link recebido por e-mail ou entre com a senha temporária.');
-      else setReady(true);
+      if (!data.user?.email) setError('Abra o link recebido por e-mail ou entre com a senha temporária.');
+      else { setEmail(data.user.email); setReady(true); }
     }
     void init();
   }, []);
@@ -41,24 +43,31 @@ export default function SetPasswordPage() {
     if (password !== confirmation) { setError('As senhas precisam ser iguais.'); return; }
     setBusy(true);
     setError('');
+    let passwordUpdated = false;
     try {
-      const response = await fetch('/api/account/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+      const client = createClient();
+      if (!client || !email) throw new Error('Sua sessão não está pronta. Entre novamente com a senha temporária.');
+      const response = await withAbortTimeout(
+        signal => fetch('/api/account/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }), signal }),
+        { timeoutMs: 20_000, message: 'A troca de senha demorou mais que o esperado. Verifique sua conexão e tente novamente.' }
+      );
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a nova senha.');
-      const client = createClient();
-      const { data: refreshed, error: refreshError } = client
-        ? await client.auth.refreshSession()
-        : { data: { user: null }, error: new Error('Cliente indisponível') };
-      if (refreshError || !refreshed.user) {
-        await client?.auth.signOut({ scope: 'local' });
-        window.location.replace('/login');
+      passwordUpdated = true;
+      const { data: signedIn, error: signInError } = await withPromiseTimeout(
+        client.auth.signInWithPassword({ email, password }),
+        { timeoutMs: 15_000, message: 'Sua senha foi atualizada, mas a entrada automática demorou demais.' }
+      );
+      if (signInError || !signedIn.user || signedIn.user.app_metadata?.must_change_password === true) {
+        window.location.replace('/login?passwordUpdated=1');
         return;
-      }
-      if (refreshed.user.app_metadata?.must_change_password === true) {
-        throw new Error('A senha foi atualizada, mas a sessão não foi renovada. Entre novamente para continuar.');
       }
       window.location.replace('/escala');
     } catch (saveError) {
+      if (passwordUpdated) {
+        window.location.replace('/login?passwordUpdated=1');
+        return;
+      }
       setError(saveError instanceof Error ? saveError.message : 'Falha ao salvar.');
       setBusy(false);
     }

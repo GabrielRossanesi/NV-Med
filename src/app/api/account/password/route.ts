@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isStrongPassword } from '@/lib/passwordPolicy';
 import { completePasswordChangeMetadata } from '@/lib/passwordLifecycle';
+import { withPromiseTimeout } from '@/lib/requestTimeout';
 
 export async function PATCH(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin) return NextResponse.json({ error: 'Origem inválida.' }, { status: 403 });
@@ -18,18 +19,22 @@ export async function PATCH(request: NextRequest) {
     }
     const admin = createAdminClient();
     if (!admin) return NextResponse.json({ error: 'A atualização de senha não está configurada no servidor.' }, { status: 503 });
-    const { data: authRecord, error: readError } = await admin.auth.admin.getUserById(user.id);
+    const { data: authRecord, error: readError } = await withPromiseTimeout(
+      admin.auth.admin.getUserById(user.id),
+      { timeoutMs: 15_000, message: 'A consulta do usuário demorou demais.' }
+    );
     if (readError || !authRecord.user) throw readError;
     // GoTrue merges app_metadata updates. Omitting a key does not reliably clear
     // the value already stored, so the first-login flag must be set explicitly.
     const appMetadata = completePasswordChangeMetadata(authRecord.user.app_metadata);
-    const { error: updateError } = await admin.auth.admin.updateUserById(user.id, { password: input.password, app_metadata: appMetadata });
+    const { error: updateError } = await withPromiseTimeout(
+      admin.auth.admin.updateUserById(user.id, { password: input.password, app_metadata: appMetadata }),
+      { timeoutMs: 20_000, message: 'A atualização da senha demorou demais.' }
+    );
     if (updateError) throw updateError;
-    const { data: refreshed, error: refreshError } = await client.auth.refreshSession();
-    return NextResponse.json({
-      updated: true,
-      sessionRefreshed: !refreshError && refreshed.user?.app_metadata?.must_change_password !== true,
-    });
+    // The password update can invalidate the refresh token used by this request.
+    // The browser creates a new session with the new password after this response.
+    return NextResponse.json({ updated: true }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'Não foi possível salvar a nova senha. Tente novamente.' }, { status: 500 });
   }

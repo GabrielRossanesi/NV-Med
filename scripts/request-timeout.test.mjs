@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { withAbortTimeout } from '../src/lib/requestTimeout.ts';
+import { withAbortTimeout, withPromiseTimeout } from '../src/lib/requestTimeout.ts';
 
 test('returns a request result before the timeout', async () => {
   const result = await withAbortTimeout(async () => 'saved', { timeoutMs: 50 });
@@ -21,4 +21,11 @@ test('aborts a stalled request and returns the configured message', async () => 
     /Tempo limite atingido\./
   );
   assert.equal(aborted, true);
+});
+
+test('stops waiting for an operation that cannot be aborted', async () => {
+  await assert.rejects(
+    withPromiseTimeout(new Promise(() => {}), { timeoutMs: 5, message: 'Autenticação indisponível.' }),
+    /Autenticação indisponível\./
+  );
 });

@@ -1,14 +1,25 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Activity } from 'lucide-react';
+import { withPromiseTimeout } from '@/lib/requestTimeout';
 export default function LoginPage() {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('passwordUpdated') === '1') {
+      window.history.replaceState({}, '', '/login');
+      const noticeTimer = window.setTimeout(() => setNotice('Sua senha foi atualizada. Entre com a nova senha para continuar.'), 0);
+      return () => window.clearTimeout(noticeTimer);
+    }
+  }, []);
   async function login(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(''); setNotice('');
     try { const client = createClient(); if (!client) throw new Error('O acesso ainda não foi configurado pelo administrador.');
-      const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
+      const { error } = await withPromiseTimeout(
+        client.auth.signInWithPassword({ email: email.trim(), password }),
+        { timeoutMs: 15_000, message: 'O login demorou mais que o esperado. Verifique sua conexão e tente novamente.' }
+      );
       if (error) throw new Error('Não foi possível entrar. Confira seu e-mail e senha.');
       window.location.assign('/escala');
     } catch (e) { setError(e instanceof Error ? e.message : 'Falha de conexão. Tente novamente.'); setBusy(false); }
@@ -17,7 +28,10 @@ export default function LoginPage() {
     if (!email.trim()) { setError('Preencha seu e-mail para recuperar o acesso.'); return; }
     setBusy(true); setError(''); setNotice('');
     try { const client = createClient(); if (!client) throw new Error('Acesso ainda não configurado.');
-      const { error } = await client.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/definir-senha' });
+      const { error } = await withPromiseTimeout(
+        client.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/definir-senha' }),
+        { timeoutMs: 15_000, message: 'A solicitação demorou mais que o esperado. Tente novamente.' }
+      );
       if (error) throw new Error('Não foi possível solicitar o link. Tente novamente em instantes.');
       setNotice('Se o e-mail estiver cadastrado, você receberá um link para definir sua senha.');
     } catch (e) { setError(e instanceof Error ? e.message : 'Falha de conexão.'); } finally { setBusy(false); }

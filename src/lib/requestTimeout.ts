@@ -28,3 +28,23 @@ export async function withAbortTimeout<T>(
     clearTimeout(timeout);
   }
 }
+
+export async function withPromiseTimeout<T>(
+  operation: PromiseLike<T>,
+  options: TimeoutOptions = {}
+): Promise<T> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(options.message || 'A operação demorou demais. Verifique sua conexão e tente novamente.')),
+      timeoutMs
+    );
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(operation), timedOut]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
