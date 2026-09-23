@@ -229,6 +229,15 @@ body {
   min-height: 100vh;
 }
 
+@keyframes nv-autofill-detected {
+  from { opacity: 0.99; }
+  to { opacity: 1; }
+}
+
+input:-webkit-autofill {
+  animation: nv-autofill-detected 1ms;
+}
+
 /* Smooth transitions for theme toggle */
 body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-border, .border-card-border, button, input, select {
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;

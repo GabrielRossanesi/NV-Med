@@ -22,25 +22,50 @@ export default function SetPasswordPage() {
 
   useEffect(() => {
     async function init() {
-      const client = createClient();
-      if (!client) { setError('Acesso não configurado.'); return; }
-      const code = new URLSearchParams(window.location.search).get('code');
-      if (code) {
-        const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
-        window.history.replaceState({}, '', '/definir-senha');
-        if (exchangeError) { setError('Link inválido ou expirado. Solicite outro na tela de login.'); return; }
+      try {
+        const client = createClient();
+        if (!client) { setError('Acesso não configurado.'); return; }
+        const code = new URLSearchParams(window.location.search).get('code');
+        if (code) {
+          const { error: exchangeError } = await withPromiseTimeout(
+            client.auth.exchangeCodeForSession(code),
+            { timeoutMs: 15_000, message: 'A validação do link demorou demais. Solicite um novo acesso.' }
+          );
+          window.history.replaceState({}, '', '/definir-senha');
+          if (exchangeError) { setError('Link inválido ou expirado. Solicite outro na tela de login.'); return; }
+        }
+        const { data, error: userError } = await withPromiseTimeout(
+          client.auth.getUser(),
+          { timeoutMs: 15_000, message: 'A validação do acesso demorou demais. Volte ao login e tente novamente.' }
+        );
+        if (userError || !data.user?.email) setError('Abra o link recebido por e-mail ou entre com a senha temporária.');
+        else { setEmail(data.user.email); setReady(true); }
+      } catch (initError) {
+        setError(initError instanceof Error ? initError.message : 'Não foi possível validar seu acesso.');
       }
-      const { data } = await client.auth.getUser();
-      if (!data.user?.email) setError('Abra o link recebido por e-mail ou entre com a senha temporária.');
-      else { setEmail(data.user.email); setReady(true); }
     }
     void init();
   }, []);
 
-  async function save(event: React.FormEvent) {
+  function syncPassword(value: string) {
+    setPassword(value);
+    if (ready) setError('');
+  }
+
+  function syncConfirmation(value: string) {
+    setConfirmation(value);
+    if (ready) setError('');
+  }
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isStrongPassword(password)) { setError('A senha ainda não atende a todos os requisitos.'); return; }
-    if (password !== confirmation) { setError('As senhas precisam ser iguais.'); return; }
+    const formData = new FormData(event.currentTarget);
+    const submittedPassword = String(formData.get('password') || '');
+    const submittedConfirmation = String(formData.get('confirmation') || '');
+    setPassword(submittedPassword);
+    setConfirmation(submittedConfirmation);
+    if (!isStrongPassword(submittedPassword)) { setError('A senha ainda não atende a todos os requisitos.'); return; }
+    if (submittedPassword !== submittedConfirmation) { setError('As senhas precisam ser iguais.'); return; }
     setBusy(true);
     setError('');
     let passwordUpdated = false;
@@ -48,14 +73,14 @@ export default function SetPasswordPage() {
       const client = createClient();
       if (!client || !email) throw new Error('Sua sessão não está pronta. Entre novamente com a senha temporária.');
       const response = await withAbortTimeout(
-        signal => fetch('/api/account/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }), signal }),
+        signal => fetch('/api/account/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: submittedPassword }), signal }),
         { timeoutMs: 20_000, message: 'A troca de senha demorou mais que o esperado. Verifique sua conexão e tente novamente.' }
       );
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a nova senha.');
       passwordUpdated = true;
       const { data: signedIn, error: signInError } = await withPromiseTimeout(
-        client.auth.signInWithPassword({ email, password }),
+        client.auth.signInWithPassword({ email, password: submittedPassword }),
         { timeoutMs: 15_000, message: 'Sua senha foi atualizada, mas a entrada automática demorou demais.' }
       );
       if (signInError || !signedIn.user || signedIn.user.app_metadata?.must_change_password === true) {
@@ -81,12 +106,12 @@ export default function SetPasswordPage() {
           <div><h1 className="text-2xl font-semibold tracking-tight">Crie sua senha pessoal</h1><p className="mt-2 text-sm text-text-secondary">Substitua a senha temporária antes de acessar o painel.</p></div>
           {error && <p role="alert" className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</p>}
           <label className="nv-label">Nova senha
-            <div className="relative mt-2"><input className="nv-input pr-11" type={visible ? 'text' : 'password'} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} required value={password} onChange={event => setPassword(event.target.value)} /><button type="button" onClick={() => setVisible(value => !value)} className="absolute right-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-text-muted hover:bg-state-hover" aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}>{visible ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
+            <div className="relative mt-2"><input name="password" className="nv-input pr-11" type={visible ? 'text' : 'password'} autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} required onInput={event => syncPassword(event.currentTarget.value)} onAnimationStart={event => { if (event.animationName === 'nv-autofill-detected') syncPassword(event.currentTarget.value); }} /><button type="button" onClick={() => setVisible(value => !value)} className="absolute right-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-text-muted hover:bg-state-hover" aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}>{visible ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
           </label>
-          <label className="nv-label">Confirmar senha<input className="nv-input mt-2" type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} required value={confirmation} onChange={event => setConfirmation(event.target.value)}/></label>
-          <div className="grid grid-cols-2 gap-2">{Object.entries(checks).map(([key, valid]) => <span key={key} className={`flex items-center gap-1.5 text-xs ${valid ? 'text-primary' : 'text-text-muted'}`}><Check size={13}/>{labels[key as keyof typeof checks]}</span>)}</div>
+          <label className="nv-label">Confirmar senha<input name="confirmation" className="nv-input mt-2" type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} required onInput={event => syncConfirmation(event.currentTarget.value)} onAnimationStart={event => { if (event.animationName === 'nv-autofill-detected') syncConfirmation(event.currentTarget.value); }}/></label>
+          <div className="grid grid-cols-2 gap-2">{Object.entries(checks).map(([key, valid]) => <span key={key} className={`flex items-center gap-1.5 text-xs ${valid ? 'text-primary' : 'text-text-muted'}`}><Check size={13}/>{labels[key as keyof typeof checks]}</span>)}<span className={`flex items-center gap-1.5 text-xs ${confirmation && password === confirmation ? 'text-primary' : 'text-text-muted'}`}><Check size={13}/>Senhas iguais</span></div>
           <div className="flex gap-2 rounded-xl border border-border bg-surface-muted/50 p-3 text-sm text-text-muted"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary"/><span>Esta senha será conhecida somente por você.</span></div>
-          <button className="nv-button w-full" disabled={!ready || busy || !isStrongPassword(password) || password !== confirmation}>{busy ? 'Salvando…' : 'Salvar senha e entrar'}</button>
+          <button className="nv-button w-full" disabled={!ready || busy}>{busy ? 'Salvando…' : ready ? 'Salvar senha e entrar' : 'Validando acesso…'}</button>
           <a className="block py-1 text-center text-sm text-primary" href="/login">Voltar ao login</a>
         </form>
       </section>
