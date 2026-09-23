@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
+import { withAbortTimeout } from '@/lib/requestTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 import {
   Organization,
@@ -490,7 +491,10 @@ export async function saveShiftToSupabase(shift: Shift) {
     notes: shift.notes
   };
 
-  const { error } = await supabase.from('shifts').upsert(payload).select('id').single();
+  const { error } = await withAbortTimeout(
+    async signal => await supabase.from('shifts').upsert(payload).select('id').abortSignal(signal).single(),
+    { message: 'O servidor demorou para confirmar o plantão. Verifique sua conexão e tente novamente.' }
+  );
   if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
@@ -518,7 +522,10 @@ export async function saveShiftsToSupabase(shifts: Shift[]) {
     status: shift.status,
     notes: shift.notes
   }));
-  const { error } = await supabase.from('shifts').upsert(payload).select('id');
+  const { error } = await withAbortTimeout(
+    async signal => await supabase.from('shifts').upsert(payload).select('id').abortSignal(signal),
+    { message: 'O servidor demorou para confirmar os postos. Verifique sua conexão e tente novamente.' }
+  );
   if (error) throw new Error('Não foi possível salvar os postos: ' + error.message);
 }
 
