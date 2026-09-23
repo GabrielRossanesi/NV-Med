@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { getDoctorCompliance } from '@/lib/documentCompliance';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
 import { doctorContractModelLabels, doctorContractModelShortLabels } from '@/lib/doctorProfile';
+import { doctorHasOperationalUnit, getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 
 function DoctorsPageContent() {
   const {
@@ -31,6 +32,7 @@ function DoctorsPageContent() {
     doctors,
     documents,
     units,
+    shifts,
     addDoctor,
     deleteDoctor
   } = useStore();
@@ -38,6 +40,7 @@ function DoctorsPageContent() {
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
   const documentGovernance = getDocumentGovernance(activeOrg);
   const orgUnits = units.filter((u) => u.organizationId === activeOrganizationId);
+  const orgShifts = shifts.filter((shift) => shift.organizationId === activeOrganizationId);
   
   // Filter doctors by active organization
   const orgDoctors = doctors.filter((d) => d.organizationId === activeOrganizationId);
@@ -92,7 +95,6 @@ function DoctorsPageContent() {
   const [status, setStatus] = useState<DoctorStatus>('active');
   const [contractModel, setContractModel] = useState<DoctorContractModel>('pf');
   const [contractSigned, setContractSigned] = useState(false);
-  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
 
   const orgDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
 
@@ -106,18 +108,13 @@ function DoctorsPageContent() {
 
     const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
     const matchesSpecialty = specialtyFilter === 'all' || doc.specialty.toLowerCase() === specialtyFilter.toLowerCase();
-    const matchesUnit = unitFilter === 'all' || doc.linkedUnits.includes(unitFilter);
-    const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime, activeOrg?.settings.requiredDocuments, Math.max(...documentGovernance.expiryAlertDays));
+    const matchesUnit = unitFilter === 'all' || doctorHasOperationalUnit(orgShifts, doc.id, unitFilter);
+    const operationalDoctor = { ...doc, linkedUnits: getDoctorOperationalUnitIds(orgShifts, doc.id) };
+    const documentSummary = getDoctorCompliance(operationalDoctor, orgDocuments, referenceTime, activeOrg?.settings.requiredDocuments, Math.max(...documentGovernance.expiryAlertDays));
     const matchesDocuments = documentFilter === 'all' || (documentFilter === 'pending' ? documentSummary.pending > 0 || documentSummary.nearExpiry > 0 : documentSummary.compliant);
 
     return matchesSearch && matchesStatus && matchesSpecialty && matchesUnit && matchesDocuments;
   });
-
-  const handleUnitToggle = (unitId: string) => {
-    setSelectedUnits((prev) =>
-      prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]
-    );
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +132,7 @@ function DoctorsPageContent() {
       status,
       contractModel,
       contractSigned,
-      linkedUnits: selectedUnits
+      linkedUnits: []
     })) return;
 
     // Reset Form
@@ -151,7 +148,6 @@ function DoctorsPageContent() {
     setStatus('active');
     setContractModel('pf');
     setContractSigned(false);
-    setSelectedUnits([]);
     setIsModalOpen(false);
   };
 
@@ -352,7 +348,7 @@ function DoctorsPageContent() {
                     <th className="p-4">CRM / UF</th>
                     <th className="p-4">Especialidade</th>
                     <th className="p-4">Contratação</th>
-                    <th className="p-4">Unidades Vinculadas</th>
+                    <th className="p-4">Unidades atendidas</th>
                     <th className="p-4">Status</th>
                     <th className="p-4">Documentação</th>
                     <th className="p-4 text-center">Ações</th>
@@ -361,9 +357,9 @@ function DoctorsPageContent() {
                 <tbody className="divide-y divide-border text-xs">
                   {filteredDoctors.length > 0 ? (
                     filteredDoctors.map((doc) => {
-                      // Find clinical names linked to this doctor
-                      const linkedClinics = orgUnits.filter((u) => doc.linkedUnits.includes(u.id));
-                      const documentSummary = getDoctorCompliance(doc, orgDocuments, referenceTime, activeOrg?.settings.requiredDocuments, Math.max(...documentGovernance.expiryAlertDays));
+                      const operationalUnitIds = getDoctorOperationalUnitIds(orgShifts, doc.id);
+                      const linkedClinics = orgUnits.filter((u) => operationalUnitIds.includes(u.id));
+                      const documentSummary = getDoctorCompliance({ ...doc, linkedUnits: operationalUnitIds }, orgDocuments, referenceTime, activeOrg?.settings.requiredDocuments, Math.max(...documentGovernance.expiryAlertDays));
 
                       return (
                         <tr key={doc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/10 transition">
@@ -400,7 +396,7 @@ function DoctorsPageContent() {
                                 </span>
                               ))}
                               {linkedClinics.length === 0 && (
-                                <span className="text-[10px] text-text-muted italic">Sem vínculos</span>
+                                <span className="text-[10px] text-text-muted italic">Sem plantões</span>
                               )}
                             </div>
                           </td>
@@ -632,27 +628,6 @@ function DoctorsPageContent() {
                   placeholder="Rua, Número, Bairro, Cidade - UF"
                   className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
                 />
-              </div>
-
-              {/* Linked Units Selection */}
-              <div className="space-y-2.5">
-                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Vincular a Unidades</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-card-border rounded-lg p-3 max-h-40 overflow-y-auto bg-background">
-                  {orgUnits.map((u) => (
-                    <label key={u.id} className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedUnits.includes(u.id)}
-                        onChange={() => handleUnitToggle(u.id)}
-                        className="rounded text-primary focus:ring-teal-500 border-slate-300"
-                      />
-                      <span className="truncate">{u.name}</span>
-                    </label>
-                  ))}
-                  {orgUnits.length === 0 && (
-                    <p className="text-xs text-text-muted italic col-span-2">Cadastre unidades primeiro nas configurações.</p>
-                  )}
-                </div>
               </div>
 
               {/* Modal Footer Actions */}

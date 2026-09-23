@@ -25,7 +25,6 @@ function UnitsPageContent() {
     units,
     addUnit,
     deleteUnit,
-    updateOrganizationSettings,
     saving
   } = useStore();
 
@@ -64,7 +63,6 @@ function UnitsPageContent() {
 
   // Form states for new Unit
   const [name, setName] = useState('');
-  const [companyCnpj, setCompanyCnpj] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('SP');
@@ -77,8 +75,7 @@ function UnitsPageContent() {
   const filteredUnits = orgUnits.filter((unit) => {
     const matchesSearch =
       unit.name.toLowerCase().includes(search.toLowerCase()) ||
-      unit.city.toLowerCase().includes(search.toLowerCase()) ||
-      (activeOrg?.cnpj || '').includes(search);
+      unit.city.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || unit.status === statusFilter;
 
@@ -92,21 +89,16 @@ function UnitsPageContent() {
   };
 
   const openCreateModal = () => {
-    setCompanyCnpj(activeOrg?.cnpj || '');
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const normalizedCompanyCnpj = companyCnpj.trim();
-    if (!activeOrg || !normalizedCompanyCnpj) return;
-    if (!activeOrg.cnpj?.trim()) {
-      if (!await updateOrganizationSettings(activeOrg.id, { cnpj: normalizedCompanyCnpj })) return;
-    }
+    if (!activeOrg) return;
 
     if (!await addUnit({
       name,
-      cnpj: normalizedCompanyCnpj,
+      cnpj: activeOrg.cnpj?.trim() || '',
       address,
       city,
       state,
@@ -119,7 +111,6 @@ function UnitsPageContent() {
 
     // Reset Form
     setName('');
-    setCompanyCnpj('');
     setAddress('');
     setCity('');
     setState('SP');
@@ -188,7 +179,7 @@ function UnitsPageContent() {
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
           <input
             type="text"
-            placeholder="Buscar por nome da unidade, cidade ou CNPJ..."
+            placeholder="Buscar por nome da unidade ou cidade..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
@@ -264,7 +255,7 @@ function UnitsPageContent() {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
               <input
                 type="text"
-                placeholder="Buscar por nome da clínica, CNPJ ou cidade..."
+                placeholder="Buscar por nome da unidade ou cidade..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
@@ -294,7 +285,6 @@ function UnitsPageContent() {
                       <div className="min-w-0">
                         <span className="text-[9px] uppercase font-bold text-text-muted tracking-wide">{getTypeLabel(unit.type)}</span>
                         <h3 className="text-sm font-bold text-text-primary mt-0.5 truncate">{unit.name}</h3>
-                        <p className="text-[10px] text-text-muted mt-0.5 font-mono">CNPJ: {activeOrg?.cnpj || 'Não informado'}</p>
                       </div>
                       {getStatusBadge(unit.status)}
                     </div>
@@ -391,32 +381,14 @@ function UnitsPageContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-border bg-surface-muted/30 p-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Empresa responsável</label>
-                  <input
-                    type="text"
-                    readOnly
-                    aria-readonly="true"
-                    value={activeOrg?.name || ''}
-                    className="w-full cursor-not-allowed rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs font-medium text-text-secondary"
-                  />
+              <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-muted/30 px-3.5 py-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Building2 className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Empresa responsável</p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-text-primary">{activeOrg?.name}</p>
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">CNPJ da empresa</label>
-                  <input
-                    type="text"
-                    required
-                    readOnly={Boolean(activeOrg?.cnpj?.trim())}
-                    aria-readonly={Boolean(activeOrg?.cnpj?.trim())}
-                    value={companyCnpj}
-                    onChange={(event) => setCompanyCnpj(event.target.value)}
-                    placeholder="Cadastre o CNPJ da empresa"
-                    className={`w-full rounded-lg border border-border px-3 py-2 font-mono text-xs text-text-secondary focus:outline-none focus:border-primary ${activeOrg?.cnpj?.trim() ? 'cursor-not-allowed bg-surface-muted' : 'bg-background'}`}
-                  />
-                </div>
-                <p className="sm:col-span-2 text-xs text-text-muted">{activeOrg?.cnpj?.trim() ? 'O CNPJ vem do cadastro da empresa e não pode ser alterado nesta unidade.' : 'Informe o CNPJ da empresa responsável. Ele também será salvo no cadastro da empresa.'}</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -515,7 +487,7 @@ function UnitsPageContent() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !companyCnpj.trim()}
+                  disabled={saving}
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? 'Salvando…' : 'Salvar Unidade'}

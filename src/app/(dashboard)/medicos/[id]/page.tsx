@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { doctorContractModelLabels } from '@/lib/doctorProfile';
+import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 
 export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -117,8 +118,8 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
   };
 
-  // Find linked units
-  const linkedUnitsList = orgUnits.filter((u) => doctor.linkedUnits.includes(u.id));
+  const operationalUnitIds = getDoctorOperationalUnitIds(docShifts, doctor.id);
+  const linkedUnitsList = orgUnits.filter((u) => operationalUnitIds.includes(u.id));
 
   // Sort doctor shifts
   const sortedShifts = [...docShifts]
@@ -223,11 +224,11 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
-          {/* Linked units list */}
+          {/* Units inferred from scheduled shifts */}
           <div className="bg-card-bg rounded-xl border border-card-border p-5">
             <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Building className="h-4 w-4 text-primary" />
-              Unidades Vinculadas
+              Unidades atendidas
             </h3>
             <div className="space-y-2">
               {linkedUnitsList.map((u) => (
@@ -239,7 +240,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               ))}
               {linkedUnitsList.length === 0 && (
-                <p className="text-xs text-text-muted italic text-center py-4">Sem vínculos cadastrados.</p>
+                <p className="text-xs text-text-muted italic text-center py-4">As unidades aparecerão após o primeiro plantão escalado.</p>
               )}
             </div>
           </div>

@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { localDate, shiftTouchesDay } from '@/lib/scheduling';
 import { documentIsCritical, documentIsNearExpiry, documentStatusLabels, getDoctorCompliance } from '@/lib/documentCompliance';
 import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
+import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 
 export default function DashboardPage() {
   const { activeOrganizationId, organizations, doctors, units, sectors, shifts, documents } = useStore();
@@ -35,9 +36,10 @@ export default function DashboardPage() {
   const documentGovernance = getDocumentGovernance(activeOrg);
   const requirements = activeOrg?.settings.requiredDocuments || [];
   const maxAlertDays = Math.max(...documentGovernance.expiryAlertDays);
-  const applicableDocumentIds = new Set(orgDoctors.flatMap(doctor => applicableDocuments(doctor, orgDocs, requirements).map(document => document.id)));
+  const operationalDoctors = new Map(orgDoctors.map(doctor => [doctor.id, { ...doctor, linkedUnits: getDoctorOperationalUnitIds(orgShifts, doctor.id) }]));
+  const applicableDocumentIds = new Set(orgDoctors.flatMap(doctor => applicableDocuments(operationalDoctors.get(doctor.id) || doctor, orgDocs, requirements).map(document => document.id)));
   const effectiveDocs = orgDocs.filter(document => applicableDocumentIds.has(document.id));
-  const doctorCompliance = new Map(orgDoctors.map(doctor => [doctor.id, getDoctorCompliance(doctor, orgDocs, documentReferenceTime, requirements, maxAlertDays)]));
+  const doctorCompliance = new Map(orgDoctors.map(doctor => [doctor.id, getDoctorCompliance(operationalDoctors.get(doctor.id) || doctor, orgDocs, documentReferenceTime, requirements, maxAlertDays)]));
 
   // Compute metrics
   const totalDoctors = orgDoctors.length;
@@ -68,7 +70,8 @@ export default function DashboardPage() {
     });
   const filteredPendingDocumentItems = pendingDocumentItems.filter(document => {
     const doctor = orgDoctors.find(item => item.id === document.doctorId);
-    return doctor && (!documentUnitFilter || doctor.linkedUnits.includes(documentUnitFilter)) && (!documentSpecialtyFilter || doctor.specialty === documentSpecialtyFilter);
+    const operationalDoctor = doctor ? operationalDoctors.get(doctor.id) : null;
+    return doctor && (!documentUnitFilter || operationalDoctor?.linkedUnits.includes(documentUnitFilter)) && (!documentSpecialtyFilter || doctor.specialty === documentSpecialtyFilter);
   });
   const documentStages = [
     { label: 'Envio pendente', status: 'not_sent', count: filteredPendingDocumentItems.filter((item) => item.status === 'not_sent').length },
@@ -89,7 +92,7 @@ export default function DashboardPage() {
   const unitsBreakdown = orgUnits
     .map((unit) => {
       const count = orgShifts.filter((s) => s.unitId === unit.id && s.date.includes(month)).length;
-      const linkedDoctors = orgDoctors.filter(doctor => doctor.linkedUnits.includes(unit.id));
+      const linkedDoctors = orgDoctors.filter(doctor => operationalDoctors.get(doctor.id)?.linkedUnits.includes(unit.id));
       const regular = linkedDoctors.filter(doctor => doctorCompliance.get(doctor.id)?.compliant).length;
       return { name: unit.name, count, compliance: linkedDoctors.length ? Math.round((regular / linkedDoctors.length) * 100) : 0 };
     })

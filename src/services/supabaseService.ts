@@ -411,7 +411,7 @@ export async function saveUnitToSupabase(unit: Unit) {
     .single();
   if (organizationError || !organization) throw new Error('Empresa responsável não encontrada.');
   const companyCnpj = organization.cnpj?.trim();
-  if (!companyCnpj) throw new Error('Cadastre o CNPJ da empresa responsável antes de salvar a unidade.');
+  if (!companyCnpj) throw new Error('O CNPJ da empresa responsável ainda não foi configurado. Solicite ao administrador SaaS a atualização do cadastro da empresa.');
 
   const payload: DbUnit = {
     id: unit.id,

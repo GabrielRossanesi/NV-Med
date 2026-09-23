@@ -371,11 +371,13 @@ export default function AdminOrganizationsPage() {
                     <label className="block text-xs font-semibold text-text-muted uppercase mb-1">CNPJ</label>
                     <input
                       type="text"
+                      required
                       value={cnpj}
                       onChange={(e) => setCnpj(e.target.value)}
                       placeholder="00.000.000/0000-00"
                       className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
                     />
+                    <p className="mt-1 text-[11px] text-text-muted">CNPJ responsável usado no cadastro das unidades desta empresa.</p>
                   </div>
 
                   <div>
