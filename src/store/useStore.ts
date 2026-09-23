@@ -146,7 +146,21 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         simulatedOrganizationId: get().simulatedOrganizationId === id ? null : get().simulatedOrganizationId,
       });
     }),
-    updateOrganizationSettings: (id, updates) => commit(async () => { const previous = get().organizations.find(o => o.id === id); if (!previous) throw new Error('Empresa não encontrada.'); const org = { ...previous, ...updates }; await cloud.updateOrganizationInSupabase(org); set({ organizations: get().organizations.map(o => o.id === id ? org : o) }); }),
+    updateOrganizationSettings: (id, updates) => commit(async () => {
+      const previous = get().organizations.find(o => o.id === id);
+      if (!previous) throw new Error('Empresa não encontrada.');
+      const org = { ...previous, ...updates };
+      await cloud.updateOrganizationInSupabase(org);
+      const refreshedDocuments = updates.settings
+        ? await cloud.fetchMedicalDocumentsForOrganization(id)
+        : null;
+      set({
+        organizations: get().organizations.map(o => o.id === id ? org : o),
+        documents: refreshedDocuments
+          ? [...get().documents.filter(document => document.organizationId !== id), ...refreshedDocuments]
+          : get().documents,
+      });
+    }),
     addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }),
     updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }),
     deleteUser: (id, confirmation) => commit(async () => { const res = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível excluir o usuário.'); set({ users: get().users.filter(user => user.id !== id) }); }),

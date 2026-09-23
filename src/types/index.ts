@@ -101,13 +101,9 @@ export interface Sector {
   coveragePeriods: SectorCoveragePeriod[];
 }
 
-export type DocumentType =
-  | 'rg_cnh'
-  | 'diploma_medicina'
-  | 'diploma_residencia'
-  | 'comprovante_residencia'
-  | 'certidao_crm_etica'
-  | 'certidao_crm_financeira';
+// Each organization owns its document catalog. The stored value is a stable,
+// machine-safe key generated when the requirement is created.
+export type DocumentType = string;
 
 export type DocumentStatus =
   | 'not_sent'

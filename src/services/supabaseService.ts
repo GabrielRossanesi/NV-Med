@@ -370,6 +370,18 @@ export async function fetchDocumentAuditLogsFromSupabase() {
   return (data as DbDocumentAudit[]).map(mapDocumentAuditFromDb);
 }
 
+export async function fetchMedicalDocumentsForOrganization(organizationId: string) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase
+    .from('medical_documents')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .order('name');
+  if (error) throw new Error('Não foi possível atualizar o checklist documental.');
+  return (data as DbMedicalDocument[]).map(mapDocumentFromDb);
+}
+
 // ==============================================================================
 // OPERAÇÕES DE ESCRITA ASSÍNCRONA (PERSISTÊNCIA EM SEGUNDO PLANO)
 // ==============================================================================
