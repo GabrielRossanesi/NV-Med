@@ -249,32 +249,6 @@ function UnitsPageContent() {
         </div>
       ) : (
         <>
-          {/* Filters Bar */}
-          <div className="bg-card-bg p-4 rounded-xl border border-card-border flex flex-col md:flex-row items-center gap-4">
-            <div className="relative w-full md:flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
-              <input
-                type="text"
-                placeholder="Buscar por nome da unidade ou cidade..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
-              />
-            </div>
-
-            <div className="relative w-full md:w-44">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
-              >
-                <option value="all">Todos Status</option>
-                <option value="active">Ativa</option>
-                <option value="inactive">Inativa</option>
-              </select>
-            </div>
-          </div>
-
           {/* Grid of cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredUnits.length > 0 ? (
