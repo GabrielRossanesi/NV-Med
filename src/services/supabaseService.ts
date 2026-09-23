@@ -90,6 +90,7 @@ interface DbSector {
   default_start_time: string;
   default_end_time: string;
   required_doctors: number;
+  coverage_periods?: Array<{ kind: 'day' | 'night'; startTime: string; endTime: string; requiredDoctors: number }>;
 }
 
 interface DbMedicalDocument {
@@ -224,6 +225,12 @@ function mapUnitFromDb(row: DbUnit): Unit {
 }
 
 function mapSectorFromDb(row: DbSector): Sector {
+  const legacyPeriod = {
+    kind: (row.default_end_time < row.default_start_time ? 'night' : 'day') as 'day' | 'night',
+    startTime: row.default_start_time || '07:00',
+    endTime: row.default_end_time || '19:00',
+    requiredDoctors: Math.max(1, row.required_doctors || 1)
+  };
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -233,7 +240,8 @@ function mapSectorFromDb(row: DbSector): Sector {
     status: row.status === 'inactive' ? 'inactive' : 'active',
     defaultStartTime: row.default_start_time || '07:00',
     defaultEndTime: row.default_end_time || '19:00',
-    requiredDoctors: Math.max(1, row.required_doctors || 1)
+    requiredDoctors: legacyPeriod.requiredDoctors,
+    coveragePeriods: row.coverage_periods?.length ? row.coverage_periods : [legacyPeriod]
   };
 }
 
@@ -452,9 +460,11 @@ export async function saveSectorToSupabase(sector: Sector) {
     status: sector.status,
     default_start_time: sector.defaultStartTime,
     default_end_time: sector.defaultEndTime,
-    required_doctors: sector.requiredDoctors
+    required_doctors: sector.requiredDoctors,
+    coverage_periods: sector.coveragePeriods
   };
   const { error } = await supabase.from('sectors').upsert(payload).select('id').single();
+  if (error?.code === '23505' || error?.message.includes('sectors_unit_name_unique')) throw new Error('Já existe um setor com este nome nesta unidade. Edite o setor existente para incluir o período diurno ou noturno.');
   if (error) throw new Error('Não foi possível salvar o setor: ' + error.message);
 }
 

@@ -14,7 +14,7 @@ import {
   Settings
 } from 'lucide-react';
 import Link from 'next/link';
-import { localDate, shiftTouchesDay } from '@/lib/scheduling';
+import { localDate, sectorCoveragePeriods, shiftTouchesDay } from '@/lib/scheduling';
 import { documentIsCritical, documentIsNearExpiry, documentStatusLabels, getDoctorCompliance } from '@/lib/documentCompliance';
 import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
@@ -52,8 +52,9 @@ export default function DashboardPage() {
   const shiftsThisMonth = orgShifts.filter((s) => s.date.includes(month)).length;
   const pendingToday = orgShifts.filter((s) => shiftTouchesDay(s, today) && s.status === 'pending').length;
   const gapsToday = orgSectors.reduce((total, sector) => {
-    const filled = new Set(orgShifts.filter((shift) => shift.sectorId === sector.id && shiftTouchesDay(shift, today) && shift.doctorId && shift.status !== 'cancelled').map((shift) => shift.doctorId)).size;
-    return total + Math.max(sector.requiredDoctors - filled, 0);
+    const filled = orgShifts.filter((shift) => shift.sectorId === sector.id && shift.date === today && shift.doctorId && shift.status !== 'cancelled').length;
+    const required = sectorCoveragePeriods(sector).reduce((sum, period) => sum + period.requiredDoctors, 0);
+    return total + Math.max(required - filled, 0);
   }, 0);
 
   // Upcoming shifts sorted from the user's current local day.

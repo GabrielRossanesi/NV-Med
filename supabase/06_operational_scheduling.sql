@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.sectors (
   default_start_time text NOT NULL DEFAULT '07:00',
   default_end_time text NOT NULL DEFAULT '19:00',
   required_doctors integer NOT NULL DEFAULT 1 CHECK (required_doctors BETWEEN 1 AND 99),
+  coverage_periods jsonb NOT NULL DEFAULT '[{"kind":"day","startTime":"07:00","endTime":"19:00","requiredDoctors":1}]'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -87,10 +88,17 @@ CREATE POLICY nv_update ON public.sectors FOR UPDATE TO authenticated USING(publ
 CREATE POLICY nv_delete ON public.sectors FOR DELETE TO authenticated USING(public.nv_can_write(organization_id,'sectors'));
 
 CREATE OR REPLACE FUNCTION public.nv_validate_sector() RETURNS trigger LANGUAGE plpgsql SET search_path='' AS $$
+DECLARE period jsonb; first_period jsonb;
 BEGIN
  NEW.name := trim(NEW.name);
  IF length(NEW.name)=0 OR length(NEW.name)>100 THEN RAISE EXCEPTION 'Informe o nome do setor (até 100 caracteres).'; END IF;
- IF NEW.default_start_time !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' OR NEW.default_end_time !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' OR NEW.default_start_time=NEW.default_end_time THEN RAISE EXCEPTION 'Informe horários padrão válidos e diferentes.'; END IF;
+ IF jsonb_typeof(NEW.coverage_periods)<>'array' OR jsonb_array_length(NEW.coverage_periods) NOT BETWEEN 1 AND 2 THEN RAISE EXCEPTION 'Selecione um ou dois períodos de cobertura.'; END IF;
+ FOR period IN SELECT value FROM jsonb_array_elements(NEW.coverage_periods) LOOP
+   IF period->>'kind' NOT IN ('day','night') OR coalesce(period->>'startTime','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' OR coalesce(period->>'endTime','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' OR period->>'startTime'=period->>'endTime' THEN RAISE EXCEPTION 'Informe períodos e horários válidos.'; END IF;
+   IF coalesce(period->>'requiredDoctors','') !~ '^[0-9]+$' OR (period->>'requiredDoctors')::integer NOT BETWEEN 1 AND 99 THEN RAISE EXCEPTION 'Informe de 1 a 99 médicos esperados por período.'; END IF;
+ END LOOP;
+ first_period := NEW.coverage_periods->0;
+ NEW.default_start_time := first_period->>'startTime'; NEW.default_end_time := first_period->>'endTime'; NEW.required_doctors := (first_period->>'requiredDoctors')::integer;
  IF TG_OP='UPDATE' AND NEW.organization_id<>OLD.organization_id THEN RAISE EXCEPTION 'Não é permitido transferir registros entre empresas.'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.units u WHERE u.id=NEW.unit_id AND u.organization_id=NEW.organization_id) THEN RAISE EXCEPTION 'Selecione uma unidade válida da mesma empresa.'; END IF;
  RETURN NEW;

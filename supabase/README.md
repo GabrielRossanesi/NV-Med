@@ -22,7 +22,7 @@ Este guia contém as instruções passo a passo para conectar o banco de dados P
 1. No menu lateral esquerdo do Dashboard do Supabase, clique no ícone **SQL Editor** (ou acesse a URL: `https://supabase.com/dashboard/project/<seu-projeto>/sql`).
 2. Clique em **+ New query**.
 3. Em uma instalação nova, execute `init_all.sql` para criar a estrutura e os dados de demonstração.
-4. Depois execute, nesta ordem: `04_storage.sql`, `05_production.sql`, `06_operational_scheduling.sql`, `08_user_profiles.sql`, `09_admin_deletions.sql`, `10_financial_reporting.sql`, `11_finance_module.sql`, `12_user_additional_permissions.sql`, `13_document_governance.sql`, `14_doctor_contract_profile.sql` e `15_fix_unit_link_trigger.sql`.
+4. Depois execute, nesta ordem: `04_storage.sql`, `05_production.sql`, `06_operational_scheduling.sql`, `08_user_profiles.sql`, `09_admin_deletions.sql`, `10_financial_reporting.sql`, `11_finance_module.sql`, `12_user_additional_permissions.sql`, `13_document_governance.sql`, `14_doctor_contract_profile.sql`, `15_fix_unit_link_trigger.sql` e `16_sector_coverage_periods.sql`.
 5. Crie o usuário no Supabase Auth e use `07_bootstrap_admin.sql` para vinculá-lo ao perfil administrativo.
 6. Clique no botão verde **Run** em cada etapa.
 

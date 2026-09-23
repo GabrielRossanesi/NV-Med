@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { countDoctors, shiftTouchesDay, hasConflict } from '../src/lib/scheduling.ts';
+import { buildRecurringDates, countDoctors, shiftTouchesDay, hasConflict } from '../src/lib/scheduling.ts';
 const base = { id:'a', organizationId:'org', doctorId:'doctor', unitId:'unit', date:'2026-09-20', startTime:'07:00', endTime:'19:00', type:'onsite', status:'confirmed' };
 test('counts unique doctors and excludes cancelled shifts',()=>assert.equal(countDoctors([base,{...base,id:'b'},{...base,id:'c',doctorId:'other',status:'cancelled'}]),1));
 test('overnight shift contributes to both covered days',()=>{const s={...base,startTime:'19:00',endTime:'07:00'};assert.equal(shiftTouchesDay(s,'2026-09-20'),true);assert.equal(shiftTouchesDay(s,'2026-09-21'),true);assert.equal(shiftTouchesDay(s,'2026-09-22'),false);});
@@ -10,3 +10,7 @@ test('adjacent shifts are allowed but overlap across midnight is rejected',()=>{
 test('editing a shift does not conflict with itself',()=>assert.equal(hasConflict(base,[base]),false));
 test('cancellation and different doctors do not conflict',()=>{assert.equal(hasConflict({...base,id:'b',status:'cancelled'},[base]),false);assert.equal(hasConflict({...base,id:'b',doctorId:'other'},[base]),false);});
 test('open positions do not count as doctors or create conflicts',()=>{const open={...base,id:'open',doctorId:undefined,status:'open'};assert.equal(countDoctors([base,open]),1);assert.equal(hasConflict(open,[base]),false);});
+test('fortnightly recurrence keeps weekday and 14-day interval',()=>assert.deepEqual(buildRecurringDates('2026-09-24','2026-10-23','fortnightly'),['2026-09-24','2026-10-08','2026-10-22']));
+test('weekly recurrence includes start and limit date',()=>assert.deepEqual(buildRecurringDates('2026-09-22','2026-10-06','weekly'),['2026-09-22','2026-09-29','2026-10-06']));
+test('monthly recurrence keeps ordinal weekday',()=>assert.deepEqual(buildRecurringDates('2026-09-08','2026-12-31','monthly'),['2026-09-08','2026-10-13','2026-11-10','2026-12-08']));
+test('monthly recurrence skips months without the fifth weekday',()=>assert.deepEqual(buildRecurringDates('2026-09-30','2026-12-31','monthly'),['2026-09-30','2026-12-30']));

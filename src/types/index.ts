@@ -79,6 +79,14 @@ export interface Unit {
 }
 
 export type SectorStatus = 'active' | 'inactive';
+export type CoveragePeriodKind = 'day' | 'night';
+
+export interface SectorCoveragePeriod {
+  kind: CoveragePeriodKind;
+  startTime: string;
+  endTime: string;
+  requiredDoctors: number;
+}
 
 export interface Sector {
   id: string;
@@ -90,6 +98,7 @@ export interface Sector {
   defaultStartTime: string;
   defaultEndTime: string;
   requiredDoctors: number;
+  coveragePeriods: SectorCoveragePeriod[];
 }
 
 export type DocumentType =
