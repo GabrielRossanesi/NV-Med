@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   Building,
@@ -15,13 +15,17 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   FileSpreadsheet,
+  LoaderCircle,
+  LogOut,
   Settings,
   Shield,
+  UserRound,
   Users,
   WalletCards,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { canViewPermission } from '@/lib/permissions';
+import { logoutCurrentSession } from '@/lib/auth/logout';
 import UserAvatar from './UserAvatar';
 
 const operationalItems = [
@@ -46,7 +50,11 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const profileMenu = useRef<HTMLDivElement>(null);
   const {
     activeOrganizationId,
     organizations,
@@ -68,12 +76,38 @@ export default function Sidebar() {
     router.refresh();
   };
 
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (!profileMenu.current?.contains(event.target as Node)) setProfileMenuOpen(false);
+    };
+    const closeWithKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProfileMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', closeWithKeyboard);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', closeWithKeyboard);
+    };
+  }, []);
+
+  const logout = async () => {
+    setLogoutPending(true);
+    setLogoutError('');
+    try {
+      await logoutCurrentSession();
+    } catch (error) {
+      setLogoutError(error instanceof Error ? error.message : 'Não foi possível sair da conta.');
+      setLogoutPending(false);
+    }
+  };
+
   return (
     <>
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-sidebar-border bg-sidebar-bg/96 backdrop-blur-xl transition-[width] duration-200 md:flex ${sidebarCollapsed ? 'w-[72px]' : 'w-60'}`}
       >
-        <div className={`flex h-16 items-center border-b border-sidebar-border ${sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-4'}`}>
+        <div className={`flex h-16 items-center ${sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-4'}`}>
           <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5" aria-label="NV Med — início">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-text-inverse shadow-glow-primary">
               <Activity className="h-[18px] w-[18px]" />
@@ -144,19 +178,45 @@ export default function Sidebar() {
         </nav>
 
         <div className="border-t border-sidebar-border p-2.5">
-          <Link
-            href="/perfil"
-            className={`group/profile relative flex items-center rounded-xl transition hover:bg-state-hover ${sidebarCollapsed ? 'h-11 justify-center' : 'gap-2.5 p-2'}`}
-          >
-            <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-8 w-8" />
-            {sidebarCollapsed && <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 shadow-medium transition group-hover/profile:opacity-100">Meu perfil</span>}
-            {!sidebarCollapsed && (
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-semibold text-text-primary">{currentUser.name}</span>
-                <span className="block truncate text-[10px] text-text-muted">Meu perfil</span>
-              </span>
+          <div ref={profileMenu} className="relative">
+            <button
+              type="button"
+              onClick={() => { setProfileMenuOpen((open) => !open); setOrgMenuOpen(false); setLogoutError(''); }}
+              className={`group/profile relative flex w-full items-center rounded-xl text-left transition hover:bg-state-hover ${sidebarCollapsed ? 'h-11 justify-center' : 'gap-2.5 p-2'}`}
+              aria-label="Abrir menu do perfil"
+              aria-expanded={profileMenuOpen}
+              aria-haspopup="menu"
+              aria-controls="sidebar-profile-menu"
+            >
+              <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-8 w-8" />
+              {sidebarCollapsed && !profileMenuOpen && <span className="pointer-events-none absolute left-full z-50 ml-3 whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 shadow-medium transition group-hover/profile:opacity-100">Abrir perfil</span>}
+              {!sidebarCollapsed && (
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-semibold text-text-primary">{currentUser.name}</span>
+                    <span className="block truncate text-[10px] text-text-muted">Conta e perfil</span>
+                  </span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-text-muted transition-transform duration-150 ${profileMenuOpen ? 'rotate-180' : ''}`} />
+                </>
+              )}
+            </button>
+
+            {profileMenuOpen && (
+              <div id="sidebar-profile-menu" role="menu" className={`absolute bottom-[calc(100%+0.5rem)] z-50 w-64 origin-bottom-left animate-in rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong fade-in zoom-in-95 duration-150 ${sidebarCollapsed ? 'left-full ml-3' : 'left-0'}`}>
+                <div className="border-b border-border px-2 pb-2.5 pt-1">
+                  <p className="truncate text-sm font-semibold text-text-primary">{currentUser.name}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-text-muted">{currentUser.email}</p>
+                </div>
+                <Link role="menuitem" href="/perfil" onClick={() => setProfileMenuOpen(false)} className="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-text-secondary transition hover:bg-state-hover hover:text-text-primary">
+                  <UserRound className="h-4 w-4" /> Meu perfil
+                </Link>
+                <button role="menuitem" type="button" onClick={logout} disabled={logoutPending} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger transition hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
+                  {logoutPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} {logoutPending ? 'Saindo…' : 'Sair da conta'}
+                </button>
+                {logoutError && <p role="alert" className="px-3 pb-1 pt-2 text-xs leading-relaxed text-danger">{logoutError}</p>}
+              </div>
             )}
-          </Link>
+          </div>
           <button
             type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
