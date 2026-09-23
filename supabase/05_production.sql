@@ -93,11 +93,25 @@ CREATE TRIGGER nv_validate_shift BEFORE INSERT OR UPDATE ON public.shifts FOR EA
 
 CREATE OR REPLACE FUNCTION public.nv_validate_links() RETURNS trigger LANGUAGE plpgsql SET search_path='' AS $$
 BEGIN
- IF TG_OP='UPDATE' AND NEW.organization_id<>OLD.organization_id THEN RAISE EXCEPTION 'Não é permitido transferir registros entre empresas.'; END IF;
- IF TG_TABLE_NAME='doctors' THEN
+ -- Keep table-specific record fields inside their own branch. PostgreSQL resolves
+ -- NEW fields when a PL/pgSQL statement is compiled, even when a preceding
+ -- boolean expression would be false for another trigger table.
+ IF TG_TABLE_NAME='units' THEN
+   IF TG_OP='UPDATE' THEN
+     IF NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN RAISE EXCEPTION 'Não é permitido transferir registros entre empresas.'; END IF;
+   END IF;
+ ELSIF TG_TABLE_NAME='doctors' THEN
+   IF TG_OP='UPDATE' THEN
+     IF NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN RAISE EXCEPTION 'Não é permitido transferir registros entre empresas.'; END IF;
+   END IF;
    IF EXISTS(SELECT 1 FROM unnest(NEW.linked_units) AS links(unit_id) WHERE NOT EXISTS(SELECT 1 FROM public.units u WHERE u.id=links.unit_id AND u.organization_id=NEW.organization_id)) THEN RAISE EXCEPTION 'Unidade vinculada inválida.'; END IF;
- ELSIF TG_TABLE_NAME='medical_documents' AND NEW.file_path IS NOT NULL THEN
-   IF split_part(NEW.file_path,'/',1)<>NEW.organization_id OR split_part(NEW.file_path,'/',2)<>NEW.doctor_id OR NEW.file_path LIKE '%..%' THEN RAISE EXCEPTION 'Caminho de documento inválido.'; END IF;
+ ELSIF TG_TABLE_NAME='medical_documents' THEN
+   IF TG_OP='UPDATE' THEN
+     IF NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN RAISE EXCEPTION 'Não é permitido transferir registros entre empresas.'; END IF;
+   END IF;
+   IF NEW.file_path IS NOT NULL THEN
+     IF split_part(NEW.file_path,'/',1)<>NEW.organization_id OR split_part(NEW.file_path,'/',2)<>NEW.doctor_id OR NEW.file_path LIKE '%..%' THEN RAISE EXCEPTION 'Caminho de documento inválido.'; END IF;
+   END IF;
  END IF;
  RETURN NEW;
 END $$;

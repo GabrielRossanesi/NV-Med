@@ -1,4 +1,4 @@
--- Run after 14_doctor_contract_profile.sql inside a transaction; always rollback fixtures.
+-- Run after 15_fix_unit_link_trigger.sql inside a transaction; always rollback fixtures.
 INSERT INTO auth.users(id,aud,role,email,created_at,updated_at) VALUES('10000000-0000-4000-8000-000000000001','authenticated','authenticated','nvmed-transaction-test@example.invalid',now(),now());
 INSERT INTO public.organizations(id,name,settings) VALUES('nv-test-a','Transaction test A','{"specialties":[],"requiredDocuments":[{"type":"rg_cnh","name":"RG","required":true}]}'),('nv-test-b','Transaction test B','{"specialties":[],"requiredDocuments":[]}');
 INSERT INTO public.user_accounts(id,auth_user_id,name,email,type,organization_id,role,status,additional_permissions) VALUES('nv-test-user','10000000-0000-4000-8000-000000000001','Test','nvmed-transaction-test@example.invalid','tenant_user','nv-test-a','Jurídico','active','{"medicos":"edit","unidades":"edit","escala":"edit","financeiro":"edit"}');
@@ -10,6 +10,8 @@ DO $$ BEGIN
  BEGIN INSERT INTO public.units(id,organization_id,name,type,status) VALUES('nv-cross','nv-test-b','Forbidden','hospital','active'); RAISE EXCEPTION 'FAIL: cross-tenant insert'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN UPDATE public.user_accounts SET type='saas_admin' WHERE id='nv-test-user'; RAISE EXCEPTION 'FAIL: privilege escalation'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  INSERT INTO public.units(id,organization_id,name,type,status) VALUES('nv-test-unit','nv-test-a','Test unit','hospital','active');
+ UPDATE public.units SET specialties=ARRAY['Clínico Geral','Cardiologia'] WHERE id='nv-test-unit';
+ IF (SELECT specialties FROM public.units WHERE id='nv-test-unit')<>ARRAY['Clínico Geral','Cardiologia'] THEN RAISE EXCEPTION 'FAIL: unit specialty update'; END IF;
  INSERT INTO public.sectors(id,organization_id,unit_id,name,specialties,required_doctors) VALUES('nv-test-sector','nv-test-a','nv-test-unit','UTI',ARRAY['Clínico Geral'],2);
  INSERT INTO public.doctors(id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units) VALUES('nv-test-doctor','nv-test-a','Test doctor','TEST','SP','123456','Clínico Geral','active','scp',true,ARRAY['nv-test-unit']);
  IF NOT EXISTS(SELECT 1 FROM public.doctors WHERE id='nv-test-doctor' AND rqe='123456' AND contract_model='scp' AND contract_signed) THEN RAISE EXCEPTION 'FAIL: doctor contract profile'; END IF;
@@ -33,5 +35,5 @@ DO $$ BEGIN
  BEGIN PERFORM * FROM public.doctors; RAISE EXCEPTION 'FAIL: anonymous read'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
-SELECT 'PASS: tenant isolation, doctor RQE and contract profile, sectors, finance settlement, additional permissions, document audit, open positions, anonymous blocking, write permissions, profile protection, required documents, night overlap, adjacent shift and deletion' AS verification;
+SELECT 'PASS: tenant isolation, unit specialty update, doctor RQE and contract profile, sectors, finance settlement, additional permissions, document audit, open positions, anonymous blocking, write permissions, profile protection, required documents, night overlap, adjacent shift and deletion' AS verification;
 ROLLBACK;
