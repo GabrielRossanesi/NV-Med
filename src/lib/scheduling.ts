@@ -72,5 +72,76 @@ export function sectorCoveragePeriods(sector: Pick<Sector, 'coveragePeriods' | '
 export function coveragePeriodLabel(kind: SectorCoveragePeriod['kind']) {
   return kind === 'day' ? 'Diurno' : 'Noturno';
 }
+
+export interface CoveragePeriodSummary {
+  period: SectorCoveragePeriod;
+  items: Shift[];
+  assigned: Shift[];
+  vacancies: Shift[];
+  required: number;
+  created: number;
+  filled: number;
+  open: number;
+  uncreated: number;
+  deficit: number;
+}
+
+export interface SectorCoverageSummary {
+  periods: CoveragePeriodSummary[];
+  items: Shift[];
+  required: number;
+  created: number;
+  filled: number;
+  open: number;
+  uncreated: number;
+  deficit: number;
+}
+
+function inferredCoverageKind(startTime: string): SectorCoveragePeriod['kind'] {
+  return startTime >= '18:00' || startTime < '06:00' ? 'night' : 'day';
+}
+
+export function coverageKindForShift(shift: Pick<Shift, 'startTime' | 'endTime'>, periods: SectorCoveragePeriod[]) {
+  const exact = periods.find(period => period.startTime === shift.startTime && period.endTime === shift.endTime);
+  if (exact) return exact.kind;
+  const inferred = inferredCoverageKind(shift.startTime);
+  return periods.some(period => period.kind === inferred) ? inferred : periods[0]?.kind ?? inferred;
+}
+
+export function summarizeSectorCoverage(
+  sector: Pick<Sector, 'coveragePeriods' | 'defaultStartTime' | 'defaultEndTime' | 'requiredDoctors'>,
+  shifts: Shift[],
+): SectorCoverageSummary {
+  const periods = sectorCoveragePeriods(sector);
+  const activeItems = shifts.filter(shift => shift.status !== 'cancelled');
+  const summaries = periods.map(period => {
+    const items = activeItems.filter(shift => coverageKindForShift(shift, periods) === period.kind);
+    const assigned = items.filter(shift => Boolean(shift.doctorId));
+    const vacancies = items.filter(shift => !shift.doctorId);
+    return {
+      period,
+      items,
+      assigned,
+      vacancies,
+      required: period.requiredDoctors,
+      created: items.length,
+      filled: assigned.length,
+      open: vacancies.length,
+      uncreated: Math.max(period.requiredDoctors - items.length, 0),
+      deficit: Math.max(period.requiredDoctors - assigned.length, 0),
+    };
+  });
+
+  return summaries.reduce<SectorCoverageSummary>((total, summary) => ({
+    periods: [...total.periods, summary],
+    items: [...total.items, ...summary.items],
+    required: total.required + summary.required,
+    created: total.created + summary.created,
+    filled: total.filled + summary.filled,
+    open: total.open + summary.open,
+    uncreated: total.uncreated + summary.uncreated,
+    deficit: total.deficit + summary.deficit,
+  }), { periods: [], items: [], required: 0, created: 0, filled: 0, open: 0, uncreated: 0, deficit: 0 });
+}
 export const employmentLabels = { clt: 'CLT', concursado: 'Concursado (prefeitura)', pj: 'PJ' };
 export const paymentFrequencyLabels = { on_delivery: 'À vista', monthly: 'Mensal' };
