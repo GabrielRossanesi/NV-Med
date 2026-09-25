@@ -73,6 +73,12 @@ export function coveragePeriodLabel(kind: SectorCoveragePeriod['kind']) {
   return kind === 'day' ? 'Diurno' : 'Noturno';
 }
 
+export function statusAfterDoctorSelection(status: Shift['status'], currentDoctorId: string | undefined, nextDoctorId: string) {
+  if (!nextDoctorId) return 'open' as const;
+  if (!currentDoctorId || currentDoctorId !== nextDoctorId || status === 'open') return 'pending' as const;
+  return status;
+}
+
 export interface CoveragePeriodSummary {
   period: SectorCoveragePeriod;
   items: Shift[];

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Check, Clock3, Moon, Pencil, Plus, Sun, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Check, Clock3, Moon, Plus, Sun, Trash2, UserRoundPlus } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import { coveragePeriodLabel, employmentLabels, summarizeSectorCoverage, type SectorCoverageSummary } from '@/lib/scheduling';
 import type { CoveragePeriodKind, Doctor, EmploymentType, Sector, Shift, Unit } from '@/types';
@@ -142,14 +142,12 @@ function DayGroups({ day, groups, units, doctors, employment, doctorWarnings, co
                 {displayItems.map(item => {
                   const doctor = doctors.find(value => value.id === item.doctorId);
                   const warning = doctor ? doctorWarnings.get(doctor.id) : undefined;
-                  return <div key={item.id} className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${doctor ? 'border-success/20 bg-success/5' : 'border-warning/25 bg-warning/5'}`}>
-                    <button type="button" onClick={() => onEditShift(item)} className="min-w-0 flex-1 text-left">
-                      <span className={`flex items-center gap-1.5 truncate text-xs font-semibold ${doctor ? 'text-text-primary' : 'text-warning'}`}>{doctor?.name || 'Vaga aberta'}{warning?.warning && <AlertTriangle size={12} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'}/>}</span>
-                      <span className="mt-0.5 flex items-center gap-1 text-[10px] text-text-muted"><Clock3 size={11}/>{item.startTime}–{item.endTime}{item.employmentType ? ` · ${employmentLabels[item.employmentType]}` : ''} · {statusLabels[item.status]}</span>
-                    </button>
-                    <div className="flex shrink-0">
-                      <button type="button" className="p-1.5 text-text-muted hover:text-primary" aria-label={`Editar ${doctor?.name || 'vaga'}`} onClick={() => onEditShift(item)}><Pencil size={13}/></button>
-                      <button type="button" className="p-1.5 text-text-muted hover:text-danger" aria-label={`Excluir ${doctor?.name || 'vaga'}`} onClick={() => void onDeleteShift(item)}><Trash2 size={13}/></button>
+                  const sequence = period.items.findIndex(value => value.id === item.id) + 1;
+                  return <div key={item.id} className={`rounded-lg border px-3 py-2.5 ${doctor ? 'border-success/20 bg-success/5' : 'border-warning/25 bg-warning/5'}`}>
+                    <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Plantão {String(sequence).padStart(2, '0')}</span><span className={`text-[10px] font-semibold ${item.status === 'confirmed' ? 'text-success' : 'text-warning'}`}>{statusLabels[item.status]}</span></div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                      <button type="button" onClick={() => onEditShift(item)} className="min-w-0 flex-1 text-left"><span className={`flex items-center gap-1.5 truncate text-xs font-semibold ${doctor ? 'text-text-primary' : 'text-warning'}`}>{doctor?.name || 'Vaga aberta'}{warning?.warning && <AlertTriangle size={12} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'}/>}</span><span className="mt-0.5 flex items-center gap-1 text-[10px] text-text-muted"><Clock3 size={11}/>{item.startTime}–{item.endTime}{item.employmentType ? ` · ${employmentLabels[item.employmentType]}` : ''}</span></button>
+                      <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => onEditShift(item)} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border bg-card-bg px-2.5 text-[11px] font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/5">{doctor ? <ArrowRightLeft size={12}/> : <UserRoundPlus size={12}/>} {doctor ? 'Trocar médico' : 'Preencher vaga'}</button><button type="button" className="p-2 text-text-muted hover:text-danger" aria-label={`Excluir plantão ${sequence}`} onClick={() => void onDeleteShift(item)}><Trash2 size={13}/></button></div>
                     </div>
                   </div>;
                 })}

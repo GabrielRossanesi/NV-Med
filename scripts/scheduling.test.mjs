@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildRecurringDates, countDoctors, shiftTouchesDay, hasConflict, summarizeSectorCoverage } from '../src/lib/scheduling.ts';
+import { buildRecurringDates, countDoctors, shiftTouchesDay, hasConflict, statusAfterDoctorSelection, summarizeSectorCoverage } from '../src/lib/scheduling.ts';
 const base = { id:'a', organizationId:'org', doctorId:'doctor', unitId:'unit', date:'2026-09-20', startTime:'07:00', endTime:'19:00', type:'onsite', status:'confirmed' };
 test('counts unique doctors and excludes cancelled shifts',()=>assert.equal(countDoctors([base,{...base,id:'b'},{...base,id:'c',doctorId:'other',status:'cancelled'}]),1));
 test('overnight shift contributes to both covered days',()=>{const s={...base,startTime:'19:00',endTime:'07:00'};assert.equal(shiftTouchesDay(s,'2026-09-20'),true);assert.equal(shiftTouchesDay(s,'2026-09-21'),true);assert.equal(shiftTouchesDay(s,'2026-09-22'),false);});
@@ -32,4 +32,10 @@ test('coverage assigns a custom-time shift to its closest day or night period',(
   const sector={coveragePeriods:[{kind:'day',startTime:'07:00',endTime:'19:00',requiredDoctors:1},{kind:'night',startTime:'19:00',endTime:'07:00',requiredDoctors:1}],defaultStartTime:'07:00',defaultEndTime:'19:00',requiredDoctors:2};
   const summary=summarizeSectorCoverage(sector,[{...base,startTime:'20:00',endTime:'08:00'}]);
   assert.equal(summary.periods.find(period=>period.period.kind==='night')?.filled,1);
+});
+test('replacing a doctor requires confirmation while keeping the same doctor preserves status',()=>{
+  assert.equal(statusAfterDoctorSelection('confirmed','doctor-a','doctor-b'),'pending');
+  assert.equal(statusAfterDoctorSelection('confirmed','doctor-a','doctor-a'),'confirmed');
+  assert.equal(statusAfterDoctorSelection('open',undefined,'doctor-a'),'pending');
+  assert.equal(statusAfterDoctorSelection('confirmed','doctor-a',''),'open');
 });
