@@ -111,10 +111,10 @@ interface DayGroupsProps {
 function DayGroups({ day, groups, units, doctors, employment, doctorWarnings, compact = false, onSelectSector, onOpenShift, onEditShift, onDeleteShift }: DayGroupsProps) {
   if (!groups.length) return <div className="py-10 text-center"><p className="text-sm font-medium">Nenhum setor para exibir</p><p className="mt-1 text-xs text-text-muted">Ajuste os filtros ou cadastre um setor nesta unidade.</p></div>;
 
-  return <div className={compact ? 'divide-y divide-border' : 'space-y-4'}>
+  return <div className={compact ? 'grid gap-3 lg:grid-cols-2' : 'space-y-4'}>
     {groups.map(({ sector, coverage }) => {
       const unit = units.find(item => item.id === sector.unitId);
-      return <section key={sector.id} className={compact ? 'py-4 first:pt-0 last:pb-0' : 'rounded-xl border border-border bg-card-bg p-4'}>
+      return <section key={sector.id} className="rounded-xl border border-border bg-card-bg p-4">
         <div className="flex items-start justify-between gap-3">
           <button type="button" onClick={() => onSelectSector(sector.id)} className="min-w-0 text-left">
             <span className="block truncate text-[11px] text-text-muted">{unit?.name || 'Unidade'}</span>
@@ -209,7 +209,7 @@ export default function ScheduleCalendarView({ view, date, week, month, firstDay
       <CoverageLegend/>
       <p className="text-[11px] text-text-muted">Clique em um dia para ver médicos, vagas e especialidades.</p>
     </div>
-    <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid gap-5">
       <main className="min-w-0">
         {view === 'week' ? <div className="overflow-x-auto rounded-xl border border-border bg-card-bg"><div className="min-w-[1160px]">
           <div className="grid grid-cols-[240px_repeat(7,minmax(130px,1fr))] border-b border-border bg-surface-muted/60">
@@ -257,9 +257,9 @@ export default function ScheduleCalendarView({ view, date, week, month, firstDay
         </div></div>}
       </main>
 
-      <aside className="self-start rounded-xl border border-border bg-card-bg 2xl:sticky 2xl:top-24">
+      <aside className="rounded-xl border border-border bg-card-bg">
         <div className="border-b border-border p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium capitalize text-text-muted">{new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })}</p><h2 className="mt-1 font-semibold">{formatDay(date)}</h2></div><button type="button" onClick={() => setDetailsDate(date)} className="text-xs font-semibold text-primary hover:underline">Ver detalhes</button></div><div className="mt-4"><SummaryStrip summary={selectedSummary}/></div></div>
-        <div className="max-h-[650px] overflow-y-auto p-4"><DayGroups day={date} groups={selectedGroups} units={units} doctors={doctors} employment={employment} doctorWarnings={doctorWarnings} compact onSelectSector={onSelectSector} onOpenShift={onOpenShift} onEditShift={onEditShift} onDeleteShift={onDeleteShift}/></div>
+        <div className="p-4"><DayGroups day={date} groups={selectedGroups} units={units} doctors={doctors} employment={employment} doctorWarnings={doctorWarnings} compact onSelectSector={onSelectSector} onOpenShift={onOpenShift} onEditShift={onEditShift} onDeleteShift={onDeleteShift}/></div>
       </aside>
     </div>
 
