@@ -25,7 +25,7 @@ export function hasConflict(candidate: Shift, shifts: Shift[]) {
     const b = shiftInterval(s); return a.start < b.end && b.start < a.end;
   });
 }
-export type ShiftRecurrence = 'once' | 'weekly' | 'fortnightly' | 'monthly';
+export type ShiftRecurrence = 'once' | 'daily' | 'weekdays' | 'every_other_day' | 'custom' | 'weekly' | 'fortnightly' | 'monthly';
 
 function parseLocalDate(value: string) {
   return new Date(value + 'T12:00:00');
@@ -38,7 +38,7 @@ function sameOrdinalWeekday(date: Date, weekday: number, ordinal: number) {
   return new Date(date.getFullYear(), date.getMonth(), day, 12);
 }
 
-export function buildRecurringDates(startDate: string, untilDate: string, recurrence: ShiftRecurrence) {
+export function buildRecurringDates(startDate: string, untilDate: string, recurrence: ShiftRecurrence, customWeekdays: number[] = []) {
   if (recurrence === 'once' || !untilDate || untilDate < startDate) return [startDate];
   const start = parseLocalDate(startDate);
   const until = parseLocalDate(untilDate);
@@ -54,10 +54,10 @@ export function buildRecurringDates(startDate: string, untilDate: string, recurr
     }
     return dates;
   }
-  const interval = recurrence === 'fortnightly' ? 14 : 7;
+  const interval = recurrence === 'fortnightly' ? 14 : recurrence === 'every_other_day' ? 2 : recurrence === 'weekly' ? 7 : 1;
   const cursor = new Date(start);
   while (cursor <= until && dates.length < 120) {
-    dates.push(localDate(cursor));
+    if (recurrence === 'daily' || recurrence === 'every_other_day' || recurrence === 'weekly' || recurrence === 'fortnightly' || (recurrence === 'weekdays' && cursor.getDay() >= 1 && cursor.getDay() <= 5) || (recurrence === 'custom' && customWeekdays.includes(cursor.getDay()))) dates.push(localDate(cursor));
     cursor.setDate(cursor.getDate() + interval);
   }
   return dates;

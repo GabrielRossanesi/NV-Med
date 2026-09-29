@@ -1,20 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, ArrowRightLeft, Check, Clock3, Moon, Plus, Sun, Trash2, UserRoundPlus } from 'lucide-react';
-import Dialog from '@/components/Dialog';
-import { coveragePeriodLabel, employmentLabels, summarizeSectorCoverage, type SectorCoverageSummary } from '@/lib/scheduling';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Check, CircleHelp, Clock3, Copy, FileWarning, Moon, Plus, Sun, Trash2, UserRoundPlus, X } from 'lucide-react';
+import UserAvatar from '@/components/UserAvatar';
+import { coveragePeriodLabel, employmentLabels, hasConflict, localDate, summarizeSectorCoverage, type CoveragePeriodSummary } from '@/lib/scheduling';
 import type { CoveragePeriodKind, Doctor, EmploymentType, Sector, Shift, Unit } from '@/types';
 
-const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-const monthDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const statusLabels = { open: 'Vaga aberta', confirmed: 'Confirmado', pending: 'Aguardando confirmação', completed: 'Concluído', cancelled: 'Cancelado' };
+type CoverageFilter = 'all' | 'deficit' | 'open' | 'conflict' | 'pending' | 'complete';
+type Selection = { day: string; sectorId?: string; kind?: CoveragePeriodKind };
 
-type DoctorWarning = { warning: boolean; blocked: boolean };
-type CalendarView = 'week' | 'month';
-
-interface ScheduleCalendarViewProps {
-  view: CalendarView;
+interface Props {
+  view: 'week' | 'month';
   date: string;
   week: string[];
   month: string;
@@ -25,253 +21,158 @@ interface ScheduleCalendarViewProps {
   doctors: Doctor[];
   shifts: Shift[];
   employment: EmploymentType | '';
-  onlyGaps: boolean;
-  selectedSectorId: string;
-  selectedUnitId: string;
-  doctorWarnings: Map<string, DoctorWarning>;
+  doctorId: string;
+  periodKind: CoveragePeriodKind | '';
+  documentFilter: 'all' | 'regular' | 'pending';
+  focus: (Selection & { nonce: number }) | null;
+  coverageFilter: CoverageFilter;
+  doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>;
+  canSeeFinancial: boolean;
   onSelectDate: (date: string) => void;
   onSelectSector: (sectorId: string) => void;
   onOpenShift: (sector: Sector, date: string, kind?: CoveragePeriodKind, suggestedCount?: number) => void;
   onEditShift: (shift: Shift) => void;
   onDeleteShift: (shift: Shift) => Promise<void>;
+  onCopyPeriod: (sector: Sector, sourceDay: string, targetDay: string, kind: CoveragePeriodKind) => Promise<string>;
 }
 
-interface DaySummary {
-  required: number;
-  created: number;
-  filled: number;
-  open: number;
-  uncreated: number;
-  deficit: number;
+const weekdays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const monthWeekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const statusLabels: Record<Shift['status'], string> = { open: 'Vaga aberta', confirmed: 'Confirmado', pending: 'Aguardando confirmação', completed: 'Concluído', cancelled: 'Cancelado' };
+
+function dayLabel(day: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) {
+  return new Date(`${day}T12:00:00`).toLocaleDateString('pt-BR', options).replace('.', '');
 }
 
-function formatDay(value: string) {
-  return new Date(value + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
-}
-
-function formatFullDate(value: string) {
-  return new Date(value + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
-}
-
-function doctorShortName(name: string) {
+function shortName(name: string) {
   const parts = name.trim().split(/\s+/);
   return parts.length > 2 ? `${parts[0]} ${parts.at(-1)}` : name;
 }
 
-function emptyDaySummary(): DaySummary {
-  return { required: 0, created: 0, filled: 0, open: 0, uncreated: 0, deficit: 0 };
+function offsetDay(day: string, amount: number) {
+  const date = new Date(`${day}T12:00:00`);
+  date.setDate(date.getDate() + amount);
+  return localDate(date);
 }
 
-function mergeSummary(total: DaySummary, summary: SectorCoverageSummary): DaySummary {
-  return {
-    required: total.required + summary.required,
-    created: total.created + summary.created,
-    filled: total.filled + summary.filled,
-    open: total.open + summary.open,
-    uncreated: total.uncreated + summary.uncreated,
-    deficit: total.deficit + summary.deficit,
-  };
-}
-
-function CoverageLegend() {
-  return <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-text-muted" aria-label="Legenda da escala">
-    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success"/>Médico escalado</span>
-    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-warning"/>Vaga criada</span>
-    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-danger"/>Posto por criar</span>
-  </div>;
-}
-
-function SummaryStrip({ summary }: { summary: DaySummary }) {
-  return <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-surface-muted/25">
-    <div className="p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Escalados</p><p className="mt-1 text-lg font-semibold tabular-nums text-success">{summary.filled}<span className="text-sm font-normal text-text-muted">/{summary.required}</span></p></div>
-    <div className="border-l border-border p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Vagas abertas</p><p className={`mt-1 text-lg font-semibold tabular-nums ${summary.open ? 'text-warning' : 'text-text-secondary'}`}>{summary.open}</p></div>
-    <div className="border-l border-border p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Por criar</p><p className={`mt-1 text-lg font-semibold tabular-nums ${summary.uncreated ? 'text-danger' : 'text-text-secondary'}`}>{summary.uncreated}</p></div>
-  </div>;
-}
-
-function PeriodIcon({ kind, size = 14 }: { kind: CoveragePeriodKind; size?: number }) {
+function PeriodIcon({ kind }: { kind: CoveragePeriodKind }) {
   const Icon = kind === 'day' ? Sun : Moon;
-  return <Icon size={size} className={kind === 'day' ? 'shrink-0 text-warning' : 'shrink-0 text-primary'}/>;
+  return <Icon size={13} aria-hidden="true" className="shrink-0 text-text-muted"/>;
 }
 
-interface DayGroupsProps {
-  day: string;
-  groups: Array<{ sector: Sector; coverage: SectorCoverageSummary }>;
-  units: Unit[];
-  doctors: Doctor[];
-  employment: EmploymentType | '';
-  doctorWarnings: Map<string, DoctorWarning>;
-  compact?: boolean;
-  onSelectSector: (sectorId: string) => void;
-  onOpenShift: ScheduleCalendarViewProps['onOpenShift'];
-  onEditShift: ScheduleCalendarViewProps['onEditShift'];
-  onDeleteShift: ScheduleCalendarViewProps['onDeleteShift'];
+function tone(period: CoveragePeriodSummary, conflict: boolean, day: string) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (conflict) return { label: 'Conflito de horário', color: 'text-danger', background: 'bg-danger/[0.055]', border: 'border-danger/20', Icon: AlertTriangle };
+  if (period.deficit && day >= localDate() && day <= localDate(tomorrow)) return { label: 'Cobertura crítica', color: 'text-danger', background: 'bg-danger/[0.055]', border: 'border-danger/20', Icon: AlertTriangle };
+  if (period.uncreated) return { label: 'Posto previsto por criar', color: 'text-warning', background: 'bg-warning/[0.055]', border: 'border-warning/20', Icon: CircleHelp };
+  if (period.open) return { label: 'Vaga aberta', color: 'text-info', background: 'bg-info/[0.055]', border: 'border-info/20', Icon: UserRoundPlus };
+  if (period.deficit) return { label: 'Cobertura parcial', color: 'text-warning', background: 'bg-warning/[0.055]', border: 'border-warning/20', Icon: AlertTriangle };
+  if (period.assigned.some(shift => shift.status === 'pending')) return { label: 'Confirmação pendente', color: 'text-warning', background: 'bg-warning/[0.055]', border: 'border-warning/20', Icon: Clock3 };
+  return { label: 'Completo', color: 'text-success', background: 'bg-success/[0.045]', border: 'border-success/20', Icon: Check };
 }
 
-function DayGroups({ day, groups, units, doctors, employment, doctorWarnings, compact = false, onSelectSector, onOpenShift, onEditShift, onDeleteShift }: DayGroupsProps) {
-  if (!groups.length) return <div className="py-10 text-center"><p className="text-sm font-medium">Nenhum setor para exibir</p><p className="mt-1 text-xs text-text-muted">Ajuste os filtros ou cadastre um setor nesta unidade.</p></div>;
-
-  return <div className={compact ? 'grid gap-3 lg:grid-cols-2' : 'space-y-4'}>
-    {groups.map(({ sector, coverage }) => {
-      const unit = units.find(item => item.id === sector.unitId);
-      return <section key={sector.id} className="rounded-xl border border-border bg-card-bg p-4">
-        <div className="flex items-start justify-between gap-3">
-          <button type="button" onClick={() => onSelectSector(sector.id)} className="min-w-0 text-left">
-            <span className="block truncate text-[11px] text-text-muted">{unit?.name || 'Unidade'}</span>
-            <span className="mt-0.5 block truncate text-sm font-semibold text-text-primary">{sector.name}</span>
-          </button>
-          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${coverage.deficit ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>{coverage.filled}/{coverage.required} escalados</span>
-        </div>
-        {sector.specialties.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{sector.specialties.map(item => <span key={item} className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] text-text-muted">{item}</span>)}</div>}
-        <div className="mt-3 space-y-3">
-          {coverage.periods.map(period => {
-            const displayItems = period.items.filter(item => !employment || !item.doctorId || item.employmentType === employment);
-            return <div key={period.period.kind} className="rounded-xl border border-border bg-surface-muted/20 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <PeriodIcon kind={period.period.kind} size={16}/>
-                  <div><p className="text-xs font-semibold">{coveragePeriodLabel(period.period.kind)}</p><p className="text-[11px] tabular-nums text-text-muted">{period.period.startTime}–{period.period.endTime}</p></div>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-medium">
-                  <span className="text-success">{period.filled} escalado{period.filled === 1 ? '' : 's'}</span>
-                  {period.open > 0 && <span className="text-warning">{period.open} vaga{period.open === 1 ? '' : 's'}</span>}
-                  {period.uncreated > 0 && <span className="text-danger">{period.uncreated} por criar</span>}
-                </div>
-              </div>
-              <div className="mt-3 space-y-2">
-                {displayItems.map(item => {
-                  const doctor = doctors.find(value => value.id === item.doctorId);
-                  const warning = doctor ? doctorWarnings.get(doctor.id) : undefined;
-                  const sequence = period.items.findIndex(value => value.id === item.id) + 1;
-                  return <div key={item.id} className={`rounded-lg border px-3 py-2.5 ${doctor ? 'border-success/20 bg-success/5' : 'border-warning/25 bg-warning/5'}`}>
-                    <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Plantão {String(sequence).padStart(2, '0')}</span><span className={`text-[10px] font-semibold ${item.status === 'confirmed' ? 'text-success' : 'text-warning'}`}>{statusLabels[item.status]}</span></div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                      <button type="button" onClick={() => onEditShift(item)} className="min-w-0 flex-1 text-left"><span className={`flex items-center gap-1.5 truncate text-xs font-semibold ${doctor ? 'text-text-primary' : 'text-warning'}`}>{doctor?.name || 'Vaga aberta'}{warning?.warning && <AlertTriangle size={12} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'}/>}</span><span className="mt-0.5 flex items-center gap-1 text-[10px] text-text-muted"><Clock3 size={11}/>{item.startTime}–{item.endTime}{item.employmentType ? ` · ${employmentLabels[item.employmentType]}` : ''}</span></button>
-                      <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => onEditShift(item)} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border bg-card-bg px-2.5 text-[11px] font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/5">{doctor ? <ArrowRightLeft size={12}/> : <UserRoundPlus size={12}/>} {doctor ? 'Trocar médico' : 'Preencher vaga'}</button><button type="button" className="p-2 text-text-muted hover:text-danger" aria-label={`Excluir plantão ${sequence}`} onClick={() => void onDeleteShift(item)}><Trash2 size={13}/></button></div>
-                    </div>
-                  </div>;
-                })}
-                {employment && !displayItems.length && period.items.length > 0 && <p className="py-1 text-[11px] text-text-muted">Nenhum plantão deste período corresponde ao vínculo selecionado.</p>}
-                {!period.items.length && <p className="py-1 text-[11px] text-text-muted">Nenhum posto criado para este período.</p>}
-              </div>
-              {period.uncreated > 0 && <button type="button" onClick={() => onOpenShift(sector, day, period.period.kind, period.uncreated)} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"><Plus size={13}/>Criar {period.uncreated} {period.uncreated === 1 ? 'posto previsto' : 'postos previstos'}</button>}
-            </div>;
-          })}
-        </div>
-      </section>;
-    })}
-  </div>;
+function Inspector({ selection, onClose, children }: { selection: Selection; onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
+  return <dialog ref={ref} onCancel={onClose} aria-label={`Detalhes da escala de ${dayLabel(selection.day)}`} className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full max-w-xl overflow-y-auto border-l border-border bg-card-bg p-0 text-text-primary shadow-2xl backdrop:bg-black/45 sm:w-[min(36rem,100vw)]">
+    <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-card-bg px-5 py-5"><div><p className="text-xs font-medium uppercase tracking-wide text-primary">Detalhe do turno</p><h2 className="mt-1 text-lg font-semibold capitalize">{dayLabel(selection.day, { weekday: 'long', day: '2-digit', month: 'long' })}</h2></div><button type="button" aria-label="Fechar detalhes" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg hover:bg-state-hover"><X size={19}/></button></div>
+    <div className="space-y-6 px-5 py-5">{children}</div>
+  </dialog>;
 }
 
-export default function ScheduleCalendarView({ view, date, week, month, firstDayOffset, daysInMonth, units, sectors, doctors, shifts, employment, onlyGaps, selectedSectorId, selectedUnitId, doctorWarnings, onSelectDate, onSelectSector, onOpenShift, onEditShift, onDeleteShift }: ScheduleCalendarViewProps) {
-  const [detailsDate, setDetailsDate] = useState<string | null>(null);
-
-  const coverageFor = (sector: Sector, day: string) => summarizeSectorCoverage(sector, shifts.filter(item => item.sectorId === sector.id && item.date === day));
-  const groupsFor = (day: string) => sectors
-    .map(sector => ({ sector, coverage: coverageFor(sector, day) }))
-    .filter(group => !onlyGaps || group.coverage.deficit > 0);
-  const summaryFor = (day: string) => groupsFor(day).reduce((total, group) => mergeSummary(total, group.coverage), emptyDaySummary());
-  const selectedGroups = groupsFor(date);
-  const selectedSummary = summaryFor(date);
-
-  const openDay = (day: string) => {
-    onSelectDate(day);
-    setDetailsDate(day);
+export default function ScheduleCalendarView({ view, date, week, month, firstDayOffset, daysInMonth, units, sectors, doctors, shifts, employment, doctorId, periodKind, documentFilter, focus, coverageFilter, doctorWarnings, canSeeFinancial, onSelectDate, onSelectSector, onOpenShift, onEditShift, onDeleteShift, onCopyPeriod }: Props) {
+  const [selection, setSelection] = useState<Selection | null>(focus);
+  const [actionFeedback, setActionFeedback] = useState('');
+  const doctorById = new Map(doctors.map(doctor => [doctor.id, doctor]));
+  const unitById = new Map(units.map(unit => [unit.id, unit]));
+  const activeShifts = shifts.filter(shift => shift.status !== 'cancelled');
+  const shiftsBySectorDay = new Map<string, Shift[]>();
+  activeShifts.forEach(shift => { const key = `${shift.sectorId}:${shift.date}`; const items = shiftsBySectorDay.get(key) || []; items.push(shift); shiftsBySectorDay.set(key, items); });
+  const coverageCache = new Map<string, ReturnType<typeof summarizeSectorCoverage>>();
+  const coverageFor = (sector: Sector, day: string) => {
+    const key = `${sector.id}:${day}`;
+    let summary = coverageCache.get(key);
+    if (!summary) { summary = summarizeSectorCoverage(sector, shiftsBySectorDay.get(key) || []); coverageCache.set(key, summary); }
+    return summary;
   };
+  const hasPeriodConflict = (period: CoveragePeriodSummary) => period.assigned.some(shift => hasConflict(shift, activeShifts));
+  const matchesAdvanced = (period: CoveragePeriodSummary) => (!periodKind || period.period.kind === periodKind)
+    && (!doctorId || period.assigned.some(item => item.doctorId === doctorId))
+    && (!employment || period.assigned.some(item => item.employmentType === employment))
+    && (documentFilter === 'all' || period.assigned.some(item => { const warning = doctorWarnings.get(item.doctorId || '')?.warning || false; return documentFilter === 'pending' ? warning : !warning; }));
+  const matches = (period: CoveragePeriodSummary) => matchesAdvanced(period) && (coverageFilter === 'all'
+    || (coverageFilter === 'deficit' && period.deficit > 0)
+    || (coverageFilter === 'open' && period.open > 0)
+    || (coverageFilter === 'conflict' && hasPeriodConflict(period))
+    || (coverageFilter === 'pending' && period.assigned.some(shift => shift.status === 'pending'))
+    || (coverageFilter === 'complete' && period.required > 0 && period.deficit === 0));
+  const openSelection = (day: string, sectorId?: string, kind?: CoveragePeriodKind) => { onSelectDate(day); setActionFeedback(''); setSelection({ day, sectorId, kind }); };
+  const edit = (shift: Shift) => { setSelection(null); onEditShift(shift); };
+  const create = (sector: Sector, day: string, kind: CoveragePeriodKind, count = 1) => { setSelection(null); onOpenShift(sector, day, kind, count); };
+  const copy = async (sector: Sector, sourceDay: string, targetDay: string, kind: CoveragePeriodKind) => setActionFeedback(await onCopyPeriod(sector, sourceDay, targetDay, kind));
+  const visibleRows = sectors.flatMap(sector => coverageFor(sector, week[0]).periods.map(period => ({ sector, kind: period.period.kind, startTime: period.period.startTime, endTime: period.period.endTime })))
+    .filter(row => week.some(day => coverageFor(row.sector, day).periods.some(period => period.period.kind === row.kind && matches(period))));
 
-  const monthPeriodRows = (day: string) => {
-    const rows = new Map<string, { kind: CoveragePeriodKind; startTime: string; endTime: string; filled: number; required: number; open: number; uncreated: number }>();
-    groupsFor(day).forEach(group => group.coverage.periods.forEach(period => {
-      const key = `${period.period.kind}-${period.period.startTime}-${period.period.endTime}`;
-      const current = rows.get(key) || { kind: period.period.kind, startTime: period.period.startTime, endTime: period.period.endTime, filled: 0, required: 0, open: 0, uncreated: 0 };
-      current.filled += period.filled;
-      current.required += period.required;
-      current.open += period.open;
-      current.uncreated += period.uncreated;
-      rows.set(key, current);
-    }));
-    return [...rows.values()].sort((a, b) => a.startTime.localeCompare(b.startTime));
-  };
+  function periodCell(sector: Sector, day: string, kind: CoveragePeriodKind) {
+    const period = coverageFor(sector, day).periods.find(item => item.period.kind === kind);
+    if (!period || !matches(period)) return <div className="min-h-30 border-l border-border bg-surface-muted/10 p-3" aria-label="Não corresponde ao filtro"/>;
+    const conflict = hasPeriodConflict(period);
+    const state = tone(period, conflict, day);
+    const firstDoctor = period.assigned.filter(item => (!employment || item.employmentType === employment) && (!doctorId || item.doctorId === doctorId)).map(item => doctorById.get(item.doctorId || '')).find(Boolean);
+    const vacancy = period.vacancies[0];
+    return <div className={`group relative min-h-30 border-l border-border p-2 ${state.background}`}>
+      <button type="button" onClick={() => openSelection(day, sector.id, kind)} title={`${state.label}: ${period.filled} de ${period.required} médicos. Abrir detalhes.`} className={`flex h-full min-h-26 w-full flex-col rounded-lg border p-2 text-left transition hover:border-primary/45 hover:bg-card-bg/60 focus-visible:outline-2 focus-visible:outline-primary ${state.border}`}>
+        <span className={`flex items-center gap-1 text-[11px] font-semibold ${state.color}`}><state.Icon size={12} aria-hidden="true"/>{state.label}</span>
+        <span className="mt-1.5 text-xl font-semibold tabular-nums leading-none text-text-primary">{period.filled}<span className="text-sm font-normal text-text-muted">/{period.required}</span></span>
+        <span className="mt-1 text-[10px] text-text-secondary">{period.filled} escalado{period.filled === 1 ? '' : 's'} · {period.deficit} em falta</span>
+        {firstDoctor && <span className="mt-1 truncate text-[10px] font-medium text-text-secondary">{shortName(firstDoctor.name)}{period.assigned.length > 1 ? ` +${period.assigned.length - 1}` : ''}</span>}
+        {period.open > 0 && <span className="mt-0.5 text-[10px] font-medium text-info">{period.open} {period.open === 1 ? 'vaga aberta' : 'vagas abertas'}</span>}
+        {period.assigned.some(shift => shift.status === 'pending') && <span className="mt-0.5 text-[10px] font-medium text-warning">{period.assigned.filter(shift => shift.status === 'pending').length} confirmação pendente</span>}
+        {period.uncreated > 0 && <span className="mt-0.5 text-[10px] font-medium text-warning">{period.uncreated} {period.uncreated === 1 ? 'posto por criar' : 'postos por criar'}</span>}
+      </button>
+      {(period.uncreated > 0 || vacancy) && <button type="button" onClick={() => period.uncreated ? create(sector, day, kind, period.uncreated) : edit(vacancy!)} className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-md bg-card-bg text-primary opacity-100 shadow-sm transition hover:bg-primary hover:text-text-inverse sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100" aria-label={period.uncreated ? `Criar postos previstos em ${sector.name}, ${day}` : `Preencher vaga em ${sector.name}, ${day}`} title={period.uncreated ? 'Criar posto' : 'Preencher vaga'}><Plus size={15}/></button>}
+    </div>;
+  }
 
-  const closeDetailsAndOpen = (sector: Sector, day: string, kind?: CoveragePeriodKind, count?: number) => {
-    setDetailsDate(null);
-    onOpenShift(sector, day, kind, count);
-  };
-  const closeDetailsAndEdit = (shift: Shift) => {
-    setDetailsDate(null);
-    onEditShift(shift);
-  };
+  const selectionGroups = selection ? sectors.filter(sector => !selection.sectorId || sector.id === selection.sectorId).map(sector => ({ sector, periods: coverageFor(sector, selection.day).periods.filter(period => (!selection.kind || period.period.kind === selection.kind) && matches(period)) })).filter(group => group.periods.length) : [];
+  const monthDays = Array.from({ length: daysInMonth }, (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`);
+  const monthSummaries = monthDays.map(day => {
+    const periods = sectors.flatMap(sector => coverageFor(sector, day).periods.filter(matches));
+    return { day, filled: periods.reduce((sum, period) => sum + period.filled, 0), required: periods.reduce((sum, period) => sum + period.required, 0), deficit: periods.filter(period => period.deficit > 0).length, open: periods.reduce((sum, period) => sum + period.open, 0), conflict: periods.filter(hasPeriodConflict).length };
+  });
 
   return <>
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <CoverageLegend/>
-      <p className="text-[11px] text-text-muted">Clique em um dia para ver médicos, vagas e especialidades.</p>
-    </div>
-    <div className="grid gap-5">
-      <main className="min-w-0">
-        {view === 'week' ? <div className="overflow-x-auto rounded-xl border border-border bg-card-bg"><div className="min-w-[1160px]">
-          <div className="grid grid-cols-[240px_repeat(7,minmax(130px,1fr))] border-b border-border bg-surface-muted/60">
-            <div className="p-3 text-xs font-semibold text-text-muted">Unidade · setor</div>
-            {week.map((day, index) => <button key={day} type="button" onClick={() => onSelectDate(day)} className={`border-l border-border p-3 text-center transition hover:bg-state-hover ${date === day ? 'bg-primary/10 text-primary' : ''}`}><span className="block text-xs font-semibold">{weekDays[index]}</span><span className="mt-1 block text-sm tabular-nums">{formatDay(day)}</span></button>)}
-          </div>
-          {sectors.filter(sector => !onlyGaps || week.some(day => coverageFor(sector, day).deficit > 0)).map((sector, rowIndex) => {
-            const unit = units.find(item => item.id === sector.unitId);
-            return <div key={sector.id} className={`grid grid-cols-[240px_repeat(7,minmax(130px,1fr))] ${rowIndex ? 'border-t border-border' : ''}`}>
-              <button type="button" className="p-3 text-left transition hover:bg-state-hover" onClick={() => onSelectSector(sector.id)}><span className="block truncate text-[11px] text-text-muted">{unit?.name}</span><span className="mt-1 block truncate text-sm font-semibold">{sector.name}</span><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-muted">{sector.specialties.join(' · ') || 'Sem especialidade'}</span></button>
-              {week.map(day => {
-                const coverage = coverageFor(sector, day);
-                const tone = coverage.uncreated ? 'bg-danger/[0.035]' : coverage.open ? 'bg-warning/[0.04]' : coverage.filled ? 'bg-success/[0.035]' : '';
-                return <button key={day} type="button" onClick={() => onSelectDate(day)} className={`min-h-44 border-l border-border p-2.5 text-left align-top transition hover:bg-state-hover ${tone} ${date === day && (!selectedSectorId || selectedSectorId === sector.id) ? 'ring-2 ring-inset ring-primary' : ''}`}>
-                  <span className="flex items-center justify-between gap-1"><span className={`inline-flex items-center gap-1 text-xs font-semibold ${coverage.deficit ? 'text-danger' : 'text-success'}`}>{coverage.deficit ? <AlertTriangle size={12}/> : <Check size={12}/>} {coverage.filled}/{coverage.required}</span><span className="text-[9px] uppercase tracking-wide text-text-muted">médicos</span></span>
-                  <span className="mt-2 block space-y-2">{coverage.periods.map(period => {
-                    const names = period.assigned.map(item => doctors.find(doctor => doctor.id === item.doctorId)?.name).filter(Boolean) as string[];
-                    return <span key={period.period.kind} className="block border-t border-border/70 pt-2 first:border-t-0 first:pt-0">
-                      <span className="flex items-center justify-between gap-1"><span className="flex items-center gap-1 text-[10px] font-medium text-text-secondary"><PeriodIcon kind={period.period.kind} size={12}/>{period.period.startTime}–{period.period.endTime}</span><span className="text-[10px] font-semibold tabular-nums">{period.filled}/{period.required}</span></span>
-                      {names.length > 0 && <span className="mt-1 block truncate text-[10px] text-success" title={names.join(', ')}>{doctorShortName(names[0])}{names.length > 1 ? ` +${names.length - 1}` : ''}</span>}
-                      {period.open > 0 && <span className="mt-0.5 block text-[10px] font-medium text-warning">{period.open} {period.open === 1 ? 'vaga criada' : 'vagas criadas'}</span>}
-                      {period.uncreated > 0 && <span className="mt-0.5 block text-[10px] font-medium text-danger">{period.uncreated} {period.uncreated === 1 ? 'posto por criar' : 'postos por criar'}</span>}
-                    </span>;
-                  })}</span>
-                </button>;
-              })}
-            </div>;
-          })}
-          {!sectors.length && <div className="p-12 text-center text-sm text-text-muted">Nenhum setor corresponde aos filtros.</div>}
-        </div></div> : <div className="overflow-x-auto rounded-xl border border-border bg-card-bg"><div className="min-w-[920px]">
-          <div className="grid grid-cols-7 border-b border-border bg-surface-muted/60">{monthDays.map(item => <div key={item} className="p-3 text-center text-xs font-semibold text-text-muted">{item}</div>)}</div>
-          <div className="grid grid-cols-7">
-            {Array.from({ length: firstDayOffset }, (_, index) => <div key={`pad-${index}`} className="min-h-36 border-b border-r border-border bg-surface-muted/20"/>)}
-            {Array.from({ length: daysInMonth }, (_, index) => {
-              const day = `${month}-${String(index + 1).padStart(2, '0')}`;
-              const summary = summaryFor(day);
-              const rows = monthPeriodRows(day);
-              const tone = summary.uncreated ? 'bg-danger/[0.025]' : summary.open ? 'bg-warning/[0.03]' : summary.filled ? 'bg-success/[0.025]' : '';
-              return <button key={day} type="button" onClick={() => openDay(day)} aria-label={`Abrir plantões de ${formatFullDate(day)}`} className={`min-h-36 border-b border-r border-border p-2.5 text-left align-top transition hover:bg-state-hover ${tone} ${date === day ? 'ring-2 ring-inset ring-primary' : ''}`}>
-                <span className="flex items-start justify-between gap-2"><span className="text-sm font-semibold tabular-nums">{index + 1}</span>{summary.required > 0 && <span className={`text-[10px] font-semibold tabular-nums ${summary.deficit ? 'text-danger' : 'text-success'}`}>{summary.filled}/{summary.required}</span>}</span>
-                <span className="mt-2 block space-y-1.5">{rows.slice(0, 2).map(row => <span key={`${row.kind}-${row.startTime}`} className="block rounded-md border border-border bg-card-bg/70 px-1.5 py-1"><span className="flex items-center justify-between gap-1 text-[9px]"><span className="flex items-center gap-1 text-text-muted"><PeriodIcon kind={row.kind} size={10}/>{row.startTime}–{row.endTime}</span><strong className={row.filled < row.required ? 'text-danger' : 'text-success'}>{row.filled}/{row.required}</strong></span>{row.open > 0 && <span className="mt-0.5 block text-[9px] text-warning">{row.open} vaga{row.open === 1 ? '' : 's'}</span>}{row.uncreated > 0 && <span className="mt-0.5 block text-[9px] text-danger">{row.uncreated} por criar</span>}</span>)}{rows.length > 2 && <span className="block text-[9px] font-medium text-primary">+{rows.length - 2} horários</span>}</span>
-              </button>;
-            })}
-          </div>
-        </div></div>}
-      </main>
-
-      <aside className="rounded-xl border border-border bg-card-bg">
-        <div className="border-b border-border p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium capitalize text-text-muted">{new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })}</p><h2 className="mt-1 font-semibold">{formatDay(date)}</h2></div><button type="button" onClick={() => setDetailsDate(date)} className="text-xs font-semibold text-primary hover:underline">Ver detalhes</button></div><div className="mt-4"><SummaryStrip summary={selectedSummary}/></div></div>
-        <div className="p-4"><DayGroups day={date} groups={selectedGroups} units={units} doctors={doctors} employment={employment} doctorWarnings={doctorWarnings} compact onSelectSector={onSelectSector} onOpenShift={onOpenShift} onEditShift={onEditShift} onDeleteShift={onDeleteShift}/></div>
-      </aside>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-text-muted" aria-label="Legenda da escala">
+      <span className="font-semibold text-text-secondary">Legenda</span><span className="flex items-center gap-1"><Check size={12} className="text-success"/>Completo</span><span className="flex items-center gap-1"><AlertTriangle size={12} className="text-warning"/>Déficit</span><span className="flex items-center gap-1"><UserRoundPlus size={12} className="text-info"/>Vaga aberta</span><span className="flex items-center gap-1"><CircleHelp size={12} className="text-warning"/>Posto por criar</span><span className="flex items-center gap-1"><Clock3 size={12} className="text-warning"/>Confirmação pendente</span><span className="flex items-center gap-1"><AlertTriangle size={12} className="text-danger"/>Conflito ou crítico</span>
     </div>
 
-    {detailsDate && (() => {
-      const groups = groupsFor(detailsDate);
-      const summary = summaryFor(detailsDate);
-      const context = selectedUnitId ? units.find(unit => unit.id === selectedUnitId)?.name : 'Todas as unidades';
-      return <Dialog title={`Plantões de ${formatFullDate(detailsDate)}`} size="xl" onClose={() => setDetailsDate(null)}>
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-medium">{context}</p><p className="mt-1 text-xs text-text-muted">{selectedSectorId ? 'Setor filtrado' : 'Todos os setores e especialidades visíveis'}</p></div><CoverageLegend/></div>
-          <SummaryStrip summary={summary}/>
-          <DayGroups day={detailsDate} groups={groups} units={units} doctors={doctors} employment={employment} doctorWarnings={doctorWarnings} onSelectSector={onSelectSector} onOpenShift={closeDetailsAndOpen} onEditShift={closeDetailsAndEdit} onDeleteShift={onDeleteShift}/>
-        </div>
-      </Dialog>;
-    })()}
+    {view === 'week' ? <>
+      <div className="hidden max-h-[70vh] overflow-auto rounded-xl border border-border bg-card-bg md:block"><div className="min-w-[1310px]">
+        <div className="sticky top-0 z-20 grid grid-cols-[210px_repeat(7,minmax(157px,1fr))] border-b border-border bg-card-bg shadow-sm"><div className="sticky left-0 z-30 bg-card-bg p-3 text-xs font-semibold text-text-muted">Unidade · setor · turno</div>{week.map((day, index) => <button key={day} type="button" onClick={() => openSelection(day)} className={`border-l border-border px-3 py-2 text-left transition hover:bg-state-hover ${date === day ? 'bg-primary/5 text-primary' : ''}`}><span className="block text-[10px] font-semibold uppercase tracking-wide">{weekdays[index]}</span><span className="block text-sm font-semibold tabular-nums">{dayLabel(day)}</span></button>)}</div>
+        {visibleRows.map((row, index) => <div key={`${row.sector.id}-${row.kind}`} className={`grid grid-cols-[210px_repeat(7,minmax(157px,1fr))] ${index ? 'border-t border-border' : ''}`}><button type="button" onClick={() => { onSelectSector(row.sector.id); openSelection(date, row.sector.id, row.kind); }} className="sticky left-0 z-10 border-r border-border bg-card-bg p-3 text-left transition hover:bg-state-hover"><span className="block truncate text-[10px] text-text-muted">{unitById.get(row.sector.unitId)?.name || 'Unidade'}</span><span className="mt-0.5 block truncate text-xs font-semibold text-text-primary">{row.sector.name}</span><span className="mt-2 flex items-center gap-1 text-[10px] text-text-muted"><PeriodIcon kind={row.kind}/>{coveragePeriodLabel(row.kind)} · {row.startTime}–{row.endTime}</span></button>{week.map(day => <div key={day}>{periodCell(row.sector, day, row.kind)}</div>)}</div>)}
+        {!visibleRows.length && <p className="p-10 text-center text-sm text-text-muted">Nenhum turno corresponde aos filtros neste período.</p>}
+      </div></div>
+      <div className="space-y-4 md:hidden">{week.map(day => {
+        const groups = sectors.map(sector => ({ sector, periods: coverageFor(sector, day).periods.filter(matches) })).filter(group => group.periods.length);
+        if (!groups.length) return null;
+        return <section key={day} className="overflow-hidden rounded-xl border border-border bg-card-bg"><button type="button" onClick={() => openSelection(day)} className="w-full border-b border-border bg-surface-muted/35 px-4 py-3 text-left text-sm font-semibold capitalize">{dayLabel(day, { weekday: 'long', day: '2-digit', month: 'short' })}</button><div className="divide-y divide-border">{groups.map(({ sector, periods }) => <div key={sector.id} className="px-4 py-3"><p className="text-[11px] text-text-muted">{unitById.get(sector.unitId)?.name}</p><p className="text-sm font-semibold">{sector.name}</p><div className="mt-2 space-y-1">{periods.map(period => { const state = tone(period, hasPeriodConflict(period), day); return <button key={period.period.kind} type="button" onClick={() => openSelection(day, sector.id, period.period.kind)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-lg px-2 text-left hover:bg-state-hover"><span className="flex items-center gap-2 text-xs"><PeriodIcon kind={period.period.kind}/>{period.period.startTime}–{period.period.endTime}</span><span className={`flex items-center gap-1 text-xs font-semibold ${state.color}`}><state.Icon size={13}/>{period.filled}/{period.required} · {state.label}</span></button>; })}</div></div>)}</div></section>;
+      })}</div>
+    </> : <>
+      <div className="hidden overflow-x-auto rounded-xl border border-border bg-card-bg md:block"><div className="min-w-[700px]"><div className="grid grid-cols-7 border-b border-border bg-surface-muted/35">{monthWeekdays.map(day => <span key={day} className="p-3 text-center text-xs font-semibold text-text-muted">{day}</span>)}</div><div className="grid grid-cols-7">{Array.from({ length: firstDayOffset }, (_, index) => <div key={`pad-${index}`} className="min-h-29 border-b border-r border-border bg-surface-muted/15"/>)}{monthSummaries.map(({ day, filled, required, deficit, open, conflict }) => <button key={day} type="button" onClick={() => openSelection(day)} className={`min-h-29 border-b border-r border-border p-2 text-left align-top transition hover:bg-state-hover ${date === day ? 'bg-primary/5 ring-2 ring-inset ring-primary' : ''}`}><span className="block text-sm font-semibold tabular-nums">{Number(day.slice(-2))}</span>{required > 0 && <><span className="mt-2 block text-xs font-semibold tabular-nums">{filled}/{required} postos</span>{deficit > 0 && <span className="mt-1 block text-[10px] font-medium text-warning">{deficit} {deficit === 1 ? 'turno com déficit' : 'turnos com déficit'}</span>}{open > 0 && <span className="block text-[10px] font-medium text-info">{open} {open === 1 ? 'vaga aberta' : 'vagas abertas'}</span>}{conflict > 0 && <span className="block text-[10px] font-medium text-danger">{conflict} {conflict === 1 ? 'conflito' : 'conflitos'}</span>}</>}</button>)}</div></div></div>
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card-bg md:hidden">{monthSummaries.map(({ day, filled, required, deficit, open, conflict }) => <button key={day} type="button" onClick={() => openSelection(day)} className="flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-state-hover"><span className="min-w-0"><span className="block text-sm font-semibold capitalize">{dayLabel(day, { weekday: 'short', day: '2-digit', month: 'short' })}</span><span className="text-xs text-text-muted">{required ? `${filled} de ${required} postos` : 'Sem postos previstos'}</span></span><span className="text-right text-[11px] font-medium">{deficit > 0 && <span className="block text-warning">{deficit} com déficit</span>}{open > 0 && <span className="block text-info">{open} {open === 1 ? 'vaga' : 'vagas'}</span>}{conflict > 0 && <span className="block text-danger">{conflict} {conflict === 1 ? 'conflito' : 'conflitos'}</span>}</span></button>)}</div>
+    </>}
+
+    {selection && <Inspector selection={selection} onClose={() => setSelection(null)}>
+      {actionFeedback && <p role="status" className="rounded-lg border border-border bg-surface-muted/30 px-3 py-2 text-xs text-text-secondary">{actionFeedback}</p>}
+      {selectionGroups.length ? selectionGroups.map(({ sector, periods }) => <section key={sector.id} className="border-b border-border pb-5 last:border-0"><div><p className="text-xs text-text-muted">{unitById.get(sector.unitId)?.name || 'Unidade'}</p><h3 className="mt-0.5 text-base font-semibold">{sector.name}</h3></div><div className="mt-4 space-y-5">{periods.map(period => { const conflict = hasPeriodConflict(period); const state = tone(period, conflict, selection.day); return <div key={period.period.kind}><div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-semibold"><PeriodIcon kind={period.period.kind}/>{coveragePeriodLabel(period.period.kind)} · {period.period.startTime}–{period.period.endTime}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{period.filled}<span className="text-base font-normal text-text-muted">/{period.required} médicos</span></p></div><span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${state.color} ${state.background}`}><state.Icon size={12}/>{state.label}</span></div>
+          <div className="mt-3 space-y-2">{period.assigned.filter(shift => (!employment || shift.employmentType === employment) && (!doctorId || shift.doctorId === doctorId)).map(shift => { const doctor = doctorById.get(shift.doctorId || ''); const warning = doctor && doctorWarnings.get(doctor.id); return <div key={shift.id} className="flex items-center gap-1 rounded-lg border border-border pr-1 transition hover:bg-state-hover"><button type="button" onClick={() => edit(shift)} className="flex min-h-16 min-w-0 flex-1 items-center justify-between gap-3 px-3 text-left"><span className="flex min-w-0 items-center gap-2"><UserAvatar name={doctor?.name || 'Médico'} className="h-8 w-8"/><span className="min-w-0"><span className="block truncate text-xs font-semibold">{doctor?.name || 'Médico não encontrado'}</span><span className="mt-0.5 block text-[10px] text-text-muted">{shift.employmentType ? employmentLabels[shift.employmentType] : 'Vínculo não informado'}{shift.specialty ? ` · ${shift.specialty}` : ''}</span>{shift.notes && <span className="mt-0.5 block truncate text-[10px] text-text-muted" title={shift.notes}>{shift.notes}</span>}{canSeeFinancial && Number(shift.paymentAmount) > 0 && <span className="mt-0.5 block text-[10px] text-text-muted">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(shift.paymentAmount))}</span>}</span></span><span className={`shrink-0 text-[10px] font-medium ${shift.status === 'confirmed' || shift.status === 'completed' ? 'text-success' : 'text-warning'}`}>{warning?.warning && <FileWarning size={12} className="mr-1 inline text-danger" aria-label="Pendência documental"/>}{statusLabels[shift.status]}</span></button><button type="button" aria-label={`Excluir plantão de ${doctor?.name || 'médico'}`} onClick={() => void onDeleteShift(shift)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-danger/5 hover:text-danger"><Trash2 size={14}/></button></div>; })}
+            {period.vacancies.map(shift => <div key={shift.id} className="flex items-center gap-1 rounded-lg border border-info/25 bg-info/[0.045] pr-1 text-xs font-semibold text-info"><button type="button" onClick={() => edit(shift)} className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 px-3 text-left"><span className="flex items-center gap-1.5"><UserRoundPlus size={14}/>Vaga aberta · disponível para preenchimento</span><span>Preencher</span></button><button type="button" aria-label="Excluir vaga aberta" onClick={() => void onDeleteShift(shift)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-danger/5 hover:text-danger"><Trash2 size={14}/></button></div>)}
+            {period.uncreated > 0 && <div className="flex items-center justify-between gap-2 rounded-lg border border-warning/25 bg-warning/[0.045] px-3 py-3 text-xs"><span className="text-warning">{period.uncreated} {period.uncreated === 1 ? 'posto previsto ainda não criado' : 'postos previstos ainda não criados'}</span><button type="button" onClick={() => create(sector, selection.day, period.period.kind, period.uncreated)} className="shrink-0 font-semibold text-primary hover:underline">Criar</button></div>}
+            {conflict && <p className="flex items-center gap-1.5 text-xs text-danger"><AlertTriangle size={13}/>Há médicos com horários coincidentes. Abra o plantão para corrigir.</p>}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => create(sector, selection.day, period.period.kind)} className="nv-button-secondary min-h-9 text-xs"><Plus size={13}/>Novo posto</button>{period.vacancies[0] && <button type="button" onClick={() => edit(period.vacancies[0])} className="nv-button min-h-9 text-xs"><UserRoundPlus size={13}/>Preencher vaga</button>}<button type="button" onClick={() => void copy(sector, offsetDay(selection.day, -1), selection.day, period.period.kind)} className="nv-button-secondary min-h-9 text-xs"><Copy size={13}/>Copiar dia anterior</button><button type="button" onClick={() => void copy(sector, selection.day, offsetDay(selection.day, 1), period.period.kind)} className="nv-button-secondary min-h-9 text-xs"><Copy size={13}/>Duplicar para amanhã</button></div>
+        </div>; })}</div></section>) : <p className="py-10 text-center text-sm text-text-muted">Nenhum turno corresponde aos filtros neste dia.</p>}
+    </Inspector>}
   </>;
 }
