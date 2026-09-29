@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { createClient } from '@/lib/supabase/client';
+import { vacateShift } from '@/lib/scheduleDeletion';
+import { canEditPermission } from '@/lib/permissions';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
@@ -26,6 +28,8 @@ interface NVMedState {
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
   updateShiftFinancials: (id: string, amount: number, frequency: NonNullable<Shift['paymentFrequency']>, status: NonNullable<Shift['paymentStatus']>) => Promise<boolean>;
   deleteShift: (id: string) => Promise<boolean>;
+  deleteShifts: (ids: string[]) => Promise<boolean>;
+  vacateShifts: (ids: string[]) => Promise<boolean>;
   uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
   updateDocument: (document: MedicalDocument) => Promise<boolean>;
@@ -101,6 +105,30 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
     }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
+    deleteShifts: ids => commit(async () => {
+      if (!canEditPermission(get().currentUser, 'escala')) throw new Error('Seu acesso permite apenas visualizar a escala.');
+      const uniqueIds = [...new Set(ids)];
+      const organizationId = orgId();
+      if (!uniqueIds.length || uniqueIds.length > 500 || uniqueIds.some(id => !get().shifts.some(shift => shift.id === id && shift.organizationId === organizationId))) throw new Error('Selecione entre 1 e 500 plantões desta empresa.');
+      if (uniqueIds.some(id => { const shift = get().shifts.find(item => item.id === id); return shift && (shift.paymentStatus === 'paid' || Number(shift.paymentAmount) > 0); }) && !canEditPermission(get().currentUser, 'financeiro')) throw new Error('Você não pode excluir plantões com dados financeiros.');
+      try { await cloud.deleteShiftsFromSupabase(uniqueIds, organizationId); }
+      catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
+      const deleted = new Set(uniqueIds);
+      set({ shifts: get().shifts.filter(shift => !deleted.has(shift.id)) });
+    }),
+    vacateShifts: ids => commit(async () => {
+      if (!canEditPermission(get().currentUser, 'escala')) throw new Error('Seu acesso permite apenas visualizar a escala.');
+      const uniqueIds = [...new Set(ids)];
+      const organizationId = orgId();
+      const selected = uniqueIds.map(id => get().shifts.find(shift => shift.id === id && shift.organizationId === organizationId));
+      if (!uniqueIds.length || uniqueIds.length > 500 || selected.some(shift => !shift?.doctorId)) throw new Error('Selecione entre 1 e 500 plantões com médico desta empresa.');
+      if (selected.some(shift => shift && (shift.paymentStatus === 'paid' || Number(shift.paymentAmount) > 0)) && !canEditPermission(get().currentUser, 'financeiro')) throw new Error('Você não pode alterar plantões com dados financeiros.');
+      const updated = selected.map(shift => vacateShift(shift!));
+      try { await cloud.saveShiftsToSupabase(updated); }
+      catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
+      const byId = new Map(updated.map(shift => [shift.id, shift]));
+      set({ shifts: get().shifts.map(shift => byId.get(shift.id) || shift) });
+    }),
     uploadDocument: (doctorId, type, file) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());
       if (!doctor) throw new Error('Médico não encontrado nesta empresa.');

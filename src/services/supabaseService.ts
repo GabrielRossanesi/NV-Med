@@ -559,6 +559,19 @@ export async function deleteShiftFromSupabase(shiftId: string) {
   if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
+export async function deleteShiftsFromSupabase(shiftIds: string[], organizationId: string) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  if (!shiftIds.length) return;
+
+  const { data, error } = await withAbortTimeout(
+    async signal => await supabase.from('shifts').delete().eq('organization_id', organizationId).in('id', shiftIds).select('id').abortSignal(signal),
+    { message: 'O servidor demorou para confirmar a exclusão. Atualize a escala antes de tentar novamente.' }
+  );
+  if (error) throw new Error('Não foi possível excluir os plantões: ' + error.message);
+  if (data?.length !== shiftIds.length) throw new Error('Alguns plantões não foram encontrados ou não puderam ser excluídos. Atualize a escala.');
+}
+
 export async function updateShiftPaymentInSupabase(shiftId: string, paymentStatus: Shift['paymentStatus']) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');

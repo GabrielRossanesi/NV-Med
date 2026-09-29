@@ -3,12 +3,14 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertTriangle, ArrowRightLeft, ChevronLeft, ChevronRight, Clock3, Copy, List, LoaderCircle, Moon, Plus, Repeat2, Sun, UserRoundPlus, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, ChevronLeft, ChevronRight, Clock3, Copy, List, LoaderCircle, Moon, Plus, Repeat2, Sun, Trash2, UserRoundPlus, Users } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
 import ScheduleCalendarView from '@/components/schedule/ScheduleCalendarView';
 import ScheduleDoctorView from '@/components/schedule/ScheduleDoctorView';
 import ScheduleSpecialtyView from '@/components/schedule/ScheduleSpecialtyView';
+import ScheduleDeleteDialog from '@/components/schedule/ScheduleDeleteDialog';
+import type { ScheduleDeletionScope, ScheduleDeletionSelection } from '@/lib/scheduleDeletion';
 import { buildRecurringDates, coverageKindForShift, coveragePeriodLabel, employmentLabels, hasConflict, localDate, paymentFrequencyLabels, sectorCoveragePeriods, statusAfterDoctorSelection, summarizeSectorCoverage, type ShiftRecurrence } from '@/lib/scheduling';
 import { canEditPermission, canViewPermission } from '@/lib/permissions';
 import { doctorScheduleCompliance } from '@/lib/documentGovernance';
@@ -39,7 +41,7 @@ function toNewShift(shift: Shift): Omit<Shift, 'id' | 'organizationId'> {
   return { sectorId: shift.sectorId, sector: shift.sector, specialty: shift.specialty, employmentType: shift.employmentType, employerName: shift.employerName, paymentAmount: shift.paymentAmount, paymentStatus: shift.paymentStatus, paymentFrequency: shift.paymentFrequency, paidAt: shift.paidAt, doctorId: shift.doctorId, unitId: shift.unitId, date: shift.date, startTime: shift.startTime, endTime: shift.endTime, type: shift.type, status: shift.status, notes: shift.notes };
 }
 
-function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit }: { days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void }) {
+function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit, onDelete }: { days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void; onDelete?: (shift: Shift) => void }) {
   if (!days.length) return <div className="rounded-xl border border-dashed border-border py-16 text-center"><List className="mx-auto h-6 w-6 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum plantão individual neste período</p><p className="mt-1 text-xs text-text-muted">Crie os postos previstos no calendário para gerenciá-los aqui.</p></div>;
   return <section className="space-y-3">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-base font-semibold">Plantões individuais</h2><p className="mt-1 text-xs text-text-muted">Cada linha representa um posto salvo. Use a ação para preencher uma vaga ou substituir o médico.</p></div><span className="text-xs font-medium text-text-muted">{shifts.length} {shifts.length === 1 ? 'plantão criado' : 'plantões criados'}</span></div>
@@ -63,7 +65,7 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
             <span className={`flex min-w-0 items-center gap-1.5 truncate text-sm font-medium ${doctor ? 'text-text-primary' : 'text-warning'}`}>{doctor?.name || 'Vaga aberta'}{warning?.warning && <AlertTriangle size={13} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'} aria-label="Pendência documental"/>}</span>
             <span className="text-xs text-text-secondary">{item.employmentType ? employmentLabels[item.employmentType] : '—'}</span>
             <span className={`text-xs font-medium ${item.status === 'open' ? 'text-warning' : item.status === 'pending' ? 'text-warning' : item.status === 'confirmed' ? 'text-success' : 'text-text-secondary'}`}>{statusLabels[item.status]}</span>
-            <button type="button" onClick={() => onEdit(item)} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/5">{doctor ? <ArrowRightLeft size={13}/> : <UserRoundPlus size={13}/>} {doctor ? 'Trocar médico' : 'Preencher vaga'}</button>
+            <span className="flex items-center gap-1"><button type="button" onClick={() => onEdit(item)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-2 text-xs font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/5">{doctor ? <ArrowRightLeft size={13}/> : <UserRoundPlus size={13}/>} {doctor ? 'Trocar' : 'Preencher'}</button>{onDelete && <button type="button" aria-label={`Excluir plantão ${sequence} de ${formatDay(day)}`} title="Excluir plantão" onClick={() => onDelete(item)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted transition hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/></button>}</span>
           </div>;
         })}</div>
       </section>; })}
@@ -97,9 +99,11 @@ function Schedule() {
   const [focusedTurn, setFocusedTurn] = useState<{ day: string; sectorId: string; kind: CoveragePeriodKind; nonce: number } | null>(null);
   const [referenceTime] = useState(Date.now);
   const [weekPreview, setWeekPreview] = useState<{ clones: Shift[]; sectors: number; turns: number; range: string; blocked: number; duplicates: number; conflicts: number } | null>(null);
+  const [deleteRequest, setDeleteRequest] = useState<ScheduleDeletionSelection | null>(null);
   const orgId = store.activeOrganizationId;
   const canSeeFinancial = canViewPermission(store.currentUser, 'financeiro');
   const canEditFinancial = canEditPermission(store.currentUser, 'financeiro');
+  const canEditSchedule = canEditPermission(store.currentUser, 'escala');
   const units = store.units.filter(item => item.organizationId === orgId && item.status === 'active');
   const sectors = store.sectors.filter(item => item.organizationId === orgId && item.status === 'active');
   const doctors = store.doctors.filter(item => item.organizationId === orgId && item.status === 'active');
@@ -157,6 +161,17 @@ function Schedule() {
     })
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || (a.sector || '').localeCompare(b.sector || ''));
   const listDays = [...new Set(listShifts.map(item => item.date))];
+
+  function openDelete(scope: ScheduleDeletionScope, options: Partial<ScheduleDeletionSelection> = {}) {
+    if (!canEditSchedule) return;
+    setPageError('');
+    setDeleteRequest({ scope, from: view === 'week' ? week[0] : `${month}-01`, to: view === 'week' ? week[6] : `${month}-${String(daysInMonth).padStart(2, '0')}`, unitId, sectorId, kind: periodKind, doctorId, shiftId: '', ...options });
+  }
+
+  async function confirmDelete(targets: Shift[], scope: ScheduleDeletionScope): Promise<string | null> {
+    const ok = scope === 'doctor' ? await store.vacateShifts(targets.map(item => item.id)) : await store.deleteShifts(targets.map(item => item.id));
+    return ok ? null : useStore.getState().error || 'Não foi possível concluir a ação.';
+  }
 
   function navigate(amount: number) { setDate(view === 'week' ? addDays(date, amount * 7) : (() => { const next = new Date(date + 'T12:00:00'); next.setMonth(next.getMonth() + amount); return localDate(next); })()); }
   function openShift(shift?: Shift, sector = selectedSector, day = date, requestedKind?: CoveragePeriodKind, suggestedCount = 1) {
@@ -277,7 +292,7 @@ function Schedule() {
 
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card-bg p-3 lg:flex-row lg:items-end" aria-label="Controles da escala">
       <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row"><label className="nv-label min-w-0 flex-1">Unidade<select className="nv-input" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas as unidades</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label><label className="nv-label min-w-0 flex-1">Setor<select className="nv-input" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos os setores</option>{sectors.filter(item => !unitId || item.unitId === unitId).map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label></div>
-      <div className="flex flex-wrap items-center gap-2"><button className="nv-button-secondary" onClick={() => previewWeek('previous')} disabled={view !== 'week' || store.saving}><Copy size={15}/>Copiar semana anterior</button><button className="nv-button-secondary" onClick={() => previewWeek('current')} disabled={view !== 'week' || store.saving}><Copy size={15}/>Replicar para a próxima</button></div>
+      <div className="flex flex-wrap items-center gap-2"><button className="nv-button-secondary" onClick={() => previewWeek('previous')} disabled={view !== 'week' || store.saving}><Copy size={15}/>Copiar semana anterior</button><button className="nv-button-secondary" onClick={() => previewWeek('current')} disabled={view !== 'week' || store.saving}><Copy size={15}/>Replicar para a próxima</button>{canEditSchedule && <button type="button" onClick={() => openDelete('period')} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-secondary transition hover:border-danger/40 hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/>Excluir da escala</button>}</div>
     </section>
 
     <details className="rounded-lg border border-border bg-card-bg px-4 py-3 text-sm"><summary className="cursor-pointer font-medium text-text-secondary">Filtros avançados{employment || specialty || doctorId || periodKind || documentFilter !== 'all' ? ' · ativos' : ''}</summary><div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5"><label className="nv-label">Vínculo<select className="nv-input" value={employment} onChange={event => setEmployment(event.target.value as EmploymentType | '')}><option value="">Todos</option>{Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="nv-label">Especialidade<select className="nv-input" value={specialty} onChange={event => { setSpecialty(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas</option>{[...new Set([...sectors.flatMap(item => item.specialties), ...doctors.map(item => item.specialty)])].filter(Boolean).sort().map(item => <option key={item} value={item}>{item}</option>)}</select></label><label className="nv-label">Médico<select className="nv-input" value={doctorId} onChange={event => setDoctorId(event.target.value)}><option value="">Todos</option>{visibleDoctors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="nv-label">Turno<select className="nv-input" value={periodKind} onChange={event => setPeriodKind(event.target.value as CoveragePeriodKind | '')}><option value="">Todos</option><option value="day">Diurno</option><option value="night">Noturno</option></select></label><label className="nv-label">Documentação<select className="nv-input" value={documentFilter} onChange={event => setDocumentFilter(event.target.value as 'all' | 'regular' | 'pending')}><option value="all">Todas</option><option value="regular">Regular</option><option value="pending">Pendente</option></select></label></div></details>
@@ -295,7 +310,7 @@ function Schedule() {
     <div className="flex flex-wrap items-center justify-between gap-3"><div className="inline-flex flex-wrap rounded-lg border border-border bg-card-bg p-1"><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'week' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('week')}>Semana</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'month' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('month')}>Mês</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'doctor' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('doctor')}>Por médico</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === "specialty" ? "bg-primary text-text-inverse" : "text-text-secondary"}`} onClick={() => setView("specialty")}>Por especialidade</button><button className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${view === 'list' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('list')}><List size={15}/>Plantões</button></div><div className="flex flex-wrap items-center gap-1"><button aria-label="Período anterior" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(-1)}><ChevronLeft/></button><button className="min-w-16 px-3 text-sm font-semibold" onClick={() => setDate(today)}>Hoje</button><button aria-label="Próximo período" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(1)}><ChevronRight/></button><input aria-label="Ir para data" title="Ir para data" type="date" value={date} onChange={event => setDate(event.target.value)} className="nv-input ml-2 w-36 text-xs"/></div></div>
     {pageError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{pageError}</p>}
 
-    {view === 'list' ? <ScheduleList days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift}/> : view === 'doctor' ? <ScheduleDoctorView doctors={visibleDoctors} sectors={sectors} units={units} shifts={listShifts} allShifts={shifts} month={month} canSeeFinancial={canSeeFinancial} onEdit={openShift}/> : view === 'specialty' ? <ScheduleSpecialtyView doctors={doctors} shifts={listShifts} allShifts={shifts} month={month} onEdit={openShift}/> : <ScheduleCalendarView
+    {view === 'list' ? <ScheduleList days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift} onDelete={canEditSchedule ? item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date }) : undefined}/> : view === 'doctor' ? <ScheduleDoctorView doctors={visibleDoctors} sectors={sectors} units={units} shifts={listShifts} allShifts={shifts} month={month} canSeeFinancial={canSeeFinancial} onEdit={openShift}/> : view === 'specialty' ? <ScheduleSpecialtyView doctors={doctors} shifts={listShifts} allShifts={shifts} month={month} onEdit={openShift}/> : <ScheduleCalendarView
       key={focusedTurn?.nonce || 0}
       view={view}
       date={date}
@@ -315,13 +330,16 @@ function Schedule() {
       coverageFilter={coverageFilter}
       doctorWarnings={doctorDocumentState}
       canSeeFinancial={canSeeFinancial}
+      canEditSchedule={canEditSchedule}
       onSelectDate={setDate}
       onSelectSector={setSectorId}
       onOpenShift={(sector, shiftDate, kind, count) => openShift(undefined, sector, shiftDate, kind, count)}
       onEditShift={item => openShift(item)}
-      onDeleteShift={async item => { if (window.confirm('Excluir este posto da escala?')) await store.deleteShift(item.id); }}
+      onDeleteShift={item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date })}
+      onDeleteTurn={(sector, day, kind) => openDelete('turn', { from: day, to: day, unitId: sector.unitId, sectorId: sector.id, kind })}
       onCopyPeriod={copyPeriod}
     />}
+    {deleteRequest && <ScheduleDeleteDialog key={`${deleteRequest.scope}-${deleteRequest.shiftId}-${deleteRequest.from}-${deleteRequest.sectorId}`} initial={deleteRequest} organizationId={orgId} shifts={shifts} sectors={sectors} units={units} doctors={doctors} canSeeFinancial={canSeeFinancial} canEditFinancial={canEditFinancial} onClose={() => setDeleteRequest(null)} onConfirm={confirmDelete}/>}
     {weekPreview && <Dialog title="Prévia da semana" onClose={() => !store.saving && setWeekPreview(null)}><div className="space-y-4">
       <p className="text-sm text-text-secondary">Destino: <strong className="text-text-primary">{weekPreview.range}</strong></p>
       <div className="grid grid-cols-3 gap-3 border-y border-border py-4 text-center"><div><strong className="block text-xl tabular-nums">{weekPreview.sectors}</strong><span className="text-xs text-text-muted">setores</span></div><div><strong className="block text-xl tabular-nums">{weekPreview.turns}</strong><span className="text-xs text-text-muted">turnos</span></div><div><strong className="block text-xl tabular-nums">{weekPreview.clones.length}</strong><span className="text-xs text-text-muted">postos</span></div></div>
