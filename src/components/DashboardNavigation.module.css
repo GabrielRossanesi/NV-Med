@@ -1,9 +1,11 @@
 .sidebar,
 .workspace {
   --navigation-width: 240px;
-  --navigation-radius: 24px;
+  --navigation-radius: calc(var(--radius-2xl) + var(--radius-lg));
+  --navigation-item-radius: var(--radius-2xl);
+  --navigation-curve: 16px;
   --navigation-border: color-mix(in srgb, var(--primary) 16%, var(--sidebar-border));
-  --navigation-duration: 280ms;
+  --navigation-duration: 240ms;
   --navigation-easing: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -30,7 +32,10 @@
   border: 1px solid var(--navigation-border);
   border-right: 0;
   border-radius: var(--navigation-radius) 0 0 var(--navigation-radius);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 11%, transparent), transparent 65%), color-mix(in srgb, var(--sidebar-bg) 92%, transparent);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--primary) 16%, transparent), transparent 72%),
+    color-mix(in srgb, var(--sidebar-bg) 94%, transparent);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface-elevated) 30%, transparent);
   backdrop-filter: blur(24px);
   transition: width var(--navigation-duration) var(--navigation-easing), background-color 200ms, border-color 200ms;
 }
@@ -42,7 +47,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: 10px;
-  padding: 0 16px;
+  padding: 0 13px;
 }
 
 .brandLink {
@@ -54,21 +59,24 @@
 
 .brandMark {
   display: flex;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
-  border-radius: 13px;
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--primary) 12%, var(--sidebar-bg));
   color: var(--primary);
 }
 
 .brandCopy {
   display: block;
+  max-width: 120px;
   overflow: hidden;
   white-space: nowrap;
+  opacity: 1;
+  transition: opacity 140ms, max-width var(--navigation-duration) var(--navigation-easing);
 }
 
 .brandCopy strong {
@@ -91,8 +99,8 @@
 
 .toggle {
   display: flex;
-  width: 32px;
-  height: 38px;
+  width: 36px;
+  height: 44px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -100,6 +108,20 @@
   border-radius: 10px;
   color: var(--text-muted);
   cursor: pointer;
+  touch-action: manipulation;
+}
+
+.toggleBrandIcon,
+.toggleExpandIcon {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  transition: opacity 150ms;
+}
+
+.toggleExpandIcon {
+  opacity: 0;
 }
 
 .toggle:hover {
@@ -108,27 +130,44 @@
 }
 
 .sidebar[data-collapsed='true'] .brandCopy {
-  display: none;
+  max-width: 0;
+  opacity: 0;
+}
+
+.sidebar[data-collapsed='true'] .brandLink {
+  gap: 0;
+  pointer-events: none;
 }
 
 .sidebar[data-collapsed='true'] .toggle {
   position: absolute;
-  inset: 17px auto auto 16px;
-  width: 38px;
-  background: var(--sidebar-bg);
+  inset: 14px auto auto 13px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
+  border-radius: var(--radius-2xl);
+  background: color-mix(in srgb, var(--primary) 12%, var(--sidebar-bg));
   color: var(--primary);
-  opacity: 0;
-  transition: opacity 150ms;
-}
-
-.sidebar[data-collapsed='true'] .brand:hover .toggle,
-.sidebar[data-collapsed='true'] .brand:focus-within .toggle {
   opacity: 1;
 }
 
+.sidebar[data-collapsed='true'] .brand:hover .toggleExpandIcon,
+.sidebar[data-collapsed='true'] .brand:focus-within .toggleExpandIcon {
+  opacity: 1;
+}
+
+.sidebar[data-collapsed='true'] .brand:hover .toggleBrandIcon,
+.sidebar[data-collapsed='true'] .brand:focus-within .toggleBrandIcon {
+  opacity: 0;
+}
+
 @media (hover: none) {
-  .sidebar[data-collapsed='true'] .toggle {
+  .sidebar[data-collapsed='true'] .toggleExpandIcon {
     opacity: 1;
+  }
+
+  .sidebar[data-collapsed='true'] .toggleBrandIcon {
+    opacity: 0;
   }
 }
 
@@ -232,10 +271,10 @@ button.organizationControl:hover {
   display: flex;
   height: 44px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-top: 4px;
-  padding: 0 16px 0 14px;
-  border-radius: 14px 0 0 14px;
+  padding: 0 16px 0 8px;
+  border-radius: var(--navigation-item-radius) 0 0 var(--navigation-item-radius);
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -274,6 +313,31 @@ button.organizationControl:hover {
   outline-offset: -3px;
 }
 
+.navIconWell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.navItem:hover .navIconWell {
+  border-color: color-mix(in srgb, var(--primary) 12%, transparent);
+  background: var(--state-hover);
+}
+
+.navItem[aria-current='page'] .navIconWell {
+  border-color: color-mix(in srgb, var(--primary) 24%, transparent);
+  background: var(--state-selected);
+}
+
 .navIcon,
 .navLabel {
   position: relative;
@@ -282,18 +346,22 @@ button.organizationControl:hover {
 }
 
 .navLabel {
+  max-width: 160px;
   overflow: hidden;
   white-space: nowrap;
+  opacity: 1;
+  transition: opacity 140ms, max-width var(--navigation-duration) var(--navigation-easing);
 }
 
 .sidebar[data-collapsed='true'] .navLabel {
-  display: none;
+  max-width: 0;
+  opacity: 0;
 }
 
 .activeIndicator {
   position: absolute;
   inset: 0 -1px 0 0;
-  border-radius: 14px 0 0 14px;
+  border-radius: var(--navigation-item-radius) 0 0 var(--navigation-item-radius);
   background: var(--background);
   pointer-events: none;
 }
@@ -302,19 +370,19 @@ button.organizationControl:hover {
 .activeIndicator::after {
   position: absolute;
   right: 0;
-  width: 16px;
-  height: 16px;
+  width: var(--navigation-curve);
+  height: var(--navigation-curve);
   content: '';
 }
 
 .activeIndicator::before {
   bottom: 100%;
-  background: radial-gradient(circle at 0 0, transparent 16px, var(--background) 16.5px);
+  background: radial-gradient(circle at 0 0, transparent var(--navigation-curve), var(--background) calc(var(--navigation-curve) + 0.5px));
 }
 
 .activeIndicator::after {
   top: 100%;
-  background: radial-gradient(circle at 0 100%, transparent 16px, var(--background) 16.5px);
+  background: radial-gradient(circle at 0 100%, transparent var(--navigation-curve), var(--background) calc(var(--navigation-curve) + 0.5px));
 }
 
 .footer {
@@ -373,7 +441,12 @@ button.organizationControl:hover {
   .sidebar,
   .workspace,
   .toggle,
+  .toggleBrandIcon,
+  .toggleExpandIcon,
   .navItem,
+  .navIconWell,
+  .navLabel,
+  .brandCopy,
   .navItem::before {
     transition: none !important;
   }

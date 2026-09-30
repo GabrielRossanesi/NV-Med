@@ -60,13 +60,13 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between bg-header-bg/72 px-4 backdrop-blur-xl md:px-7">
+    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between bg-header-bg/72 px-4 backdrop-blur-xl md:px-7">
       <div className="min-w-0">
         <p className="truncate text-xs font-medium text-text-muted">{currentUser.type === 'saas_admin' && !isSimulating ? 'Administração SaaS' : 'Operação médica'}</p>
         <p className="truncate text-sm font-semibold text-text-primary">{activeOrg?.name || 'NV Med'}</p>
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         {isSimulating && (
           <div className="mr-1 flex items-center gap-2 rounded-lg border border-warning/25 bg-warning/10 px-2.5 py-1.5 text-xs font-semibold text-warning">
             <EyeOff className="h-3.5 w-3.5" />
@@ -84,8 +84,8 @@ export default function Header() {
 
         <button
           type="button"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition hover:bg-state-hover hover:text-text-primary"
+          onClick={() => setTheme(useStore.getState().theme === 'dark' ? 'light' : 'dark')}
+          className="flex h-11 w-11 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-lg text-text-muted transition hover:bg-state-hover hover:text-text-primary [&>*]:pointer-events-none"
           aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
         >
           {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
@@ -95,7 +95,8 @@ export default function Header() {
           <button
             type="button"
             onClick={() => { setProfileOpen((open) => !open); setLogoutError(''); }}
-            className="ml-1 flex items-center gap-2 rounded-xl py-1 pl-1 pr-1.5 transition hover:bg-state-hover"
+            className="ml-1 flex h-11 min-w-11 shrink-0 cursor-pointer touch-manipulation items-center gap-2 rounded-xl pl-1.5 pr-2 transition hover:bg-state-hover [&>*]:pointer-events-none"
+            aria-label={`Abrir menu do perfil de ${currentUser.name}`}
             aria-expanded={profileOpen}
             aria-haspopup="menu"
             aria-controls="header-profile-menu"

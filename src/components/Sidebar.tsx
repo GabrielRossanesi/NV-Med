@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import {
@@ -92,7 +92,7 @@ export default function Sidebar() {
   ].filter((group) => group.items.length > 0);
 
   const showTooltip = (label: string, element: HTMLElement) => {
-    if (!sidebarCollapsed) return;
+    if (!sidebarCollapsed || orgMenuOpen || profileMenuOpen) return;
     const bounds = element.getBoundingClientRect();
     setTooltip({ label, top: bounds.top + bounds.height / 2, left: bounds.right + 12 });
   };
@@ -106,8 +106,42 @@ export default function Sidebar() {
   const switchOrganization = (organizationId: string) => {
     setActiveOrganizationId(organizationId);
     setOrgMenuOpen(false);
+    organizationTrigger.current?.focus();
     router.refresh();
   };
+
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Tab') {
+      const trigger = event.currentTarget.id === 'sidebar-organization-list'
+        ? organizationTrigger : profileTrigger;
+      trigger.current?.focus();
+      setOrgMenuOpen(false);
+      setProfileMenuOpen(false);
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const options = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+      '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)',
+    ));
+    if (!options.length) return;
+    event.preventDefault();
+    const index = options.indexOf(document.activeElement as HTMLElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+    options[next].focus();
+  };
+
+  useEffect(() => {
+    const menuId = orgMenuOpen ? 'sidebar-organization-list' : profileMenuOpen ? 'sidebar-profile-menu' : null;
+    if (!menuId) return;
+    const menu = document.getElementById(menuId);
+    const frame = requestAnimationFrame(() => {
+      const selected = menu?.querySelector<HTMLElement>('[aria-checked="true"]');
+      const first = menu?.querySelector<HTMLElement>('[role="menuitem"], [role="menuitemradio"]');
+      (selected || first)?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [orgMenuOpen, profileMenuOpen]);
 
   useEffect(() => {
     const nav = navigation.current;
@@ -158,9 +192,9 @@ export default function Sidebar() {
     <>
       <motion.aside layoutRoot className={styles.sidebar} data-collapsed={sidebarCollapsed} aria-label="Menu do NV Med">
         <div className={styles.brand}>
-          <Link href="/dashboard" onNavigate={closeMenus} className={styles.brandLink} aria-label="NV Med — início">
+          <Link href="/dashboard" onNavigate={closeMenus} className={styles.brandLink} aria-label="NV Med — início" tabIndex={sidebarCollapsed ? -1 : undefined} aria-hidden={sidebarCollapsed}>
             <span className={styles.brandMark}>
-              <Activity className="h-[18px] w-[18px]" />
+              <Activity className="h-5 w-5" aria-hidden="true" />
             </span>
             <span className={styles.brandCopy} aria-hidden={sidebarCollapsed}>
               <strong>NV Med</strong>
@@ -176,7 +210,10 @@ export default function Sidebar() {
             aria-controls="desktop-navigation"
             title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
           >
-            {sidebarCollapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
+            {sidebarCollapsed ? <>
+              <Activity className={styles.toggleBrandIcon} aria-hidden="true" />
+              <PanelLeftOpen className={styles.toggleExpandIcon} aria-hidden="true" />
+            </> : <PanelLeftClose className="pointer-events-none h-[18px] w-[18px]" aria-hidden="true" />}
           </button>
         </div>
 
@@ -192,6 +229,7 @@ export default function Sidebar() {
               onBlur={() => setTooltip(null)}
               className={styles.organizationControl}
               aria-label={`Selecionar empresa. Empresa ativa: ${activeOrg?.name || 'nenhuma'}`}
+              aria-haspopup="menu"
               aria-expanded={orgMenuOpen}
               aria-controls="sidebar-organization-list"
             >
@@ -215,14 +253,15 @@ export default function Sidebar() {
           )}
 
           {orgMenuOpen && currentUser.type === 'saas_admin' && (
-            <div id="sidebar-organization-list" className={styles.organizationMenu}>
+            <div id="sidebar-organization-list" role="menu" aria-label="Selecionar empresa" onKeyDown={handleMenuKeyDown} className={styles.organizationMenu}>
               <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Selecionar empresa</p>
               {organizations.map((org) => (
                 <button
                   type="button"
                   key={org.id}
                   onClick={() => switchOrganization(org.id)}
-                  aria-pressed={org.id === activeOrg?.id}
+                  role="menuitemradio"
+                  aria-checked={org.id === activeOrg?.id}
                   className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-state-hover ${org.id === activeOrg?.id ? 'bg-state-selected text-primary' : 'text-text-secondary'}`}
                 >
                   <span className="min-w-0 flex-1 truncate">{org.name}</span>
@@ -248,6 +287,7 @@ export default function Sidebar() {
                       href={item.href}
                       onNavigate={closeMenus}
                       aria-label={item.name}
+                      aria-describedby={sidebarCollapsed && tooltip?.label === item.name ? 'sidebar-navigation-tooltip' : undefined}
                       aria-current={active ? 'page' : undefined}
                       onMouseEnter={(event) => showTooltip(item.name, event.currentTarget)}
                       onMouseLeave={() => setTooltip(null)}
@@ -261,7 +301,9 @@ export default function Sidebar() {
                         aria-hidden="true"
                         transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 38 }}
                       />}
-                      <Icon className={`${styles.navIcon} h-[19px] w-[19px]`} aria-hidden="true" />
+                      <span className={styles.navIconWell}>
+                        <Icon className={`${styles.navIcon} h-[19px] w-[19px]`} aria-hidden="true" />
+                      </span>
                       <span className={styles.navLabel} aria-hidden={sidebarCollapsed}>{item.name}</span>
                     </Link>
                   );
@@ -283,6 +325,7 @@ export default function Sidebar() {
               onBlur={() => setTooltip(null)}
               className={`group/profile relative flex w-full items-center rounded-xl text-left transition hover:bg-state-hover ${sidebarCollapsed ? 'h-11 justify-center' : 'gap-2.5 p-2'}`}
               aria-label="Abrir menu do perfil"
+              aria-haspopup="menu"
               aria-expanded={profileMenuOpen}
               aria-controls="sidebar-profile-menu"
             >
@@ -299,15 +342,15 @@ export default function Sidebar() {
             </button>
 
             {profileMenuOpen && (
-              <div id="sidebar-profile-menu" className={`absolute bottom-[calc(100%+0.5rem)] z-50 w-64 rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong ${sidebarCollapsed ? 'left-full ml-3' : 'left-0'}`}>
+              <div id="sidebar-profile-menu" role="menu" aria-label="Menu do perfil" onKeyDown={handleMenuKeyDown} className={`absolute bottom-[calc(100%+0.5rem)] z-50 w-64 rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong ${sidebarCollapsed ? 'left-full ml-3' : 'left-0'}`}>
                 <div className="border-b border-border px-2 pb-2.5 pt-1">
                   <p className="truncate text-sm font-semibold text-text-primary">{currentUser.name}</p>
                   <p className="mt-0.5 truncate text-[11px] text-text-muted">{currentUser.email}</p>
                 </div>
-                <Link href="/perfil" onNavigate={closeMenus} className="mt-1 flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-text-secondary transition hover:bg-state-hover hover:text-text-primary">
+                <Link role="menuitem" href="/perfil" onNavigate={closeMenus} className="mt-1 flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-text-secondary transition hover:bg-state-hover hover:text-text-primary">
                   <UserRound className="h-4 w-4" /> Meu perfil
                 </Link>
-                <button type="button" onClick={logout} disabled={logoutPending} className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger transition hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
+                <button role="menuitem" type="button" onClick={logout} disabled={logoutPending} className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger transition hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
                   {logoutPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} {logoutPending ? 'Saindo…' : 'Sair da conta'}
                 </button>
                 {logoutError && <p role="alert" className="px-3 pb-1 pt-2 text-xs leading-relaxed text-danger">{logoutError}</p>}
@@ -354,7 +397,7 @@ export default function Sidebar() {
         </Link>
       </nav>
       {sidebarCollapsed && tooltip && createPortal(
-        <span role="tooltip" className={styles.tooltip} style={{ top: tooltip.top, left: tooltip.left }}>{tooltip.label}</span>,
+        <span id="sidebar-navigation-tooltip" role="tooltip" className={styles.tooltip} style={{ top: tooltip.top, left: tooltip.left }}>{tooltip.label}</span>,
         document.body,
       )}
     </>
