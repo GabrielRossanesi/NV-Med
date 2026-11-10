@@ -16,12 +16,12 @@ type Shift = {
 };
 type Application = Omit<Shift, 'status'> & { status: ApplicationStatus };
 const shiftStyles = {
-  open: { label: 'Vaga aberta', color: 'text-danger', icon: AlertCircle },
-  exchange: { label: 'Disponível para troca', color: 'text-warning', icon: Repeat2 },
-  confirmed: { label: 'Confirmado', color: 'text-success', icon: CheckCircle2 },
-  cancelled: { label: 'Cancelado', color: 'text-text-muted', icon: XCircle },
-  completed: { label: 'Concluído', color: 'text-text-muted', icon: CheckCircle2 },
-  pending: { label: 'Aguardando confirmação', color: 'text-warning', icon: Clock3 },
+  open: { label: 'Vaga aberta', color: 'bg-danger/10 text-danger', icon: AlertCircle },
+  exchange: { label: 'Disponível para troca', color: 'bg-warning/10 text-warning', icon: Repeat2 },
+  confirmed: { label: 'Confirmado', color: 'bg-success/10 text-success', icon: CheckCircle2 },
+  cancelled: { label: 'Cancelado', color: 'bg-surface-muted text-text-secondary', icon: XCircle },
+  completed: { label: 'Concluído', color: 'bg-surface-muted text-text-secondary', icon: CheckCircle2 },
+  pending: { label: 'Aguardando confirmação', color: 'bg-warning/10 text-warning', icon: Clock3 },
 };
 const applicationLabels: Record<ApplicationStatus, string> = {
   pending: 'Aguardando decisão', selected: 'Aprovada', not_selected: 'Não selecionada', cancelled: 'Cancelada',
@@ -35,7 +35,7 @@ function shiftDate(year: number, month: number, day: number) {
 
 function StatusLabel({ status }: { status: Status }) {
   const { icon: Icon, label, color } = shiftStyles[status];
-  return <span className={'inline-flex items-center gap-1.5 text-xs font-semibold ' + color}><Icon size={15}/>{label}</span>;
+  return <span className={'nv-badge ' + color}><Icon size={15}/>{label}</span>;
 }
 
 function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () => void; onSaved: (message: string) => void }) {
@@ -74,7 +74,7 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
       {shift.notes && <p className="whitespace-pre-wrap text-sm">{shift.notes}</p>}
       {shift.application && <p className="text-sm">Candidatura · {applicationLabels[shift.application]}</p>}
       {canExchange && <p className="text-sm text-text-muted">Sua responsabilidade pelo plantão termina quando a coordenação aprovar um substituto.</p>}
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
       {(canExchange || canApply) && <button type="button" className="nv-button" disabled={busy} onClick={() => void act()}>
         {busy ? 'Registrando…' : canExchange ? (cancel ? 'Cancelar solicitação de troca' : 'Solicitar troca') : (cancel ? 'Cancelar candidatura' : 'Enviar candidatura')}
       </button>}
@@ -127,55 +127,57 @@ export default function PortalSchedule() {
     existing.push(shift);
     grouped.set(shift.date, existing);
   }
-  return <section className="space-y-4 rounded-2xl border border-border bg-card-bg p-4 sm:p-6">
-    <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays size={21} className="text-primary"/>Plantões</h2>
-    <nav aria-label="Visualizações dos plantões" className="flex flex-wrap gap-2">
+  return <section className="nv-panel space-y-4 p-4 sm:p-6">
+    <h2 className="nv-section-title flex items-center gap-2"><CalendarDays size={21} className="text-primary"/>Plantões</h2>
+    <nav aria-label="Visualizações dos plantões" className="nv-segment">
       {(['agenda', 'schedule', 'applications'] as const).map(value => <button key={value} type="button"
-        aria-pressed={tab === value} className={tab === value ? 'nv-button' : 'nv-button-secondary'} onClick={() => {
+        aria-pressed={tab === value} onClick={() => {
           if (tab === value) return;
           setTab(value); setSchedule(null); setApplications(null); setError(''); setNotice('');
         }}>{value === 'agenda' ? 'Minha agenda' : value === 'schedule' ? 'Escalas' : 'Minhas candidaturas'}</button>)}
     </nav>
-    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
-    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {notice && <p role="status" className="nv-feedback text-success">{notice}</p>}
+    {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
     {tab === 'applications' ? <>
       {!applications && !error && <p role="status" className="text-sm text-text-muted">Carregando candidaturas…</p>}
-      {applications?.length === 0 && <p className="text-sm text-text-muted">Suas candidaturas aparecerão aqui.</p>}
+      {applications?.length === 0 && <p className="nv-empty">Suas candidaturas aparecerão aqui.</p>}
       <ul className="divide-y divide-border">{applications?.map(item => <li key={item.id} className="space-y-1 py-3">
         <p className="font-semibold">{item.unit} · {item.sector}</p><p className="text-sm text-text-muted">{displayDate(item.date)} · {item.start_time}–{item.end_time} · {item.organization}</p>
-        <p className="text-sm font-medium">{applicationLabels[item.status]}</p>
+        <p className="nv-badge">{applicationLabels[item.status]}</p>
       </li>)}</ul>
-    </> : <>
-      <div className="flex items-center justify-between">
-        <button className="nv-button-secondary" type="button" onClick={() => navigate(-1)} aria-label="Mês anterior"><ChevronLeft size={18}/></button>
-        <h3 className="font-semibold capitalize">{monthLabel(year, monthNumber)}</h3>
-        <button className="nv-button-secondary" type="button" onClick={() => navigate(1)} aria-label="Próximo mês"><ChevronRight size={18}/></button>
+    </> : <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <button className="nv-button-secondary size-11 shrink-0 p-0" type="button" onClick={() => navigate(-1)} aria-label="Mês anterior"><ChevronLeft size={18}/></button>
+          <h3 className="text-center text-sm font-semibold capitalize sm:text-base">{monthLabel(year, monthNumber)}</h3>
+          <button className="nv-button-secondary size-11 shrink-0 p-0" type="button" onClick={() => navigate(1)} aria-label="Próximo mês"><ChevronRight size={18}/></button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
+          {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(value => <span key={value} className="py-1 text-center text-xs font-medium text-text-muted">{value}</span>)}
+          {Array.from({ length: firstWeekday }, (_, i) => <span key={'blank-' + i} aria-hidden="true"/>)}
+          {Array.from({ length: days }, (_, i) => {
+            const date = shiftDate(year, monthNumber, i + 1);
+            const count = grouped.get(date)?.length || 0;
+            return <button key={date} type="button" aria-pressed={day === date}
+              aria-current={today === date ? 'date' : undefined} aria-label={displayDate(date) + ', ' + count + ' plantões'}
+              className={'min-h-11 rounded-lg border text-sm tabular-nums transition-colors ' + (day === date ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border bg-background hover:border-primary/45 hover:bg-state-hover')}
+              onClick={() => setDay(date)}>{i + 1}{count > 0 && <span className="block text-[10px] font-semibold text-primary">{count}</span>}</button>;
+          })}
+        </div>
       </div>
-      <div className="grid grid-cols-7 gap-1 sm:gap-2">
-        {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(value => <span key={value} className="py-1 text-center text-xs text-text-muted">{value}</span>)}
-        {Array.from({ length: firstWeekday }, (_, i) => <span key={'blank-' + i} aria-hidden="true"/>)}
-        {Array.from({ length: days }, (_, i) => {
-          const date = shiftDate(year, monthNumber, i + 1);
-          const count = grouped.get(date)?.length || 0;
-          return <button key={date} type="button" aria-pressed={day === date}
-            aria-current={today === date ? 'date' : undefined} aria-label={displayDate(date) + ', ' + count + ' plantões'}
-            className={'min-h-11 rounded-lg border text-sm tabular-nums ' + (day === date ? 'border-primary bg-primary/10 font-bold' : 'border-border hover:bg-state-hover')}
-            onClick={() => setDay(date)}>{i + 1}{count > 0 && <span className="block text-[10px] font-semibold text-primary">{count}</span>}</button>;
-        })}
-      </div>
-      <div className="border-t border-border pt-3">
+      <div className="min-w-0 space-y-3 rounded-xl border border-border bg-background p-3 sm:p-4">
         <h3 className="text-sm font-semibold capitalize">{displayDate(day)}</h3>
         {!schedule && !error && <p role="status" className="mt-2 text-sm text-text-muted">Carregando plantões…</p>}
-        {schedule && !grouped.get(day)?.length && <p className="mt-2 text-sm text-text-muted">Nenhum plantão nesta data.</p>}
-        <ul className="divide-y divide-border">{grouped.get(day)?.map(item => <li key={item.id}>
-          <button type="button" className="flex w-full flex-wrap items-center justify-between gap-3 rounded-lg p-3 text-left hover:bg-state-hover" onClick={() => setSelected(item)}>
-            <span><strong className="block text-sm">{item.start_time}–{item.end_time} · {item.unit}</strong>
-              <span className="block text-xs text-text-muted">{item.organization} · {item.sector}{item.specialty && ' · ' + item.specialty}</span></span>
+        {schedule && !grouped.get(day)?.length && <p className="text-sm text-text-muted">Nenhum plantão nesta data.</p>}
+        <ul className="space-y-2">{grouped.get(day)?.map(item => <li key={item.id}>
+          <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card-bg p-3 text-left transition-colors hover:border-primary/45 hover:bg-table-row-hover" onClick={() => setSelected(item)}>
+            <span><strong className="block text-sm tabular-nums">{item.start_time}–{item.end_time} · {item.unit}</strong>
+              <span className="mt-1 block text-xs text-text-muted">{item.organization} · {item.sector}{item.specialty && ' · ' + item.specialty}</span></span>
             <StatusLabel status={item.status}/>
           </button>
         </li>)}</ul>
       </div>
-    </>}
+    </div>}
     {selected && <ShiftDetail shift={selected} onClose={() => setSelected(null)} onSaved={message => {
       setSelected(null); setNotice(message); setRevision(value => value + 1);
     }}/>}

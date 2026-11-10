@@ -30,7 +30,7 @@ export default async function DashboardLayout({
         <DashboardChrome>
           <Header />
           <SaveFeedback />
-          <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
+          <main className="nv-content mx-auto w-full min-w-0 max-w-[90rem] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             {children}
           </main>
         </DashboardChrome>

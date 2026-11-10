@@ -107,7 +107,7 @@ function SettingsForm({
                   disabled={!canManageSettings || saving}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
               </div>
               <div className="space-y-1.5">
@@ -118,7 +118,7 @@ function SettingsForm({
                   disabled
                   value={cnpj}
                   onChange={(e) => setCnpj(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
                 <span className="block text-[10px] font-normal text-text-muted">Gerenciado pelo administrador SaaS.</span>
               </div>
@@ -130,7 +130,7 @@ function SettingsForm({
                   disabled={!canManageSettings || saving}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
               </div>
               <div className="space-y-1.5">
@@ -141,7 +141,7 @@ function SettingsForm({
                   disabled={!canManageSettings || saving}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-card-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
               </div>
             </div>
@@ -154,7 +154,7 @@ function SettingsForm({
                 disabled={!canManageSettings || saving}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full px-3 py-2 bg-background border border-card-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                className="nv-input"
               />
             </div>
 
@@ -170,7 +170,7 @@ function SettingsForm({
               <button
                 type="submit"
                 disabled={!canManageSettings || saving}
-                className="bg-primary hover:bg-primary-hover text-white rounded-lg py-2 px-4 font-semibold text-xs transition duration-200 cursor-pointer"
+                className="bg-primary hover:bg-primary-hover text-text-inverse rounded-lg py-2 px-4 font-semibold text-xs transition duration-200 cursor-pointer"
               >
                 {saving ? 'Salvando…' : 'Salvar Alterações'}
               </button>
@@ -197,7 +197,7 @@ function SettingsForm({
                 placeholder="Ex: Neurologia, Ortopedia..."
                 value={newSpec}
                 onChange={(e) => setNewSpec(e.target.value)}
-                className="flex-1 px-3 py-2 bg-background border border-card-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                className="nv-input flex-1"
               />
               <button
                 type="submit"
@@ -320,7 +320,7 @@ export default function SettingsPage() {
       <div className="space-y-6 animate-in fade-in duration-300">
         {/* Page Heading */}
         <div>
-          <h2 className="text-2xl font-bold text-text-primary tracking-tight">Perfil da empresa</h2>
+          <h2 className="nv-page-title">Perfil da empresa</h2>
           <p className="text-sm text-text-muted mt-1">
             Dados da empresa, especialidades e exigências de documentação médica.
           </p>

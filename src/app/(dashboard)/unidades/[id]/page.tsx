@@ -84,7 +84,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
     <header>
       <Link href="/unidades" className="mb-3 inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-primary"><ArrowLeft size={16}/>Unidades</Link>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-xs font-semibold uppercase tracking-widest text-primary">{unit.status === 'active' ? 'Unidade ativa' : 'Unidade inativa'}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{unit.name}</h1><p className="mt-2 text-sm text-text-secondary">{unit.city} · {unit.state} · {responsibleCompany?.cnpj || unit.cnpj}</p></div>
+        <div><p className="text-xs font-semibold uppercase tracking-widest text-primary">{unit.status === 'active' ? 'Unidade ativa' : 'Unidade inativa'}</p><h1 className="nv-page-title mt-1">{unit.name}</h1><p className="mt-2 text-sm text-text-secondary">{unit.city} · {unit.state} · {responsibleCompany?.cnpj || unit.cnpj}</p></div>
         <Link href={`/escala?unitId=${unit.id}`} className="nv-button-secondary"><CalendarDays size={16}/>Abrir escala</Link>
       </div>
     </header>

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
 import { createClient } from '@/lib/supabase/client';
@@ -25,8 +26,11 @@ export default function StoreHydrator({ children }: { children: React.ReactNode 
     });
     return () => { active = false; subscription?.data.subscription.unsubscribe(); };
   }, []);
-  useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); document.documentElement.style.colorScheme = theme; }, [theme]);
-  if (error) return <main className="min-h-screen flex items-center justify-center p-6"><div className="max-w-md rounded-xl border border-border bg-card-bg p-8 space-y-4"><h1 className="text-xl font-semibold">Não foi possível abrir o painel</h1><p role="alert" className="text-text-secondary">{error}</p><button className="nv-button" onClick={() => window.location.reload()}>Tentar novamente</button><button className="nv-button-secondary ml-2" onClick={async () => { await createClient()?.auth.signOut(); window.location.replace('/login'); }}>Voltar ao login</button></div></main>;
-  if (!ready) return <div role="status" className="min-h-screen flex items-center justify-center text-text-secondary">Carregando seus dados…</div>;
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    return () => document.documentElement.classList.remove('dark');
+  }, [theme]);
+  if (error) return <main className="min-h-screen flex items-center justify-center p-6"><div className="nv-panel max-w-md space-y-4 p-6"><h1 className="text-xl font-semibold">Não foi possível abrir o painel</h1><p role="alert" className="text-text-secondary">{error}</p><div className="flex flex-wrap gap-2"><button className="nv-button" onClick={() => window.location.reload()}>Tentar novamente</button><button className="nv-button-secondary" onClick={async () => { await createClient()?.auth.signOut(); window.location.replace('/login'); }}>Voltar ao login</button></div></div></main>;
+  if (!ready) return <div role="status" className="flex min-h-svh items-center justify-center gap-3 text-sm text-text-secondary"><LoaderCircle size={18} className="text-primary motion-safe:animate-spin" aria-hidden="true"/>Carregando seus dados…</div>;
   return <>{children}</>;
 }

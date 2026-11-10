@@ -7,11 +7,12 @@ import {
   Building2,
   Calendar,
   Clock,
-  AlertTriangle,
+  ArrowUpRight,
   ChevronRight,
   FileCheck2,
   UserCheck,
-  Settings
+  Settings,
+  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { localDate, sectorCoveragePeriods, shiftTouchesDay } from '@/lib/scheduling';
@@ -20,7 +21,36 @@ import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovern
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 import OperationalIndicators from '@/components/OperationalIndicators';
 import NotificationInbox from '@/components/NotificationInbox';
+import UserAvatar from '@/components/UserAvatar';
 import { canViewPermission } from '@/lib/permissions';
+
+type MetricProps = {
+  href: string;
+  label: string;
+  value: React.ReactNode;
+  detail: string;
+  icon: LucideIcon;
+  tone: string;
+  highlight?: boolean;
+};
+
+function DashboardMetric({ href, label, value, detail, icon: Icon, tone, highlight }: MetricProps) {
+  return (
+    <Link href={href} className={`nv-panel group flex flex-col gap-3 p-4 transition-shadow hover:shadow-medium motion-reduce:transition-none sm:p-5 ${highlight ? 'border-t-2 border-t-primary' : ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className={`inline-grid size-9 shrink-0 place-items-center rounded-xl bg-current/10 ${tone}`}>
+          <Icon size={18} aria-hidden="true" />
+        </span>
+        <ArrowUpRight size={16} className="shrink-0 text-text-muted group-hover:text-primary" aria-hidden="true" />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-text-secondary">{label}</p>
+        <p className="mt-1 text-3xl font-semibold leading-none tracking-tight tabular-nums">{value}</p>
+      </div>
+      <p className={`mt-auto text-xs font-medium leading-relaxed ${tone}`}>{detail}</p>
+    </Link>
+  );
+}
 
 export default function DashboardPage() {
   const { activeOrganizationId, organizations, doctors, units, sectors, shifts, documents, currentUser } = useStore();
@@ -106,24 +136,24 @@ export default function DashboardPage() {
   const isOrgEmpty = orgDoctors.length === 0 && orgUnits.length === 0;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Welcome Heading */}
-      <div>
-        <h2 className="text-2xl font-bold text-text-primary tracking-tight">
-          Painel de Controle
-        </h2>
-        <p className="text-sm text-text-muted mt-1">
-          Balanço geral da operação médica para <span className="font-semibold text-text-secondary">{activeOrg?.name}</span>.
-        </p>
-      </div>
-
-      <OperationalIndicators key={activeOrganizationId} organization={activeOrganizationId} />
-      <NotificationInbox/>
+    <div className="space-y-6 lg:space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="nv-page-title">Painel de controle</h1>
+          <p className="mt-2 text-sm text-text-muted">
+            Balanço geral da operação médica{activeOrg && <> para <span className="font-medium text-text-secondary">{activeOrg.name}</span></>}.
+          </p>
+        </div>
+        <time dateTime={today} className="nv-badge gap-2 px-3 py-2">
+          <Calendar size={15} className="text-accent" aria-hidden="true" />
+          {new Date(today + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </time>
+      </header>
 
       {isOrgEmpty ? (
-        <div className="bg-card-bg border border-border p-8 rounded-2xl shadow-soft text-center max-w-3xl mx-auto space-y-6 my-8">
+        <div className="nv-panel space-y-5 p-5 text-center sm:p-8">
           <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Building2 className="h-8 w-8 animate-pulse" />
+            <Building2 className="h-8 w-8" />
           </div>
           <div>
             <h3 className="text-xl font-bold text-text-primary">Bem-vindo ao NV Med!</h3>
@@ -139,7 +169,7 @@ export default function DashboardPage() {
             >
               <Users className="h-6 w-6 text-primary mb-2 group-hover:scale-110 transition" />
               <span className="text-xs font-bold text-text-primary">Corpo Clínico</span>
-              <span className="text-[10px] text-text-muted mt-1">Cadastrar primeiro médico</span>
+              <span className="text-xs text-text-muted mt-1">Cadastrar primeiro médico</span>
             </Link>
 
             <Link
@@ -148,7 +178,7 @@ export default function DashboardPage() {
             >
               <Building2 className="h-6 w-6 text-primary mb-2 group-hover:scale-110 transition" />
               <span className="text-xs font-bold text-text-primary">Unidades</span>
-              <span className="text-[10px] text-text-muted mt-1">Cadastrar primeira unidade</span>
+              <span className="text-xs text-text-muted mt-1">Cadastrar primeira unidade</span>
             </Link>
 
             <Link
@@ -157,93 +187,57 @@ export default function DashboardPage() {
             >
               <Settings className="h-6 w-6 text-primary mb-2 group-hover:scale-110 transition" />
               <span className="text-xs font-bold text-text-primary">Configurações</span>
-              <span className="text-[10px] text-text-muted mt-1">Ajustar dados da empresa</span>
+              <span className="text-xs text-text-muted mt-1">Ajustar dados da empresa</span>
             </Link>
           </div>
         </div>
       ) : (
         <>
-          {/* KPI Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Doctors */}
-            <Link
+          <section aria-label="Indicadores da operação" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3 sm:gap-4">
+            <DashboardMetric
               href={`/escala?date=${today}`}
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
-            >
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Furos de cobertura hoje</span>
-                <h3 className={`text-2xl font-bold mt-1 ${gapsToday ? 'text-danger' : 'text-success'}`}>{gapsToday}</h3>
-                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${gapsToday ? 'text-danger' : 'text-success'}`}>
-                  <AlertTriangle className="h-3 w-3" />
-                  {gapsToday ? 'Abrir escala e preencher' : 'Cobertura planejada completa'}
-                </span>
-              </div>
-              <div className={`p-2.5 rounded-xl ${gapsToday ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
-                <Calendar className="h-5 w-5" />
-              </div>
-            </Link>
-
-            {/* Document Alerts */}
-            <Link
+              label="Furos de cobertura hoje"
+              value={gapsToday}
+              detail={gapsToday ? 'Abrir escala e preencher' : 'Cobertura planejada completa'}
+              icon={Calendar}
+              tone={gapsToday ? 'text-danger' : 'text-success'}
+              highlight
+            />
+            <DashboardMetric
               href={`/escala?date=${today}`}
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-warning/55 hover:shadow-medium group"
-            >
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Confirmações de hoje</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{pendingToday}</h3>
-                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${pendingToday ? 'text-warning' : 'text-success'}`}>
-                  <Clock className="h-3 w-3" />
-                  {pendingToday ? 'Aguardando profissionais' : 'Nenhuma confirmação pendente'}
-                </span>
-              </div>
-              <div className={`p-2.5 rounded-xl ${pendingToday ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
-                <UserCheck className="h-5 w-5" />
-              </div>
-            </Link>
-
-            {canSeeDocuments && <Link
-              href="/documentos?status=critical"
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
-            >
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Pendências documentais</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{pendingDocsCount}</h3>
-                <span className={`text-[10px] font-semibold flex items-center gap-1 mt-1.5 ${pendingDocsCount ? 'text-danger' : 'text-success'}`}>
-                  <FileCheck2 className="h-3 w-3" />
-                  {pendingDocsCount ? 'Revisar documentos' : 'Documentação em dia'}
-                </span>
-              </div>
-              <div className={`p-2.5 rounded-xl ${pendingDocsCount ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
-                <FileCheck2 className="h-5 w-5" />
-              </div>
-            </Link>}
-
-            {/* Month Shifts */}
-            <Link
+              label="Confirmações de hoje"
+              value={pendingToday}
+              detail={pendingToday ? 'Aguardando profissionais' : 'Nenhuma confirmação pendente'}
+              icon={UserCheck}
+              tone={pendingToday ? 'text-warning' : 'text-success'}
+            />
+            {canSeeDocuments && (
+              <DashboardMetric
+                href="/documentos?status=critical"
+                label="Pendências documentais"
+                value={pendingDocsCount}
+                detail={pendingDocsCount ? 'Revisar documentos' : 'Documentação em dia'}
+                icon={FileCheck2}
+                tone={pendingDocsCount ? 'text-danger' : 'text-success'}
+              />
+            )}
+            <DashboardMetric
               href="/escala"
-              className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-primary/50 hover:shadow-medium group"
-            >
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Estrutura da operação</span>
-                <h3 className="text-2xl font-bold text-text-primary mt-1">{totalUnits} <span className="text-sm font-medium text-text-muted">unid.</span> · {orgSectors.length} <span className="text-sm font-medium text-text-muted">set.</span></h3>
-                <span className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1.5 group-hover:underline">
-                  <Clock className="h-3 w-3" />
-                  {activeDoctors}/{totalDoctors} médicos ativos · {shiftsThisMonth} postos no mês
-                </span>
-              </div>
-              <div className="bg-primary/10 text-primary p-2.5 rounded-xl group-hover:bg-primary group-hover:text-text-inverse transition-colors">
-                <Calendar className="h-5 w-5" />
-              </div>
-            </Link>
-          </div>
+              label="Estrutura da operação"
+              value={<>{totalUnits} <span className="text-sm font-medium text-text-muted">unid.</span> · {orgSectors.length} <span className="text-sm font-medium text-text-muted">set.</span></>}
+              detail={`${activeDoctors}/${totalDoctors} médicos ativos · ${shiftsThisMonth} postos no mês`}
+              icon={Building2}
+              tone="text-primary"
+            />
+          </section>
 
           {/* Main Operational grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid gap-5 xl:grid-cols-3">
             
             {/* Upcoming Shifts list */}
-            <div className="bg-card-bg rounded-xl border border-card-border overflow-hidden lg:col-span-2 flex flex-col justify-between">
-              <div className="p-5 border-b border-border flex items-center justify-between">
-                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Próximos Plantões Escalados</h3>
+            <div className="nv-panel overflow-hidden xl:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-4 sm:px-5">
+                <h3 className="nv-section-title">Próximos plantões escalados</h3>
                 <Link href="/escala" className="text-xs text-primary font-semibold hover:underline flex items-center gap-0.5">
                   Ver escala completa <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
@@ -256,41 +250,43 @@ export default function DashboardPage() {
                     const unit = orgUnits.find((u) => u.id === shift.unitId);
 
                     const statusColors = {
-                      open: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400',
-                      confirmed: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
-                      pending: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
-                      completed: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400',
-                      cancelled: 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400',
+                      open: 'bg-warning/10 text-warning',
+                      confirmed: 'bg-success/10 text-success',
+                      pending: 'bg-warning/10 text-warning',
+                      completed: 'bg-info/10 text-info',
+                      cancelled: 'bg-danger/10 text-danger',
                     };
 
                     return (
                       <Link
                         key={shift.id}
                         href={`/escala?date=${shift.date}${shift.doctorId ? `&doctorId=${shift.doctorId}` : ''}`}
-                        className="p-4 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition cursor-pointer group"
+                        className="group flex flex-wrap items-center justify-between gap-3 px-4 py-4 text-sm transition-colors hover:bg-table-row-hover focus-visible:outline-offset-[-3px] sm:px-5"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                            {doctor?.name.charAt(4) || 'D'}
-                          </div>
+                        <div className="flex min-w-0 items-center gap-3">
+                          {doctor ? <UserAvatar name={doctor.name} /> : (
+                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-warning/10 text-warning">
+                              <Calendar size={16} aria-hidden="true" />
+                            </span>
+                          )}
                           <div>
                             <p className="font-semibold text-text-secondary group-hover:text-primary transition-colors">{doctor?.name || 'Vaga aberta'}</p>
-                            <p className="text-[10px] text-text-muted">{shift.specialty || doctor?.specialty || 'Sem especialidade'} • {unit?.name}</p>
+                            <p className="text-xs text-text-muted">{shift.specialty || doctor?.specialty || 'Sem especialidade'} • {unit?.name}</p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="tabular-nums sm:text-right">
                             <p className="font-semibold text-text-secondary">
-                              {new Date(shift.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                              {new Date(shift.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                             </p>
-                            <p className="text-[10px] text-text-muted flex items-center gap-0.5 justify-end">
+                            <p className="flex items-center gap-1 text-xs text-text-muted sm:justify-end">
                               <Clock className="h-2.5 w-2.5" />
                               {shift.startTime} - {shift.endTime}
                             </p>
                           </div>
 
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${statusColors[shift.status]}`}>
+                          <span className={`nv-badge ${statusColors[shift.status]}`}>
                             {shift.status === 'open' ? 'Vaga aberta' : shift.status === 'confirmed' ? 'Confirmado' : shift.status === 'pending' ? 'Pendente' : shift.status === 'cancelled' ? 'Cancelado' : 'Concluído'}
                           </span>
                         </div>
@@ -298,7 +294,7 @@ export default function DashboardPage() {
                     );
                   })
                 ) : (
-                  <div className="p-8 text-center text-text-muted">
+                  <div className="nv-empty m-4">
                     Nenhum plantão agendado nos próximos dias.
                   </div>
                 )}
@@ -306,8 +302,8 @@ export default function DashboardPage() {
             </div>
 
             {/* Unit Breakdown */}
-            <div className="bg-card-bg rounded-xl border border-card-border p-5">
-              <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Plantões por Unidade no Mês</h3>
+            <div className="nv-panel p-4 sm:p-5">
+              <h3 className="nv-section-title mb-4">Plantões por unidade no mês</h3>
               <div className="space-y-2">
                 {unitsBreakdown.map((ub) => {
                   const total = shiftsThisMonth || 1;
@@ -323,10 +319,10 @@ export default function DashboardPage() {
                         <span className="font-medium text-text-secondary truncate pr-4 group-hover:text-primary transition-colors">{ub.name}</span>
                         <span className="font-bold text-text-primary flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
                       </div>
-                      {canSeeDocuments && <p className="text-[10px] text-text-muted">Conformidade documental · <span className={ub.compliance === 100 ? 'font-semibold text-success' : 'font-semibold text-warning'}>{ub.compliance}%</span></p>}
+                      {canSeeDocuments && <p className="text-xs text-text-muted">Conformidade documental · <span className={ub.compliance === 100 ? 'font-semibold text-success' : 'font-semibold text-warning'}>{ub.compliance}%</span></p>}
                       <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-primary rounded-full transition-all duration-500"
+                          className="h-full rounded-full bg-accent transition-[width] duration-300 motion-reduce:transition-none"
                           style={{ width: `${percentage}%` }}
                         />
                       </div>
@@ -341,18 +337,18 @@ export default function DashboardPage() {
           </div>
 
           {/* Bottom Operational grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid gap-5 xl:grid-cols-3">
             
             {/* Document workflow */}
-            {canSeeDocuments && <div className="overflow-hidden rounded-xl border border-card-border bg-card-bg lg:col-span-2">
+            {canSeeDocuments && <div className="nv-panel overflow-hidden xl:col-span-2">
               <div className="flex flex-col gap-4 border-b border-border p-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">Esteira documental</h3>
+                  <h3 className="nv-section-title">Esteira documental</h3>
                   <p className="mt-1 text-xs text-text-muted">Pendências por etapa, do envio até a regularização.</p>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Unidade<select value={documentUnitFilter} onChange={event => setDocumentUnitFilter(event.target.value)} className="mt-1 block min-w-40 rounded-lg border border-border bg-input-bg px-2.5 py-2 text-xs normal-case text-text-primary"><option value="">Todas</option>{orgUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Especialidade<select value={documentSpecialtyFilter} onChange={event => setDocumentSpecialtyFilter(event.target.value)} className="mt-1 block min-w-40 rounded-lg border border-border bg-input-bg px-2.5 py-2 text-xs normal-case text-text-primary"><option value="">Todas</option>{[...new Set(orgDoctors.map(doctor => doctor.specialty))].map(item => <option key={item} value={item}>{item}</option>)}</select></label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Unidade<select value={documentUnitFilter} onChange={event => setDocumentUnitFilter(event.target.value)} className="nv-input mt-1 block min-w-32 normal-case"><option value="">Todas</option>{orgUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Especialidade<select value={documentSpecialtyFilter} onChange={event => setDocumentSpecialtyFilter(event.target.value)} className="nv-input mt-1 block min-w-32 normal-case"><option value="">Todas</option>{[...new Set(orgDoctors.map(doctor => doctor.specialty))].map(item => <option key={item} value={item}>{item}</option>)}</select></label>
                   <Link href={`/medicos?documentStatus=pending${documentUnitFilter ? `&unitId=${documentUnitFilter}` : ''}${documentSpecialtyFilter ? `&specialty=${encodeURIComponent(documentSpecialtyFilter)}` : ''}`} className="mb-0.5 flex items-center gap-0.5 px-2 py-2 text-xs font-semibold text-primary hover:underline">Ver corpo clínico <ChevronRight className="h-3.5 w-3.5" /></Link>
                 </div>
               </div>
@@ -385,8 +381,8 @@ export default function DashboardPage() {
             </div>}
 
             {/* Specialty Breakdown */}
-            <div className="bg-card-bg rounded-xl border border-card-border p-5">
-              <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Corpo Clínico por Especialidade</h3>
+            <div className="nv-panel p-4 sm:p-5">
+              <h3 className="nv-section-title mb-4">Corpo clínico por especialidade</h3>
               <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
                 {specialtiesBreakdown.map((sb) => (
                   <Link
@@ -409,6 +405,9 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+
+      <OperationalIndicators key={activeOrganizationId} organization={activeOrganizationId} />
+      <NotificationInbox />
     </div>
   );
 }

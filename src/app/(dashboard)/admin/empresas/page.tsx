@@ -134,14 +134,14 @@ export default function AdminOrganizationsPage() {
     switch (status) {
       case 'active':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-500">
+          <span className="nv-badge bg-success/10 text-success">
             <CheckCircle className="h-3 w-3" /> Ativa
           </span>
         );
       case 'setup':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-500 font-medium">
-            <AlertCircle className="h-3 w-3 animate-pulse" /> Implantação
+          <span className="nv-badge bg-warning/10 text-warning">
+            <AlertCircle className="h-3 w-3" /> Implantação
           </span>
         );
       case 'suspended':
@@ -166,7 +166,7 @@ export default function AdminOrganizationsPage() {
       case 'platinum':
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">Platinum</span>;
       case 'gold':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/20">Gold</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-warning/10 text-warning border border-warning/20">Gold</span>;
       case 'silver':
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">Silver</span>;
       default:
@@ -180,7 +180,7 @@ export default function AdminOrganizationsPage() {
         {/* Title */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight flex items-center gap-2">
+            <h2 className="nv-page-title flex items-center gap-2">
               <Building className="h-6 w-6 text-primary" />
               Gestão de Empresas
             </h2>
@@ -210,11 +210,11 @@ export default function AdminOrganizationsPage() {
         </div>
 
         {/* Companies Table */}
-        <div className="bg-card-bg border border-border rounded-2xl shadow-soft overflow-hidden">
+        <div className="nv-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-border bg-surface-muted/50 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                <tr className="border-b border-border bg-surface-muted font-semibold text-text-secondary uppercase tracking-wide">
                   <th className="p-4">Empresa</th>
                   <th className="p-4">CNPJ & Local</th>
                   <th className="p-4">Responsável</th>
@@ -233,7 +233,7 @@ export default function AdminOrganizationsPage() {
                   ).length;
 
                   return (
-                    <tr key={org.id} className="hover:bg-state-hover transition duration-150">
+                    <tr key={org.id} className="hover:bg-table-row-hover transition-colors duration-150">
                        <td className="p-4">
                          <div className="font-semibold text-text-primary text-sm">{org.name}</div>
                          <div className="text-[10px] text-text-muted font-mono mt-0.5">{org.razaoSocial}</div>
@@ -292,7 +292,7 @@ export default function AdminOrganizationsPage() {
                           </button>
                           <button
                             onClick={() => startSimulation(org.id)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-500 hover:bg-amber-500 hover:text-white rounded-lg transition font-semibold text-[10px] cursor-pointer"
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-warning/10 text-warning hover:bg-warning/20 rounded-lg transition font-semibold text-[10px] cursor-pointer"
                             title="Simular login operacional nesta empresa"
                           >
                             <Eye className="h-3.5 w-3.5" />
@@ -328,9 +328,9 @@ export default function AdminOrganizationsPage() {
         {/* Modal Create/Edit */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-overlay backdrop-blur-[2px]" />
             
-            <div className="relative w-full max-w-xl bg-card-bg border border-border rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="relative w-full max-w-xl bg-card-bg border border-border rounded-2xl shadow-strong overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
               {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-border">
                 <h3 className="text-lg font-bold text-text-primary">
@@ -350,7 +350,7 @@ export default function AdminOrganizationsPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ex: Pronto Socorro da Criança"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -361,7 +361,7 @@ export default function AdminOrganizationsPage() {
                       value={razaoSocial}
                       onChange={(e) => setRazaoSocial(e.target.value)}
                       placeholder="Ex: Pronto Socorro Infantil da Capital Ltda"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -373,7 +373,7 @@ export default function AdminOrganizationsPage() {
                       value={cnpj}
                       onChange={(e) => setCnpj(e.target.value)}
                       placeholder="00.000.000/0000-00"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                     <p className="mt-1 text-[11px] text-text-muted">CNPJ responsável usado no cadastro das unidades desta empresa.</p>
                   </div>
@@ -385,7 +385,7 @@ export default function AdminOrganizationsPage() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="(11) 99999-9999"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -396,7 +396,7 @@ export default function AdminOrganizationsPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="contato@empresa.com.br"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -407,7 +407,7 @@ export default function AdminOrganizationsPage() {
                       value={responsavelName}
                       onChange={(e) => setResponsavelName(e.target.value)}
                       placeholder="Nome do Diretor/Gestor"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -418,7 +418,7 @@ export default function AdminOrganizationsPage() {
                       value={responsavelRole}
                       onChange={(e) => setResponsavelRole(e.target.value)}
                       placeholder="Ex: Diretor Clínico"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -429,7 +429,7 @@ export default function AdminOrganizationsPage() {
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       placeholder="Cidade"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -441,7 +441,7 @@ export default function AdminOrganizationsPage() {
                       value={state}
                       onChange={(e) => setState(e.target.value.toUpperCase())}
                       placeholder="SP"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -450,7 +450,7 @@ export default function AdminOrganizationsPage() {
                     <select
                       value={plan}
                       onChange={(e) => setPlan(e.target.value as 'silver' | 'gold' | 'platinum')}
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
+                      className="nv-input"
                     >
                       <option value="silver">Silver (R$ 799/mês)</option>
                       <option value="gold">Gold (R$ 1.299/mês)</option>
@@ -463,7 +463,7 @@ export default function AdminOrganizationsPage() {
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value as 'active' | 'setup' | 'suspended' | 'cancelled')}
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
+                      className="nv-input"
                     >
                       <option value="active">Ativa</option>
                       <option value="setup">Implantação</option>

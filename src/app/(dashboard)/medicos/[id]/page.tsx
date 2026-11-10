@@ -110,9 +110,9 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   // Doctor status toggle button classes
   const getBtnClass = (s: DoctorStatus) => {
     const activeColors = {
-      active: 'bg-emerald-500 text-white shadow-md border-emerald-500',
-      pending: 'bg-amber-500 text-white shadow-md border-amber-500',
-      inactive: 'bg-slate-600 text-white shadow-md border-slate-600'
+      active: 'bg-success/10 text-success border-success/20',
+      pending: 'bg-warning/10 text-warning border-warning/20',
+      inactive: 'bg-surface-muted text-text-secondary border-border'
     };
     const inactiveColors = 'bg-background text-text-muted border-border hover:bg-slate-100 dark:hover:bg-slate-900';
     return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
@@ -138,7 +138,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         </Link>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight">{doctor.name}</h2>
+            <h2 className="nv-page-title">{doctor.name}</h2>
             <p className="text-xs text-text-muted mt-1">CRM: {doctor.crm}-{doctor.crmUf} • Cadastro: {doctor.status.toUpperCase()}</p>
           </div>
           
@@ -350,7 +350,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                               <button
                                 disabled={useStore.getState().saving}
                                 onClick={() => handleUpload(doc.type)}
-                                className="bg-primary hover:bg-primary-hover text-white rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                                className="bg-primary hover:bg-primary-hover text-text-inverse rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
                               >
                                 Enviar
                               </button>

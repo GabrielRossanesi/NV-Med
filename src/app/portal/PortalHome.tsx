@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Activity, ClipboardCheck, FileCheck2 } from 'lucide-react';
+import { Activity, ChevronDown, ClipboardCheck, FileCheck2, LoaderCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { logoutCurrentSession } from '@/lib/auth/logout';
 import { enrollmentStatusLabels, portalError, type EnrollmentStatus } from '@/lib/doctorPortal';
 import { isStrongPassword } from '@/lib/passwordPolicy';
-import { documentStatusLabels } from '@/lib/documentCompliance';
+import { documentStatusClasses, documentStatusLabels } from '@/lib/documentCompliance';
 import type { DocumentStatus } from '@/types';
 import PortalSchedule from './PortalSchedule';
 import NotificationInbox from '@/components/NotificationInbox';
@@ -21,6 +21,12 @@ type Enrollment = {
 type Catalog = { name: string; specialties: string[] };
 type PortalDocument = { id: string; name: string; status: DocumentStatus; expiry_date?: string; has_file: boolean; review_note?: string };
 const digits = (value: string) => value.replace(/\D/g, '');
+const enrollmentTones: Record<EnrollmentStatus, string> = {
+  approved: 'bg-success/10 text-success',
+  pending: 'bg-warning/10 text-warning',
+  correction_requested: 'bg-warning/10 text-warning',
+  rejected: 'bg-danger/10 text-danger',
+};
 
 function RegisterAccount({ organization }: { organization: string }) {
   const [notice, setNotice] = useState('');
@@ -57,8 +63,8 @@ function RegisterAccount({ organization }: { organization: string }) {
       setBusy(false);
     }
   }
-  return <section className="rounded-2xl border border-border bg-card-bg p-5 sm:p-8">
-    <h2 className="text-lg font-semibold">Crie seu acesso médico</h2>
+  return <section className="nv-panel p-5 sm:p-8">
+    <h2 className="nv-section-title">Crie seu acesso médico</h2>
     <p className="mt-1 text-sm text-text-muted">Confirme seu e-mail para iniciar o credenciamento na empresa.</p>
     <form onSubmit={signUp} className="mt-5 space-y-4">
       <label className="nv-label">E-mail<input className="nv-input" name="email" type="email" autoComplete="email" required maxLength={254}/></label>
@@ -93,8 +99,8 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
       setBusy(false);
     }
   }
-  return <form onSubmit={save} className="space-y-5 rounded-2xl border border-border bg-card-bg p-5 sm:p-7">
-    <h2 className="text-lg font-semibold">{previous ? 'Corrigir cadastro' : 'Credenciamento'} · {catalog.name}</h2>
+  return <form onSubmit={save} className="space-y-5 nv-panel p-5 sm:p-7">
+    <h2 className="nv-section-title">{previous ? 'Corrigir cadastro' : 'Credenciamento'} · {catalog.name}</h2>
     <div className="grid gap-4 sm:grid-cols-2">
       <label className="nv-label">Nome completo<input className="nv-input" name="name" autoComplete="name" defaultValue={previous?.name} required maxLength={150}/></label>
       <label className="nv-label">E-mail verificado<input className="nv-input" type="email" value={email} readOnly/></label>
@@ -110,7 +116,7 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
         <input name="specialties" type="checkbox" value={specialty} defaultChecked={previous?.specialties.includes(specialty)}/>{specialty}
       </label>)}</div>
     </fieldset>
-    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
     <button className="nv-button" disabled={busy || !catalog.specialties.length}>{busy ? 'Enviando…' : 'Enviar para aprovação'}</button>
   </form>;
 }
@@ -148,16 +154,19 @@ function Documents({ doctor }: { doctor: string }) {
       setBusy('');
     }
   }
-  return <details className="rounded-2xl border border-border bg-card-bg p-5" onToggle={event => { if (event.currentTarget.open && !documents) void load(); }}>
-    <summary className="cursor-pointer font-semibold"><FileCheck2 className="mr-2 inline text-primary" size={18}/>Meus documentos</summary>
-    <div className="mt-4 space-y-4">
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {notice && <p role="status" className="text-sm text-success">{notice}</p>}
+  return <details className="nv-panel nv-disclosure" onToggle={event => { if (event.currentTarget.open && !documents) void load(); }}>
+    <summary><FileCheck2 className="shrink-0 text-primary" size={18} aria-hidden="true"/><span>Meus documentos</span><ChevronDown className="shrink-0 text-text-muted" size={16} aria-hidden="true"/></summary>
+    <div className="space-y-4 p-4 sm:p-5">
+      {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
+      {notice && <p role="status" className="nv-feedback text-success">{notice}</p>}
       {!documents && !error && <p role="status" className="text-sm text-text-muted">Carregando documentos…</p>}
-      {documents?.length === 0 && <p className="text-sm text-text-muted">A empresa ainda não tem exigências para este cadastro.</p>}
+      {documents?.length === 0 && <p className="nv-empty">A empresa ainda não tem exigências para este cadastro.</p>}
       {documents?.map(item => <article key={item.id} className="space-y-2 border-t border-border pt-4">
         <h3 className="font-medium">{item.name}</h3>
-        <p className="text-sm text-text-muted">{documentStatusLabels[item.status]}{item.expiry_date && <> · Válido até <time dateTime={item.expiry_date}>{item.expiry_date.split('-').reverse().join('/')}</time></>}</p>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
+          <span className={`nv-badge border ${documentStatusClasses[item.status]}`}>{documentStatusLabels[item.status]}</span>
+          {item.expiry_date && <span>Válido até <time dateTime={item.expiry_date}>{item.expiry_date.split('-').reverse().join('/')}</time></span>}
+        </div>
         {item.review_note && <p className="text-sm">{item.review_note}</p>}
         {item.has_file && <a className="text-sm font-semibold text-primary underline" href={'/api/portal/documents/' + encodeURIComponent(item.id)}>Baixar arquivo enviado</a>}
         <form onSubmit={event => upload(event, item)} className="flex flex-wrap items-end gap-2">
@@ -205,27 +214,27 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
     }
   }
   const previous = enrollments?.find(item => item.organization_id === organization);
-  return <main className="mx-auto min-h-screen max-w-4xl space-y-6 px-4 py-8 sm:px-8 sm:py-12">
-    <header className="flex items-start justify-between gap-3 border-b border-border pb-6">
-      <div><p className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity size={18}/>NV Med</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Portal do médico</h1></div>
+  return <main className="nv-content mx-auto min-h-svh max-w-5xl space-y-5 px-4 py-6 sm:space-y-6 sm:px-8 sm:py-10">
+    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-5">
+      <div><p className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="grid size-8 place-items-center rounded-lg bg-primary/10"><Activity size={17} aria-hidden="true"/></span>NV Med</p><h1 className="nv-page-title mt-2">Portal do médico</h1></div>
       {email && <button className="nv-button-secondary" onClick={() => void logoutCurrentSession().catch(failure => setError(failure.message))}>Sair</button>}
     </header>
-    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
     {!email ? <RegisterAccount organization={initialOrganization}/> : <>
-      {enrollments === null && !error && <p role="status" className="text-sm text-text-muted">Carregando credenciamento…</p>}
+      {enrollments === null && !error && <p role="status" className="nv-feedback items-center text-info"><LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true"/>Carregando credenciamento…</p>}
       {enrollments?.some(item => item.status === 'approved') && <PortalSchedule/>}
       {enrollments?.map(item => <section key={item.doctor_id} className="space-y-3">
-        <div className="rounded-2xl border border-border border-l-4 border-l-primary bg-card-bg p-5">
+        <div className="nv-panel p-4 sm:p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">{item.organization}</p>
-          <h2 className="mt-1 text-lg font-semibold">{item.name}</h2>
-          <p className="mt-1 flex items-center gap-2 text-sm text-text-secondary"><ClipboardCheck size={16}/>{enrollmentStatusLabels[item.status]}</p>
+          <h2 className="mt-1 nv-section-title">{item.name}</h2>
+          <p className={`nv-badge mt-2 ${enrollmentTones[item.status]}`}><ClipboardCheck size={15} aria-hidden="true"/>{enrollmentStatusLabels[item.status]}</p>
           {item.review_note && <p className="mt-2 text-sm">{item.review_note}</p>}
           {item.status === 'correction_requested' && <button className="nv-button-secondary mt-3" disabled={loadingCompany} onClick={() => void findCompany(item.organization_id)}>Corrigir cadastro</button>}
         </div>
         {item.status !== 'rejected' && (!item.legacy_link || item.status === 'approved') && <Documents doctor={item.doctor_id}/>}
       </section>)}
       {enrollments !== null && <section className="space-y-3">
-        <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
+        <form className="nv-panel flex flex-wrap items-end gap-3 p-4 sm:p-5" onSubmit={event => {
           event.preventDefault();
           void findCompany(String(new FormData(event.currentTarget).get('organization')).trim());
         }}>

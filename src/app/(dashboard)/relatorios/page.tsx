@@ -136,15 +136,15 @@ export default function ReportsPage() {
   return (
     <AccessGuard requiredPermission="relatorios">
       <div className="space-y-7 animate-in fade-in duration-300">
-        <header><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Monitoramento operacional</p><h1 className="mt-2 flex items-center gap-2 text-2xl font-bold tracking-tight"><FileSpreadsheet className="h-6 w-6 text-primary"/>Relatórios e exportações</h1><p className="mt-1 text-sm text-text-muted">Extraia dados da unidade em CSV compatível com Excel e acompanhe pagamentos por período.</p></header>
+        <header><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Monitoramento operacional</p><h1 className="nv-page-title mt-2 flex items-center gap-2"><FileSpreadsheet className="h-6 w-6 text-primary"/>Relatórios e exportações</h1><p className="mt-1 text-sm text-text-muted">Extraia dados da unidade em CSV compatível com Excel e acompanhe pagamentos por período.</p></header>
 
-        <section aria-label="Filtros dos relatórios" className="grid gap-4 rounded-2xl border border-border bg-card-bg p-4 md:grid-cols-[180px_minmax(180px,1fr)_minmax(220px,1.2fr)]">
+        <section aria-label="Filtros dos relatórios" className="grid gap-4 nv-panel p-4 md:grid-cols-[180px_minmax(180px,1fr)_minmax(220px,1.2fr)]">
           <label className="nv-label">Período<select className="nv-input mt-2" value={mode} onChange={event => setMode(event.target.value as PeriodMode)}><option value="week">Semanal</option><option value="month">Mensal</option></select></label>
           <label className="nv-label">{mode === 'week' ? 'Semana de referência' : 'Mês de referência'}<input className="nv-input mt-2" type={mode === 'week' ? 'date' : 'month'} value={mode === 'week' ? reference : reference.slice(0, 7)} onChange={event => setReference(mode === 'week' ? event.target.value : `${event.target.value}-01`)}/></label>
           <label className="nv-label">Unidade<select className="nv-input mt-2" value={unitId} onChange={event => setUnitId(event.target.value)}><option value="">Todas as unidades</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
         </section>
 
-        <section className="grid overflow-hidden rounded-2xl border border-border bg-card-bg sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo do período">
+        <section className="grid overflow-hidden nv-panel sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo do período">
           <div className="p-5"><p className="text-xs text-text-muted">Período selecionado</p><p className="mt-2 font-semibold tabular-nums">{displayDate(bounds.start)} – {displayDate(bounds.end)}</p></div>
           <div className="border-t border-border p-5 sm:border-l sm:border-t-0"><p className="text-xs text-text-muted">Plantões</p><p className="mt-2 text-2xl font-semibold tabular-nums">{periodShifts.length}</p></div>
           {canSeeDocuments && <>

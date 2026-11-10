@@ -58,7 +58,7 @@ export default function AdminPermissionsPage() {
       <div className="space-y-8 animate-in fade-in duration-300">
         {/* Title */}
         <div>
-          <h2 className="text-2xl font-bold text-text-primary tracking-tight flex items-center gap-2">
+          <h2 className="nv-page-title flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
             Matriz de Permissões (RBAC)
           </h2>
@@ -94,7 +94,7 @@ export default function AdminPermissionsPage() {
         </div>
 
         {/* Matrix Card */}
-        <div className="bg-card-bg border border-border rounded-2xl shadow-soft overflow-hidden">
+        <div className="nv-panel overflow-hidden">
           <div className="p-5 border-b border-border bg-surface-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="font-bold text-text-primary">
@@ -108,8 +108,8 @@ export default function AdminPermissionsPage() {
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-500 font-semibold">
-                <span className="h-4 w-4 bg-emerald-500/10 rounded flex items-center justify-center"><Check className="h-3 w-3" /></span> Autorizado
+              <span className="flex items-center gap-1 text-success font-semibold">
+                <span className="h-4 w-4 bg-success/10 rounded flex items-center justify-center"><Check className="h-3 w-3" /></span> Autorizado
               </span>
               <span className="flex items-center gap-1 text-danger font-semibold">
                 <span className="h-4 w-4 bg-danger/10 rounded flex items-center justify-center"><X className="h-3 w-3" /></span> Bloqueado
@@ -136,7 +136,7 @@ export default function AdminPermissionsPage() {
               <tbody className="divide-y divide-border text-xs">
                 {activeTab === 'tenant' ? (
                   clientModules.map(module => (
-                    <tr key={module.key} className="hover:bg-state-hover transition duration-150">
+                    <tr key={module.key} className="hover:bg-table-row-hover transition-colors duration-150">
                       <td className="p-4 font-semibold text-text-secondary">
                         {module.name}
                       </td>
@@ -146,7 +146,7 @@ export default function AdminPermissionsPage() {
                           <td key={role} className="p-4 text-center">
                             <div className="flex justify-center">
                               {allowed ? (
-                                <div className="h-6 w-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 flex items-center justify-center">
+                                <div className="h-6 w-6 rounded-lg bg-success/10 text-success flex items-center justify-center">
                                   <Check className="h-3.5 w-3.5" />
                                 </div>
                               ) : (
@@ -162,7 +162,7 @@ export default function AdminPermissionsPage() {
                   ))
                 ) : (
                   saasModules.map(module => (
-                    <tr key={module.key} className="hover:bg-state-hover transition duration-150">
+                    <tr key={module.key} className="hover:bg-table-row-hover transition-colors duration-150">
                       <td className="p-4 font-semibold text-text-secondary">
                         {module.name}
                       </td>
@@ -172,7 +172,7 @@ export default function AdminPermissionsPage() {
                           <td key={role} className="p-4 text-center">
                             <div className="flex justify-center">
                               {allowed ? (
-                                <div className="h-6 w-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 flex items-center justify-center">
+                                <div className="h-6 w-6 rounded-lg bg-success/10 text-success flex items-center justify-center">
                                   <Check className="h-3.5 w-3.5" />
                                 </div>
                               ) : (

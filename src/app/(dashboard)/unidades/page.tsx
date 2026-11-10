@@ -140,12 +140,12 @@ function UnitsPageContent() {
 
   const getStatusBadge = (status: UnitStatus) => {
     return status === 'active' ? (
-      <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+      <span className="nv-badge bg-success/10 text-success">
         <CheckCircle className="h-3 w-3" />
         Ativa
       </span>
     ) : (
-      <span className="inline-flex items-center gap-1 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+      <span className="nv-badge bg-danger/10 text-danger">
         <XCircle className="h-3 w-3" />
         Inativa
       </span>
@@ -157,7 +157,7 @@ function UnitsPageContent() {
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary tracking-tight">
+          <h2 className="nv-page-title">
             Unidades de Atendimento
           </h2>
           <p className="text-sm text-text-muted mt-1">
@@ -166,7 +166,7 @@ function UnitsPageContent() {
         </div>
         <button
           onClick={openCreateModal}
-          className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
+          className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Nova Unidade
@@ -182,7 +182,7 @@ function UnitsPageContent() {
             placeholder="Buscar por nome da unidade ou cidade..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+            className="nv-input pl-9"
           />
         </div>
 
@@ -190,7 +190,7 @@ function UnitsPageContent() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+            className="nv-input"
           >
             <option value="all">Todos Status</option>
             <option value="active">Ativa</option>
@@ -241,7 +241,7 @@ function UnitsPageContent() {
           </div>
           <button
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-sm mx-auto"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-text-inverse rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-sm mx-auto"
           >
             <Plus className="h-4 w-4" />
             Cadastrar primeira unidade
@@ -303,7 +303,7 @@ function UnitsPageContent() {
                     </Link>
                     <button
                       onClick={() => handleDelete(unit.id)}
-                      className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-text-muted hover:text-red-600 dark:hover:text-red-400 transition cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:bg-danger/10 hover:text-danger transition cursor-pointer"
                       title="Excluir"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -322,8 +322,8 @@ function UnitsPageContent() {
 
       {/* Creation Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="bg-card-bg rounded-xl border border-border max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-[2px] p-4">
+          <div className="nv-panel bg-modal-bg max-w-lg w-full max-h-[90vh] flex flex-col shadow-strong animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
@@ -351,7 +351,7 @@ function UnitsPageContent() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Hospital NV Med Pinheiros"
-                  className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
               </div>
 
@@ -371,7 +371,7 @@ function UnitsPageContent() {
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as UnitType)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   >
                     <option value="hospital">Hospital</option>
                     <option value="clinic">Clínica</option>
@@ -389,7 +389,7 @@ function UnitsPageContent() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Ex: (11) 98888-8888"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
               </div>
@@ -403,7 +403,7 @@ function UnitsPageContent() {
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Cidade"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -411,7 +411,7 @@ function UnitsPageContent() {
                   <select
                     value={state}
                     onChange={(e) => setState(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   >
                     {['SP', 'RJ', 'MG', 'PR', 'SC', 'RS', 'BA', 'DF', 'PE'].map((uf) => (
                       <option key={uf} value={uf}>{uf}</option>
@@ -428,7 +428,7 @@ function UnitsPageContent() {
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Rua, Número, Bairro"
-                  className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
               </div>
 
@@ -462,7 +462,7 @@ function UnitsPageContent() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-text-inverse font-semibold text-xs transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? 'Salvando…' : 'Salvar Unidade'}
                 </button>

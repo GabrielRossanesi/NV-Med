@@ -81,7 +81,7 @@ function Report({ initial, activeOrganization }: { initial: Record<string, strin
   return <div className="space-y-5">
     <header>
       <Link href="/relatorios" className="text-sm font-semibold text-primary underline">Voltar aos relatórios</Link>
-      <h1 className="mt-2 flex items-center gap-2 text-2xl font-bold"><FileSpreadsheet size={24} className="text-primary"/>Relatório de plantões</h1>
+      <h1 className="nv-page-title mt-2 flex items-center gap-2"><FileSpreadsheet size={24} className="text-primary"/>Relatório de plantões</h1>
     </header>
     <form className="space-y-4 rounded-xl border border-border bg-card-bg p-4" onSubmit={event => {
       event.preventDefault();

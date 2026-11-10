@@ -66,7 +66,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   }
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
-    saving: false, error: null, notice: null, theme: 'dark', sidebarCollapsed: true,
+    saving: false, error: null, notice: null, theme: 'light', sidebarCollapsed: true,
     setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null, notice: null }),
     setSidebarCollapsed: sidebarCollapsed => set({ sidebarCollapsed }),
     clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null, notice: null }),
@@ -209,7 +209,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   partialize: state => ({ theme: state.theme, activeOrganizationId: state.activeOrganizationId }),
   merge: (saved, current) => ({
     ...current,
-    theme: (saved as { theme?: string })?.theme === 'light' ? 'light' : 'dark',
+    theme: (saved as { theme?: string })?.theme === 'dark' ? 'dark' : 'light',
     activeOrganizationId: (saved as { activeOrganizationId?: string })?.activeOrganizationId || '',
     sidebarCollapsed: true,
   }),

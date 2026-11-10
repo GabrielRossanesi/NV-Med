@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, ChevronDown } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 type Notification = { id: string; message: string; read_at?: string };
@@ -58,12 +58,12 @@ export default function NotificationInbox({ preferences = false, revision = 0 }:
   }
   if (!preferences && !items?.length) return null;
   const unread = items?.filter(item => !item.read_at).length || 0;
-  return <details className="rounded-2xl border border-border bg-card-bg p-5">
-    <summary className="cursor-pointer font-semibold"><Bell size={18} className="mr-2 inline text-primary"/>Notificações{unread > 0 && <span className="ml-2 text-sm text-primary">· {unread} não lidas</span>}</summary>
-    <div className="mt-3 space-y-3">
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+  return <details className="nv-panel nv-disclosure">
+    <summary><Bell size={18} className="shrink-0 text-primary" aria-hidden="true"/><span className="flex flex-wrap items-center gap-x-2">Notificações{unread > 0 && <span className="nv-badge bg-primary/10 text-primary">{unread} não lidas</span>}</span><ChevronDown size={16} className="shrink-0 text-text-muted" aria-hidden="true"/></summary>
+    <div className="space-y-3 p-4 sm:p-5">
+      {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
       {!items && !error && <p role="status" className="text-sm text-text-muted">Carregando notificações…</p>}
-      {items?.length === 0 && <p className="text-sm text-text-muted">Você ainda não tem notificações.</p>}
+      {items?.length === 0 && <p className="nv-empty">Você ainda não tem notificações.</p>}
       <ul className="divide-y divide-border">{items?.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
         <span>{item.message}</span>{!item.read_at && <button type="button" className="font-semibold text-primary underline" onClick={() => void markRead(item.id)}>Marcar como lida</button>}
       </li>)}</ul>
@@ -73,7 +73,7 @@ export default function NotificationInbox({ preferences = false, revision = 0 }:
           <input type="checkbox" name={key} defaultChecked={settings[key as keyof Preferences]}/>{label}
         </label>)}
         <button className="nv-button-secondary" disabled={saving}>{saving ? 'Salvando…' : 'Salvar preferências'}</button>
-        {notice && <p role="status" className="text-sm text-success">{notice}</p>}
+        {notice && <p role="status" className="nv-feedback text-success">{notice}</p>}
       </form>}
     </div>
   </details>;

@@ -161,15 +161,15 @@ function DoctorsPageContent() {
     switch (status) {
       case 'active':
         return (
-          <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+          <span className="nv-badge bg-success/10 text-success">
             <CheckCircle className="h-3 w-3" />
             Ativo
           </span>
         );
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-            <Clock className="h-3 w-3 animate-pulse" />
+          <span className="nv-badge bg-warning/10 text-warning">
+            <Clock className="h-3 w-3" />
             Pendente
           </span>
         );
@@ -188,7 +188,7 @@ function DoctorsPageContent() {
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary tracking-tight">
+          <h2 className="nv-page-title">
             Corpo Clínico (Médicos)
           </h2>
           <p className="text-sm text-text-muted mt-1">
@@ -200,7 +200,7 @@ function DoctorsPageContent() {
             setSpecialty(activeOrg?.settings.specialties[0] || '');
             setIsModalOpen(true);
           }}
-          className="bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
+          className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Novo Médico
@@ -241,7 +241,7 @@ function DoctorsPageContent() {
                 placeholder="Buscar por nome, CRM, RQE ou especialidade..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                className="nv-input pl-9"
               />
             </div>
 
@@ -250,7 +250,7 @@ function DoctorsPageContent() {
               <select
                 value={specialtyFilter}
                 onChange={(e) => setSpecialtyFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                className="nv-input"
               >
                 <option value="all">Todas Especialidades</option>
                 {activeOrg?.settings.specialties.map((spec) => (
@@ -266,7 +266,7 @@ function DoctorsPageContent() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-xs bg-background text-text-primary focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                className="nv-input"
               >
                 <option value="all">Todos Status</option>
                 <option value="active">Ativo</option>
@@ -420,7 +420,7 @@ function DoctorsPageContent() {
                               </Link>
                               <button
                                 onClick={() => handleDelete(doc.id)}
-                                className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-text-muted hover:text-red-655 dark:hover:text-red-400 transition cursor-pointer"
+                                className="p-1.5 rounded text-text-muted hover:bg-danger/10 hover:text-danger transition cursor-pointer"
                                 title="Excluir"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -446,8 +446,8 @@ function DoctorsPageContent() {
 
       {/* Creation Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="bg-card-bg rounded-xl border border-border max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-[2px] p-4">
+          <div className="nv-panel bg-modal-bg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-strong animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
@@ -477,7 +477,7 @@ function DoctorsPageContent() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Dr(a). Nome Sobrenome"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
 
@@ -487,7 +487,7 @@ function DoctorsPageContent() {
                   <select
                     value={specialty}
                     onChange={(e) => setSpecialty(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   >
                     {activeOrg?.settings.specialties.map((spec) => (
                       <option key={spec} value={spec}>
@@ -506,7 +506,7 @@ function DoctorsPageContent() {
                     value={crm}
                     onChange={(e) => setCrm(e.target.value)}
                     placeholder="Ex: 123456"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
 
@@ -516,7 +516,7 @@ function DoctorsPageContent() {
                   <select
                     value={crmUf}
                     onChange={(e) => setCrmUf(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   >
                     {['SP', 'RJ', 'MG', 'PR', 'RS', 'SC', 'DF', 'BA', 'PE', 'CE'].map((uf) => (
                       <option key={uf} value={uf}>
@@ -535,7 +535,7 @@ function DoctorsPageContent() {
                     value={rqe}
                     onChange={(e) => setRqe(e.target.value.replace(/[^0-9]/g, ''))}
                     placeholder="Ex: 123456"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
 
@@ -548,7 +548,7 @@ function DoctorsPageContent() {
                     value={cpf}
                     onChange={(e) => setCpf(e.target.value)}
                     placeholder="Ex: 000.000.000-00"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
 
@@ -561,7 +561,7 @@ function DoctorsPageContent() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Ex: (11) 99999-9999"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
 
@@ -574,7 +574,7 @@ function DoctorsPageContent() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="medico@exemplo.com"
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   />
                 </div>
 
@@ -584,7 +584,7 @@ function DoctorsPageContent() {
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as DoctorStatus)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   >
                     <option value="active">Ativo (Aprovado)</option>
                     <option value="pending">Pendente (Análise de Docs)</option>
@@ -597,7 +597,7 @@ function DoctorsPageContent() {
                   <select
                     value={contractModel}
                     onChange={(e) => setContractModel(e.target.value as DoctorContractModel)}
-                    className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                    className="nv-input"
                   >
                     {Object.entries(doctorContractModelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
@@ -626,7 +626,7 @@ function DoctorsPageContent() {
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Rua, Número, Bairro, Cidade - UF"
-                  className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:border-primary focus:bg-white dark:focus:bg-slate-900 transition"
+                  className="nv-input"
                 />
               </div>
 
@@ -641,7 +641,7 @@ function DoctorsPageContent() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-xs transition duration-200"
+                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-text-inverse font-semibold text-xs transition duration-200"
                 >
                   Salvar Cadastro
                 </button>

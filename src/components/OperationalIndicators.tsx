@@ -30,7 +30,7 @@ export default function OperationalIndicators({ organization }: { organization: 
     return () => { active = false; };
   }, [organization]);
 
-  if (!counts) return error ? <p role="alert" className="text-sm text-text-muted">Os indicadores operacionais estão indisponíveis.</p> : null;
+  if (!counts) return error ? <p role="alert" className="nv-feedback text-warning">Os indicadores operacionais estão indisponíveis.</p> : null;
   const report = (from: string, to: string, filters: Record<string, string> = {}) =>
     '/relatorios/plantoes?' + new URLSearchParams({ empresa: organization, inicio: from, fim: to, ...filters }).toString();
   const cards = [
@@ -50,14 +50,14 @@ export default function OperationalIndicators({ organization }: { organization: 
     isSimulating || canViewPermission(user, item.href.split(/[/?]/)[1])
   ));
   if (!visibleCards.length) return null;
-  return <section className="space-y-3" aria-label="Fila operacional">
-    <div><h2 className="font-semibold">Fila operacional</h2>
-      <p className="text-xs text-text-muted">Vagas dos próximos dois meses, plantões concluídos do último mês e pagamentos do período operacional.</p></div>
-    <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
+  return <section className="nv-panel overflow-hidden" aria-label="Fila operacional">
+    <header className="px-4 py-4 sm:px-5"><h2 className="nv-section-title">Fila operacional</h2>
+      <p className="mt-1 text-sm text-text-muted">Vagas dos próximos dois meses, plantões concluídos do último mês e pagamentos do período operacional.</p></header>
+    <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 xl:grid-cols-3">
       {visibleCards.map(item => <Link key={item.label} href={item.href}
-        className="group flex min-h-20 items-center justify-between gap-3 bg-card-bg p-4 hover:bg-state-hover">
-        <span className="text-sm font-medium">{item.label}</span>
-        <span className="flex items-center gap-2 text-xl font-semibold tabular-nums text-primary">{item.count}<ArrowUpRight size={14} aria-hidden="true"/></span>
+        className="group flex min-h-16 items-center justify-between gap-3 bg-card-bg px-4 py-3 transition-colors hover:bg-table-row-hover focus-visible:outline-offset-[-3px] sm:px-5">
+        <span className="text-sm font-medium text-text-secondary group-hover:text-text-primary">{item.label}</span>
+        <span className="flex shrink-0 items-center gap-2 text-xl font-semibold tabular-nums">{item.count}<ArrowUpRight size={15} className="text-text-muted group-hover:text-primary" aria-hidden="true"/></span>
       </Link>)}
     </div>
   </section>;

@@ -79,8 +79,8 @@ function tone(period: CoveragePeriodSummary, conflict: boolean, day: string) {
 function Inspector({ selection, onClose, children }: { selection: Selection; onClose: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
-  return <dialog ref={ref} onCancel={onClose} aria-label={`Detalhes da escala de ${dayLabel(selection.day)}`} className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full max-w-xl overflow-y-auto border-l border-border bg-card-bg p-0 text-text-primary shadow-2xl backdrop:bg-black/45 sm:w-[min(36rem,100vw)]">
-    <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-card-bg px-5 py-5"><div><p className="text-xs font-medium uppercase tracking-wide text-primary">Detalhe do turno</p><h2 className="mt-1 text-lg font-semibold capitalize">{dayLabel(selection.day, { weekday: 'long', day: '2-digit', month: 'long' })}</h2></div><button type="button" aria-label="Fechar detalhes" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg hover:bg-state-hover"><X size={19}/></button></div>
+  return <dialog ref={ref} onCancel={onClose} aria-label={`Detalhes da escala de ${dayLabel(selection.day)}`} className="nv-dialog fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full max-w-xl overflow-y-auto border-l border-border p-0 sm:w-[min(36rem,100vw)]">
+    <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-modal-bg px-5 py-4"><div><p className="text-xs font-medium uppercase tracking-wide text-primary">Detalhe do turno</p><h2 className="nv-section-title mt-1 capitalize">{dayLabel(selection.day, { weekday: 'long', day: '2-digit', month: 'long' })}</h2></div><button type="button" aria-label="Fechar detalhes" onClick={onClose} className="grid size-11 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-state-hover hover:text-text-primary"><X size={19}/></button></div>
     <div className="space-y-6 px-5 py-5">{children}</div>
   </dialog>;
 }

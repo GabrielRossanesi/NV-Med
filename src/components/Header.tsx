@@ -60,7 +60,7 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between bg-header-bg/72 px-4 backdrop-blur-xl md:px-7">
+    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-border bg-header-bg/90 px-4 backdrop-blur-xl md:px-7">
       <div className="min-w-0">
         <p className="truncate text-xs font-medium text-text-muted">{currentUser.type === 'saas_admin' && !isSimulating ? 'Administração SaaS' : 'Operação médica'}</p>
         <p className="truncate text-sm font-semibold text-text-primary">{activeOrg?.name || 'NV Med'}</p>

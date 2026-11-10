@@ -144,13 +144,13 @@ export default function AdminUsersPage() {
     switch (status) {
       case 'active':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-500">
+          <span className="nv-badge bg-success/10 text-success">
             <CheckCircle className="h-3 w-3" /> Ativo
           </span>
         );
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-500 animate-pulse">
+          <span className="nv-badge bg-warning/10 text-warning">
             <AlertCircle className="h-3 w-3" /> Pendente
           </span>
         );
@@ -171,7 +171,7 @@ export default function AdminUsersPage() {
         {/* Title */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight flex items-center gap-2">
+            <h2 className="nv-page-title flex items-center gap-2">
               <Users className="h-6 w-6 text-primary" />
               Gestão de Usuários
             </h2>
@@ -207,7 +207,7 @@ export default function AdminUsersPage() {
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs bg-input-bg border border-input-border rounded-lg text-text-primary focus:outline-none"
+                className="nv-input"
               >
                 <option value="all">Todos os tipos</option>
                 <option value="saas_admin">Admin SaaS</option>
@@ -220,7 +220,7 @@ export default function AdminUsersPage() {
               <select
                 value={filterOrg}
                 onChange={(e) => setFilterOrg(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs bg-input-bg border border-input-border rounded-lg text-text-primary focus:outline-none"
+                className="nv-input"
               >
                 <option value="all">Todas as empresas</option>
                 {organizations.map(o => (
@@ -234,7 +234,7 @@ export default function AdminUsersPage() {
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs bg-input-bg border border-input-border rounded-lg text-text-primary focus:outline-none"
+                className="nv-input"
               >
                 <option value="all">Todos os cargos</option>
                 {Array.from(new Set(users.map(u => u.role))).map(role => (
@@ -248,7 +248,7 @@ export default function AdminUsersPage() {
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs bg-input-bg border border-input-border rounded-lg text-text-primary focus:outline-none"
+                className="nv-input"
               >
                 <option value="all">Todos os status</option>
                 <option value="active">Ativo</option>
@@ -260,11 +260,11 @@ export default function AdminUsersPage() {
         </div>
 
         {/* Users Table */}
-        <div className="bg-card-bg border border-border rounded-2xl shadow-soft overflow-hidden">
+        <div className="nv-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-border bg-surface-muted/50 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                <tr className="border-b border-border bg-surface-muted font-semibold text-text-secondary uppercase tracking-wide">
                   <th className="p-4">Usuário</th>
                   <th className="p-4">Tipo & Vínculo</th>
                   <th className="p-4">Cargo / Função</th>
@@ -279,7 +279,7 @@ export default function AdminUsersPage() {
                   const org = organizations.find(o => o.id === user.organizationId);
                   
                   return (
-                    <tr key={user.id} className="hover:bg-state-hover transition duration-150">
+                    <tr key={user.id} className="hover:bg-table-row-hover transition-colors duration-150">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs text-text-inverse ${
@@ -302,7 +302,7 @@ export default function AdminUsersPage() {
                           </span>
                         ) : (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/20">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-warning/10 text-warning border border-warning/20">
                               <Building className="h-3 w-3" /> Cliente
                             </span>
                             <p className="text-[10px] text-text-muted truncate max-w-[150px]" title={org?.name}>
@@ -331,8 +331,8 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="p-4 text-center">
                         {user.status === 'pending' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/5 px-2 py-0.5 rounded-full border border-amber-500/10">
-                            <Clock className="h-3 w-3 animate-pulse" /> Convite pendente
+                          <span className="inline-flex items-center gap-1 text-[11px] text-warning bg-warning/5 px-2 py-0.5 rounded-full border border-amber-500/10">
+                            <Clock className="h-3 w-3" /> Convite pendente
                           </span>
                         ) : user.lastActive ? (
                           <span className="font-mono text-xs text-text-primary bg-surface-muted px-2 py-0.5 rounded border border-border inline-block">
@@ -405,9 +405,9 @@ export default function AdminUsersPage() {
         {/* Modal Create/Edit */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-overlay backdrop-blur-[2px]" />
             
-            <div className="relative w-full max-w-lg bg-card-bg border border-border rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="relative w-full max-w-lg bg-card-bg border border-border rounded-2xl shadow-strong overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
               {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-border">
                 <h3 className="text-lg font-bold text-text-primary">
@@ -427,7 +427,7 @@ export default function AdminUsersPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ex: Mariana Costa Martins"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -440,7 +440,7 @@ export default function AdminUsersPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="mariana@empresa.com.br"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -451,7 +451,7 @@ export default function AdminUsersPage() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="(11) 98888-8888"
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:border-primary focus:outline-none"
+                      className="nv-input"
                     />
                   </div>
 
@@ -461,7 +461,7 @@ export default function AdminUsersPage() {
                       <select
                         value={type}
                         onChange={(e) => handleTypeChange(e.target.value as 'saas_admin' | 'tenant_user')}
-                        className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
+                        className="nv-input"
                       >
                         <option value="tenant_user">Usuário da Empresa</option>
                         <option value="saas_admin">Admin SaaS</option>
@@ -473,7 +473,7 @@ export default function AdminUsersPage() {
                       <select
                         value={status}
                         onChange={(e) => setStatus(e.target.value as 'active' | 'pending' | 'inactive')}
-                        className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
+                        className="nv-input"
                       >
                         <option value="active">Ativo</option>
                         <option value="pending">Convite Pendente</option>
@@ -488,7 +488,7 @@ export default function AdminUsersPage() {
                       <select
                         value={organizationId || ''}
                         onChange={(e) => setOrganizationId(e.target.value)}
-                        className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
+                        className="nv-input"
                       >
                         {organizations.map(o => (
                           <option key={o.id} value={o.id}>{o.name}</option>
@@ -506,7 +506,7 @@ export default function AdminUsersPage() {
                         setRole(nextRole);
                         setAdditionalPermissions(current => sanitizeAdditionalPermissions(current, type, nextRole));
                       }}
-                      className="w-full px-3 py-2 text-sm bg-input-bg border border-input-border rounded-xl text-text-primary focus:border-primary focus:outline-none"
+                      className="nv-input"
                     >
                       {type === 'saas_admin' ? (
                         saasRoles.map(r => <option key={r} value={r}>{r}</option>)
