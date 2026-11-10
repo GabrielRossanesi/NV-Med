@@ -79,7 +79,7 @@ export default function Header() {
   }
 
   return (
-    <header className="nv-topbar sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-md">
+    <header className="nv-topbar sticky top-0 z-20 bg-background/95 backdrop-blur-md">
       <div className="nv-topbar-inner mx-auto w-full max-w-[112rem] px-3 py-2.5 sm:px-6 xl:px-9">
         <div className="nv-topbar-context flex min-w-0 items-center gap-2.5">
           <span className="hidden size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary min-[390px]:grid" aria-hidden="true">
