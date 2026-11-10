@@ -13,3 +13,9 @@ Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verific
 - Em **Escalas → Plantão avulso**, escolha unidade, setor, especialidade, motivo e datas. Pode deixar vagas abertas ou já indicar o médico. Repetições terminam na data escolhida; o padrão é o último dia do mês.
 - Plantões avulsos somam demanda apenas nas datas cadastradas, sem alterar a quantidade fixa do setor. Eles não são incluídos ao copiar semanas ou turnos.
 - Aplique `18_ad_hoc_shifts.sql` antes de disponibilizar a interface: adiciona os campos persistidos e valida motivo, especialidade e empresa no banco.
+
+## Valores de plantões e acordos financeiros
+
+- Valide `26_shift_payment_agreements.sql` após a migration 25 em um PostgreSQL descartável, com `scripts/test-database.ps1`. A migration cria a tabela privada de referências, amplia a visão financeira protegida e adiciona os fluxos auditados de alteração e consulta.
+- Coordene a disponibilização da migration com a versão correspondente da interface. Os valores padrão servem como referência para novas decisões e os acordos existentes preservam seus valores.
+- Depois da baixa, a correção do valor combinado exige edição em Financeiro e em Configurações da empresa, com motivo obrigatório. A modalidade, o vencimento, a data e o valor efetivamente pago são preservados.

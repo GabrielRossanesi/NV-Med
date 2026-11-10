@@ -156,6 +156,45 @@ export type EmploymentType = 'clt' | 'concursado' | 'pj';
 export type PaymentStatus = 'pending' | 'paid';
 export type PaymentFrequency = 'on_delivery' | 'monthly';
 
+export interface ShiftRateScope {
+  unit_id: string | null;
+  sector_id: string | null;
+  specialty: string | null;
+  duration_minutes: number | null;
+  shift_type: ShiftType | null;
+  turn: CoveragePeriodKind | null;
+}
+
+export interface ShiftRate extends ShiftRateScope {
+  id: string;
+  organization_id: string;
+  amount_cents: number;
+  active: boolean;
+}
+
+export interface ShiftPaymentAgreement {
+  mode: 'default' | 'manual' | 'override';
+  rate: (ShiftRateScope & Pick<ShiftRate, 'id' | 'amount_cents'>) | null;
+  override_reason: string | null;
+  reason: string | null;
+  actor: string;
+  changed_at: string;
+  kind: 'agreement' | 'paid_adjustment';
+}
+
+export interface ShiftAgreementSelection {
+  mode: ShiftPaymentAgreement['mode'] | 'keep';
+  frequency: PaymentFrequency;
+  amount_cents?: number;
+  rate_id: string | null;
+  rate_cents: number | null;
+  reason: string;
+  override_reason: string;
+  expected_amount_cents?: number;
+  expected_frequency?: PaymentFrequency;
+  expected_changed_at?: string;
+}
+
 export interface Shift {
   exchangeRequested?: boolean;
   coverageMode?: 'regular' | 'adhoc';
@@ -172,6 +211,7 @@ export interface Shift {
   paymentDueDate?: string;
   paidAmount?: number;
   paymentNote?: string;
+  paymentAgreement?: ShiftPaymentAgreement;
   id: string;
   doctorId?: string; // Empty while this staffing position is open
   unitId: string; // Linked Unit ID
@@ -183,6 +223,8 @@ export interface Shift {
   notes?: string;
   organizationId: string;
 }
+
+export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection };
 
 export type AdditionalPermissions = Record<string, 'view' | 'edit'>;
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
+import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, ShiftWrite, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission } from '@/lib/permissions';
@@ -21,11 +21,12 @@ interface NVMedState {
   updateUnit: (unit: Unit) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
   addSector: (sector: Omit<Sector, 'id' | 'organizationId'>) => Promise<boolean>;
   updateSector: (sector: Sector) => Promise<boolean>; deleteSector: (id: string) => Promise<boolean>;
-  addShift: (shift: Omit<Shift, 'id' | 'organizationId'>) => Promise<boolean>;
-  addShifts: (shifts: Omit<Shift, 'id' | 'organizationId'>[]) => Promise<boolean>;
-  updateShift: (shift: Shift) => Promise<boolean>;
+  addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>) => Promise<boolean>;
+  addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[]) => Promise<boolean>;
+  updateShift: (shift: ShiftWrite) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
   updateShiftFinancials: (...input: Parameters<typeof cloud.updateShiftFinancialsInSupabase>) => Promise<boolean>;
+  updateShiftAgreement: (...input: Parameters<typeof cloud.editShiftAgreement>) => Promise<boolean>;
   deleteShift: (id: string) => Promise<boolean>;
   deleteShifts: (ids: string[]) => Promise<boolean>;
   vacateShifts: (ids: string[]) => Promise<boolean>;
@@ -110,6 +111,11 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
       const updated = await cloud.updateShiftFinancialsInSupabase(id, amount, frequency, status, settlement);
+      set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
+    }),
+    updateShiftAgreement: (id, selection, adjustment) => commit(async () => {
+      if (!get().shifts.some(shift => shift.id === id && shift.organizationId === orgId())) throw new Error('Plantão não encontrado nesta empresa.');
+      const updated = await cloud.editShiftAgreement(id, selection, adjustment);
       set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
     }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),

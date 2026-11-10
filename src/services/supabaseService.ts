@@ -8,6 +8,9 @@ import {
   Sector,
   MedicalDocument,
   Shift,
+  ShiftWrite,
+  ShiftRate,
+  ShiftAgreementSelection,
   UserAccount,
   DocumentStatus,
   DocumentType,
@@ -143,6 +146,7 @@ interface DbShift {
   payment_due_date?: string | null;
   paid_amount?: number | null;
   payment_note?: string | null;
+  payment_agreement?: Shift['paymentAgreement'] | null;
   id: string;
   organization_id: string;
   doctor_id?: string | null;
@@ -304,6 +308,7 @@ function mapShiftFromDb(row: DbShift): Shift {
     paymentDueDate: row.payment_due_date || undefined,
     paidAmount: row.paid_amount == null ? undefined : Number(row.paid_amount),
     paymentNote: row.payment_note || undefined,
+    paymentAgreement: row.payment_agreement || undefined,
     id: row.id,
     organizationId: row.organization_id,
     doctorId: row.doctor_id || undefined,
@@ -500,16 +505,16 @@ export async function deleteSectorFromSupabase(sectorId: string) {
   if (error) throw new Error('Não foi possível excluir o setor. Desative-o se já houver plantões vinculados.');
 }
 
-export async function saveShiftToSupabase(shift: Shift) {
+export async function saveShiftToSupabase(shift: ShiftWrite) {
   const [saved] = await saveShiftsToSupabase([shift]);
   if (!saved) throw new Error('Plantão salvo. Recarregue a escala para atualizar os detalhes.');
   return saved;
 }
 
-export async function saveShiftsToSupabase(shifts: Shift[]) {
+export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  const payload = shifts.map((shift): DbShift => ({
+  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection } => ({
     id: shift.id,
     coverage_mode: shift.coverageMode || 'regular',
     coverage_reason: shift.coverageMode === 'adhoc' ? shift.coverageReason?.trim() : null,
@@ -522,6 +527,7 @@ export async function saveShiftsToSupabase(shifts: Shift[]) {
     payment_status: shift.paymentStatus || 'pending',
     payment_frequency: shift.paymentFrequency || 'on_delivery',
     paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
+    agreement: shift.agreement,
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
@@ -598,6 +604,30 @@ export async function updateShiftFinancialsInSupabase(
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error('Plantão não encontrado nesta empresa.');
   return mapShiftFromDb(row as DbShift);
+}
+
+export async function fetchShiftRates(organization: string) {
+  const client = createClient();
+  if (!client) throw new Error('Conexão não configurada.');
+  const { data, error } = await client.rpc('nv_shift_rates', { org: organization });
+  if (error) throw new Error('Não foi possível consultar os valores padrão.');
+  return data as ShiftRate[];
+}
+
+export async function saveShiftRate(organization: string, target: string | null, rule: Omit<ShiftRate, 'organization_id' | 'id'>) {
+  const client = createClient();
+  if (!client) throw new Error('Conexão não configurada.');
+  const { error } = await client.rpc('nv_save_shift_rate', { org: organization, target, rule });
+  if (error) throw new Error(error.code === '22023' ? error.message : 'Não foi possível salvar o valor padrão.');
+}
+
+export async function editShiftAgreement(target: string, selection: ShiftAgreementSelection, adjustment = false) {
+  const client = createClient();
+  if (!client) throw new Error('Conexão não configurada.');
+  const { data, error } = await client.rpc('nv_edit_shift_agreement', { target, selection, adjustment });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Acordo registrado. Atualize a página para consultar a ficha.');
+  return mapShiftFromDb(data as DbShift);
 }
 
 export async function saveDocumentToSupabase(doc: MedicalDocument) {

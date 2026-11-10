@@ -2,20 +2,21 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ArrowUpRight, Building2, CalendarDays, CalendarCheck, Clock3, FileClock, ListChecks, WalletCards, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Building2, CalendarDays, CalendarCheck, ChevronLeft, ChevronRight, Clock3, FileClock, ListChecks, WalletCards, type LucideIcon } from 'lucide-react';
 import OperationalIndicators, { useOperationalCounts } from '@/components/OperationalIndicators';
 import UserAvatar from '@/components/UserAvatar';
-import { coverageDays, dashboardPayments, doctorsWithDocumentIssues, shiftScheduleHref } from '@/lib/dashboardOverview';
+import { coverageDays, coverageWeeks, dashboardAgenda, dashboardPayments, dashboardRange, dashboardShiftMatches, doctorsWithDocumentIssues, moveDashboardMonth, shiftScheduleHref, type DashboardPeriod } from '@/lib/dashboardOverview';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
 import { saoPauloDate } from '@/lib/financeState';
 import { canViewPermission } from '@/lib/permissions';
-import { localDate, shiftTouchesDay } from '@/lib/scheduling';
+import { localDate } from '@/lib/scheduling';
 import { useStore } from '@/store/useStore';
-import type { Doctor, Shift, Unit } from '@/types';
+import type { Doctor, Sector, Shift, Unit } from '@/types';
 
 const longDate = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 const shortDate = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
 const weekday = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' });
+const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateAtNoon = (date: string) => new Date(date + 'T12:00:00');
 const shortTime = (time: string) => time.slice(0, 5);
@@ -52,22 +53,40 @@ function SegmentedControl<T extends string>({ label, value, onChange, options }:
   </div>;
 }
 
-type DayCoverage = ReturnType<typeof coverageDays>[number];
+const periodOptions: { value: DashboardPeriod; label: string }[] = [
+  { value: 'today', label: 'Hoje' }, { value: 'tomorrow', label: 'Amanhã' },
+  { value: 'week', label: '7 dias' }, { value: 'month', label: 'Mês' },
+];
 
-function CoveragePanel({ days, shifts, unitById, doctorById }: {
-  days: DayCoverage[]; shifts: Shift[]; unitById: Map<string, Unit>; doctorById: Map<string, Doctor>;
+function MonthNavigation({ month, onChange }: { month: string; onChange: (value: string) => void }) {
+  const button = 'grid size-10 shrink-0 place-items-center rounded-lg text-text-secondary hover:bg-state-hover';
+  return <div className="mt-3 flex w-fit max-w-full items-center gap-1 rounded-xl border border-border px-1">
+    <button type="button" className={button} aria-label="Mês anterior" onClick={() => onChange(moveDashboardMonth(month, -1))}><ChevronLeft size={16} aria-hidden="true" /></button>
+    <span aria-live="polite" className="min-w-32 text-center text-xs font-semibold capitalize">{monthLabel.format(dateAtNoon(`${month}-01`))}</span>
+    <button type="button" className={button} aria-label="Próximo mês" onClick={() => onChange(moveDashboardMonth(month, 1))}><ChevronRight size={16} aria-hidden="true" /></button>
+  </div>;
+}
+
+type CoverageFilters = { unit: string; specialty: string };
+
+function CoveragePanel({ today, sectors, shifts, unitById, doctorById, specialties, filters, onFilter }: {
+  today: string; sectors: Sector[]; shifts: Shift[]; unitById: Map<string, Unit>; doctorById: Map<string, Doctor>;
+  specialties: string[]; filters: CoverageFilters; onFilter: (filters: CoverageFilters) => void;
 }) {
-  const [range, setRange] = useState<'today' | 'week'>('week');
+  const [range, setRange] = useState<DashboardPeriod>('week');
+  const [month, setMonth] = useState(today.slice(0, 7));
   const [groupBy, setGroupBy] = useState<'unit' | 'specialty'>('unit');
   const [showAll, setShowAll] = useState(false);
-  const visibleDays = range === 'today' ? days.slice(0, 1) : days;
-  const periodShifts = shifts.filter(shift => shift.status !== 'cancelled' && shift.date >= visibleDays[0].day && shift.date <= visibleDays.at(-1)!.day);
+  const { start, end, length } = dashboardRange(today, range, month);
+  const periodShifts = shifts.filter(shift => shift.status !== 'cancelled' && shift.date >= start && shift.date <= end);
+  const visibleDays = coverageDays(start, sectors, periodShifts, length, Boolean(filters.specialty));
+  const columns = range === 'month' ? coverageWeeks(visibleDays) : visibleDays.map(day => ({ ...day, end: day.day }));
   const required = visibleDays.reduce((sum, day) => sum + day.required, 0);
   const deficit = visibleDays.reduce((sum, day) => sum + day.deficit, 0);
   const open = periodShifts.filter(shift => !shift.doctorId).length;
   const confirmed = periodShifts.filter(shift => shift.status === 'confirmed' && shift.doctorId).length;
   const percent = required ? Math.round((required - deficit) / required * 100) : null;
-  const peak = Math.max(1, ...visibleDays.map(day => day.required));
+  const peak = Math.max(1, ...columns.map(day => day.required));
   const distribution = new Map<string, { name: string; count: number; open: number }>();
   for (const shift of periodShifts) {
     const specialty = shift.specialty || doctorById.get(shift.doctorId || '')?.specialty || 'Sem especialidade';
@@ -85,10 +104,20 @@ function CoveragePanel({ days, shifts, unitById, doctorById }: {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 id="coverage-title" className="nv-section-title">Escalas e cobertura</h2>
-        <p className="mt-1 text-sm text-text-muted">Ocupação dos postos previstos por dia.</p>
+        <p className="mt-1 text-sm text-text-muted">{filters.specialty ? 'Ocupação dos postos cadastrados na especialidade.' : 'Ocupação dos postos previstos.'}</p>
       </div>
-      <SegmentedControl label="Período de cobertura" value={range} onChange={setRange} options={[{ value: 'today', label: 'Hoje' }, { value: 'week', label: '7 dias' }]} />
+      <SegmentedControl label="Período de cobertura" value={range} onChange={setRange} options={periodOptions} />
     </div>
+    {range === 'month' && <MonthNavigation month={month} onChange={setMonth} />}
+    <div className="mt-3 grid gap-2 min-[390px]:grid-cols-2">
+      <label className="nv-label text-xs">Unidade<select className="nv-input" value={filters.unit} onChange={event => onFilter({ ...filters, unit: event.target.value })}>
+        <option value="">Todas</option>{[...unitById.values()].map(unit => <option value={unit.id} key={unit.id}>{unit.name}</option>)}
+      </select></label>
+      <label className="nv-label text-xs">Especialidade<select className="nv-input" value={filters.specialty} onChange={event => onFilter({ ...filters, specialty: event.target.value })}>
+        <option value="">Todas</option>{specialties.map(item => <option key={item}>{item}</option>)}
+      </select></label>
+    </div>
+    <p className="mt-2 text-xs text-text-muted">Os filtros também se aplicam à agenda de próximos plantões.</p>
 
     <div className="my-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <strong className="text-4xl font-semibold tracking-[-0.06em] tabular-nums text-text-primary">{percent === null ? '—' : `${percent}%`}</strong>
@@ -96,9 +125,10 @@ function CoveragePanel({ days, shifts, unitById, doctorById }: {
     </div>
 
     {required > 0 ? <>
-      <ul aria-label="Cobertura diária" className="flex gap-0.5 rounded-2xl border border-border bg-surface-muted/35 px-2 pb-2 pt-3 sm:gap-2 sm:px-3">
-        {visibleDays.map(day => <li key={day.day} className="min-w-0 flex-1">
-          <Link href={`/escala?date=${day.day}`} aria-label={`${longDate.format(dateAtNoon(day.day))}, ${day.required - day.deficit} de ${day.required} postos preenchidos`}
+      <ul aria-label={range === 'month' ? 'Cobertura semanal do mês' : 'Cobertura diária'} className="flex gap-0.5 rounded-2xl border border-border bg-surface-muted/35 px-2 pb-2 pt-3 sm:gap-2 sm:px-3">
+        {columns.map(day => <li key={day.day} className="min-w-0 flex-1">
+          <Link href={'/escala?' + new URLSearchParams({ date: day.day, ...(filters.unit && { unitId: filters.unit }), ...(filters.specialty && { specialty: filters.specialty }) })}
+            aria-label={`${range === 'month' ? `${shortDate.format(dateAtNoon(day.day))} a ${shortDate.format(dateAtNoon(day.end))}` : longDate.format(dateAtNoon(day.day))}, ${day.required - day.deficit} de ${day.required} postos preenchidos`}
             className="group flex flex-col items-center gap-2 rounded-lg px-0.5 py-1 text-center hover:bg-state-hover">
             <span className="text-xs font-semibold tabular-nums text-text-secondary">{day.required - day.deficit}/{day.required}</span>
             <span className="flex h-19 w-full max-w-16 flex-col justify-end" aria-hidden="true">
@@ -106,7 +136,7 @@ function CoveragePanel({ days, shifts, unitById, doctorById }: {
                 <span className="bg-primary/80" style={{ height: day.required ? `${(day.required - day.deficit) / day.required * 100}%` : 0 }} />
               </span>
             </span>
-            <span className="text-[11px] font-medium capitalize text-text-muted">{weekday.format(dateAtNoon(day.day)).replace('.', '')} <span className="hidden min-[390px]:inline">{day.day.slice(-2)}</span></span>
+            <span className="text-[11px] font-medium capitalize text-text-muted">{range === 'month' ? `${day.day.slice(-2)}–${day.end.slice(-2)}` : <>{weekday.format(dateAtNoon(day.day)).replace('.', '')} <span className="hidden min-[390px]:inline">{day.day.slice(-2)}</span></>}</span>
           </Link>
         </li>)}
       </ul>
@@ -114,7 +144,7 @@ function CoveragePanel({ days, shifts, unitById, doctorById }: {
         <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-primary/80" />Preenchidos</span>
         <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-accent/25" />Descobertos</span>
       </div>
-    </> : <EmptyState icon={CalendarDays} title="Sem postos previstos neste período" detail="A previsão aparece quando há setores ativos com cobertura configurada." />}
+    </> : <EmptyState icon={CalendarDays} title={filters.specialty ? 'Sem postos cadastrados para a especialidade' : 'Sem postos previstos neste período'} detail={filters.specialty ? 'Ajuste o período, a unidade ou a especialidade.' : 'A previsão aparece quando há setores ativos com cobertura configurada.'} />}
 
     <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3">
       <div><dt className="text-xs text-text-muted">Plantões confirmados</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-primary">{confirmed}</dd></div>
@@ -135,15 +165,19 @@ function CoveragePanel({ days, shifts, unitById, doctorById }: {
   </section>;
 }
 
-function UpcomingPanel({ days, shifts, unitById, doctorById }: {
-  days: DayCoverage[]; shifts: Shift[]; unitById: Map<string, Unit>; doctorById: Map<string, Doctor>;
+function UpcomingPanel({ today, shifts, unitById, doctorById, filters }: {
+  today: string; shifts: Shift[]; unitById: Map<string, Unit>; doctorById: Map<string, Doctor>; filters: CoverageFilters;
 }) {
-  const [selected, setSelected] = useState<'today' | 'tomorrow' | 'week'>('today');
-  const day = days[selected === 'tomorrow' ? 1 : 0].day;
-  const end = selected === 'week' ? days.at(-1)!.day : day;
-  const agenda = shifts.filter(shift => shift.status === 'confirmed' && shift.doctorId
-    && (shiftTouchesDay(shift, day) || (shift.date > day && shift.date <= end)))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  const [selected, setSelected] = useState<DashboardPeriod>('today');
+  const [month, setMonth] = useState(today.slice(0, 7));
+  const [page, setPage] = useState({ key: '', index: 0 });
+  const { start: day, end } = dashboardRange(today, selected, month);
+  const agenda = useMemo(() => dashboardAgenda(shifts, day, end, selected !== 'month'), [shifts, day, end, selected]);
+  const pageSize = selected === 'month' ? 8 : 4;
+  const pageCount = Math.ceil(agenda.length / pageSize);
+  const pageKey = JSON.stringify([selected, day, filters]);
+  const pageIndex = page.key === pageKey ? Math.max(0, Math.min(page.index, pageCount - 1)) : 0;
+  const scheduleHref = '/escala?' + new URLSearchParams({ date: day, ...(selected === 'month' && { view: 'month' }), ...(filters.unit && { unitId: filters.unit }), ...(filters.specialty && { specialty: filters.specialty }) });
 
   return <section aria-labelledby="agenda-title" className="nv-panel self-start rounded-[1.375rem] p-4 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -151,11 +185,12 @@ function UpcomingPanel({ days, shifts, unitById, doctorById }: {
         <h2 id="agenda-title" className="nv-section-title">Próximos plantões</h2>
         <p className="mt-1 text-sm text-text-muted">Agenda de plantões confirmados.</p>
       </div>
-      <SegmentedControl label="Período dos plantões" value={selected} onChange={setSelected} options={[{ value: 'today', label: 'Hoje' }, { value: 'tomorrow', label: 'Amanhã' }, { value: 'week', label: '7 dias' }]} />
+      <SegmentedControl label="Período dos plantões" value={selected} onChange={setSelected} options={periodOptions} />
     </div>
-    <p className="mb-3 mt-5 flex items-center gap-2 text-xs font-semibold text-text-muted"><CalendarDays size={15} aria-hidden="true" />{selected === 'week' ? `${shortDate.format(dateAtNoon(day))} – ${shortDate.format(dateAtNoon(end))}` : displayDay(day)}</p>
+    {selected === 'month' && <MonthNavigation month={month} onChange={setMonth} />}
+    <p className="mb-3 mt-5 flex items-center gap-2 text-xs font-semibold text-text-muted"><CalendarDays size={15} aria-hidden="true" />{day !== end ? `${shortDate.format(dateAtNoon(day))} – ${shortDate.format(dateAtNoon(end))}` : displayDay(day)}</p>
     {agenda.length ? <ul className="divide-y divide-border border-y border-border">
-      {agenda.slice(0, 4).map(shift => {
+      {agenda.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize).map(shift => {
         const doctor = doctorById.get(shift.doctorId || '');
         return <li key={shift.id}><Link href={shiftScheduleHref(shift)} className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 rounded-lg py-3 hover:bg-table-row-hover">
           <UserAvatar name={doctor?.name || 'Médico'} className="row-span-2 mt-0.5 size-9" />
@@ -171,7 +206,12 @@ function UpcomingPanel({ days, shifts, unitById, doctorById }: {
         </Link></li>;
       })}
     </ul> : <EmptyState icon={CalendarCheck} title="Nenhum plantão confirmado" detail="Consulte a escala do dia para acompanhar vagas e confirmações." />}
-    <div className="mt-3"><TextLink href={`/escala?date=${day}`}>{selected === 'week' ? 'Abrir calendário da escala' : 'Ver escala do dia'}{selected !== 'week' && agenda.length > 4 ? ` (${agenda.length} confirmados)` : ''}</TextLink></div>
+    {selected === 'month' && pageCount > 1 && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <button type="button" className="nv-button-secondary" disabled={pageIndex === 0} onClick={() => setPage({ key: pageKey, index: pageIndex - 1 })}>Anterior</button>
+      <span aria-live="polite">Página {pageIndex + 1} de {pageCount}</span>
+      <button type="button" className="nv-button-secondary" disabled={pageIndex + 1 >= pageCount} onClick={() => setPage({ key: pageKey, index: pageIndex + 1 })}>Próxima</button>
+    </div>}
+    <div className="mt-3"><TextLink href={scheduleHref}>{selected === 'month' ? 'Ver escala do mês' : selected === 'week' ? 'Abrir calendário da escala' : 'Ver escala do dia'}{agenda.length > pageSize ? ` (${agenda.length} confirmados)` : ''}</TextLink></div>
   </section>;
 }
 
@@ -271,6 +311,7 @@ function DashboardContent({ organization }: { organization: string }) {
   const canSeeUnits = canViewPermission(currentUser, 'unidades');
   const canSeeSettings = canViewPermission(currentUser, 'configuracoes');
   const [referenceTime] = useState(Date.now);
+  const [scheduleFilters, setScheduleFilters] = useState<CoverageFilters>({ unit: '', specialty: '' });
   useEffect(() => {
     if (window.location.hash === '#pendencias') document.getElementById('pendencias')?.scrollIntoView();
   }, []);
@@ -281,7 +322,12 @@ function DashboardContent({ organization }: { organization: string }) {
   const orgUnits = useMemo(() => units.filter(unit => unit.organizationId === organization), [units, organization]);
   const unitById = useMemo(() => new Map(orgUnits.map(unit => [unit.id, unit])), [orgUnits]);
   const doctorById = useMemo(() => new Map(orgDoctors.map(doctor => [doctor.id, doctor])), [orgDoctors]);
-  const days = useMemo(() => coverageDays(today, sectors.filter(sector => sector.organizationId === organization && sector.status === 'active'), orgShifts, 7), [today, sectors, organization, orgShifts]);
+  const orgSectors = useMemo(() => sectors.filter(sector => sector.organizationId === organization), [sectors, organization]);
+  const sectorById = useMemo(() => new Map(orgSectors.map(sector => [sector.id, sector])), [orgSectors]);
+  const activeSectors = useMemo(() => orgSectors.filter(sector => sector.status === 'active'), [orgSectors]);
+  const scheduleShifts = useMemo(() => orgShifts.filter(shift => dashboardShiftMatches(shift, scheduleFilters.unit, scheduleFilters.specialty, doctorById, sectorById)), [orgShifts, scheduleFilters, doctorById, sectorById]);
+  const specialties = useMemo(() => [...new Set([...orgSectors.flatMap(sector => sector.specialties), ...orgShifts.map(shift => shift.specialty || ''), ...orgDoctors.map(doctor => doctor.specialty)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [orgDoctors, orgSectors, orgShifts]);
+  const [todayCoverage] = useMemo(() => coverageDays(today, activeSectors, orgShifts, 1), [today, activeSectors, orgShifts]);
   const issues = useMemo(() => {
     if (!canSeeDocuments) return [];
     return doctorsWithDocumentIssues(orgDoctors, documents.filter(document => document.organizationId === organization), orgShifts, referenceTime,
@@ -316,10 +362,10 @@ function DashboardContent({ organization }: { organization: string }) {
           {canSeeSettings && <TextLink href="/configuracoes">Configurações da empresa</TextLink>}
         </div>
       </section>}
-      <OperationalIndicators today={today} gaps={days[0].deficit} canSeeSchedule={canSeeSchedule} canSeeDoctors={canSeeDoctors} result={result} />
+      <OperationalIndicators today={today} gaps={todayCoverage.deficit} canSeeSchedule={canSeeSchedule} canSeeDoctors={canSeeDoctors} result={result} />
       {canSeeSchedule && <div className="nv-overview-grid grid gap-4 lg:gap-5">
-        <CoveragePanel days={days} shifts={orgShifts} unitById={unitById} doctorById={doctorById} />
-        <UpcomingPanel days={days} shifts={orgShifts} unitById={unitById} doctorById={doctorById} />
+        <CoveragePanel today={today} sectors={activeSectors.filter(sector => !scheduleFilters.unit || sector.unitId === scheduleFilters.unit)} shifts={scheduleShifts} unitById={unitById} doctorById={doctorById} specialties={specialties} filters={scheduleFilters} onFilter={setScheduleFilters} />
+        <UpcomingPanel today={today} shifts={scheduleShifts} unitById={unitById} doctorById={doctorById} filters={scheduleFilters} />
       </div>}
       <div className="nv-overview-grid grid gap-4 lg:gap-5">
         <PendingPanel units={orgUnits} issues={issues} canSeeDocuments={canSeeDocuments} checkins={checkins} checkinHref={checkinHref} />

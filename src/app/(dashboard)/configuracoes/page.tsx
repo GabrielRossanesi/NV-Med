@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
-import { canEditPermission } from '@/lib/permissions';
+import { canEditPermission, canViewPermission } from '@/lib/permissions';
 
 interface SettingsFormProps {
   activeOrg: Organization;
@@ -31,7 +31,7 @@ function SettingsForm({
   canManageSettings,
   saving,
 }: SettingsFormProps) {
-  const { theme, setTheme } = useStore();
+  const { theme, setTheme, currentUser } = useStore();
 
   // Form editing state
   const [name, setName] = useState(activeOrg?.name || '');
@@ -237,6 +237,10 @@ function SettingsForm({
             <Link href="/configuracoes/documentos" className="nv-button-secondary">Gerenciar exigências <ArrowRight size={15} /></Link>
           </div>
         </section>
+        {canViewPermission(currentUser, 'financeiro') && <section className="flex flex-wrap items-center justify-between gap-4 border-b border-border py-6">
+          <div><h3 className="text-sm font-semibold">Valores de plantões</h3><p className="mt-2 max-w-lg text-sm text-text-muted">Consulte e configure referências para novos acordos financeiros.</p></div>
+          <Link href="/configuracoes/valores-plantoes" className="nv-button-secondary">Consultar valores <ArrowRight size={15} aria-hidden="true" /></Link>
+        </section>}
       </div>
 
       {/* Right Column (Theme, Compliance & Demo tools) */}

@@ -2,17 +2,65 @@ import { documentIsCritical, getDoctorCompliance } from './documentCompliance.ts
 import { applicableDocuments } from './documentGovernance.ts';
 import { getDoctorOperationalUnitIds } from './doctorUnits.ts';
 import { financeState } from './financeState.ts';
-import { localDate, summarizeSectorCoverage } from './scheduling.ts';
+import { localDate, shiftTouchesDay, summarizeSectorCoverage } from './scheduling.ts';
 import type { Doctor, DocumentRequirement, MedicalDocument, Sector, Shift } from '../types/index.ts';
 
 export function shiftScheduleHref(shift: Pick<Shift, 'date' | 'id'>) {
   return '/escala?' + new URLSearchParams({ date: shift.date, shiftId: shift.id }) + '#plantao';
 }
 
-export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], length: number) {
+export type DashboardPeriod = 'today' | 'tomorrow' | 'week' | 'month';
+
+function dayOffset(day: string, offset: number) {
+  const date = new Date(`${day}T12:00:00`);
+  date.setDate(date.getDate() + offset);
+  return localDate(date);
+}
+
+export function moveDashboardMonth(month: string, offset: number) {
+  const date = new Date(`${month}-01T12:00:00`);
+  date.setMonth(date.getMonth() + offset);
+  return localDate(date).slice(0, 7);
+}
+
+export function dashboardRange(today: string, period: DashboardPeriod, month = today.slice(0, 7)) {
+  if (period === 'month') {
+    const start = `${month}-01`;
+    const end = dayOffset(`${moveDashboardMonth(month, 1)}-01`, -1);
+    return { start, end, length: Number(end.slice(-2)) };
+  }
+  const start = period === 'tomorrow' ? dayOffset(today, 1) : today;
+  const length = period === 'week' ? 7 : 1;
+  return { start, end: dayOffset(start, length - 1), length };
+}
+
+export function dashboardShiftMatches(
+  shift: Shift, unitId: string, specialty: string, doctors: ReadonlyMap<string, Doctor>, sectors: ReadonlyMap<string, Sector>,
+) {
+  if (unitId && shift.unitId !== unitId) return false;
+  if (!specialty) return true;
+  const sector = sectors.get(shift.sectorId || '');
+  return specialty === (shift.specialty || doctors.get(shift.doctorId || '')?.specialty || (sector?.specialties.length === 1 ? sector.specialties[0] : undefined));
+}
+
+export function dashboardAgenda(shifts: Shift[], start: string, end: string, includeOvernight: boolean) {
+  return shifts.filter(shift => shift.status === 'confirmed' && shift.doctorId
+    && ((shift.date >= start && shift.date <= end) || (includeOvernight && shiftTouchesDay(shift, start))))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id));
+}
+
+export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], length: number, registeredOnly = false) {
   const shiftsByTurn = new Map<string, Shift[]>();
+  const shiftsByDay = new Map<string, Shift[]>();
+  const end = dayOffset(today, length - 1);
   for (const shift of shifts) {
-    if (shift.status === 'cancelled') continue;
+    if (shift.status === 'cancelled' || shift.date < today || shift.date > end) continue;
+    if (registeredOnly) {
+      const items = shiftsByDay.get(shift.date) || [];
+      items.push(shift);
+      shiftsByDay.set(shift.date, items);
+      continue;
+    }
     const key = `${shift.date}/${shift.sectorId}`;
     const items = shiftsByTurn.get(key) || [];
     items.push(shift);
@@ -20,9 +68,11 @@ export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], 
   }
 
   return Array.from({ length }, (_, offset) => {
-    const date = new Date(`${today}T12:00:00`);
-    date.setDate(date.getDate() + offset);
-    const day = localDate(date);
+    const day = dayOffset(today, offset);
+    if (registeredOnly) {
+      const items = shiftsByDay.get(day) || [];
+      return { day, required: items.length, deficit: items.filter(item => !item.doctorId).length };
+    }
     const totals = { day, required: 0, deficit: 0 };
     for (const sector of sectors) {
       const summary = summarizeSectorCoverage(sector, shiftsByTurn.get(`${day}/${sector.id}`) || []);
@@ -31,6 +81,20 @@ export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], 
     }
     return totals;
   });
+}
+
+export function coverageWeeks(days: ReturnType<typeof coverageDays>) {
+  const weeks: { day: string; end: string; required: number; deficit: number }[] = [];
+  for (const day of days) {
+    const week = weeks.at(-1);
+    if (!week || new Date(`${day.day}T12:00:00`).getDay() === 1) weeks.push({ ...day, end: day.day });
+    else {
+      week.end = day.day;
+      week.required += day.required;
+      week.deficit += day.deficit;
+    }
+  }
+  return weeks;
 }
 
 export function doctorsWithDocumentIssues(
