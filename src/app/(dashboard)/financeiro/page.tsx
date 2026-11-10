@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { financeState, financeStateLabels, saoPauloDate, type FinanceState } from '@/lib/financeState';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Banknote,
@@ -19,8 +19,9 @@ import {
 import Dialog from '@/components/Dialog';
 import ShiftRecordSummary from '@/components/schedule/ShiftRecordSummary';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
-import { downloadCsv } from '@/lib/csv';
-import { employmentLabels, localDate, paymentFrequencyLabels } from '@/lib/scheduling';
+import { createClient } from '@/lib/supabase/client';
+import type { ReportCatalog } from '@/lib/shiftReport';
+import { localDate, paymentFrequencyLabels } from '@/lib/scheduling';
 import { canEditPermission, canViewPermission } from '@/lib/permissions';
 import { buildAgreementSelection, chooseShiftRate, initialAgreementDraft, parseMoneyCents } from '@/lib/shiftPricing';
 import { useStore } from '@/store/useStore';
@@ -58,12 +59,8 @@ function money(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function safeName(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-}
-
 function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClose }: {
-  shift: Shift; organization?: Organization; unit?: Unit; sector?: Sector; doctor?: Doctor; onClose: () => void;
+  shift: Shift; organization?: Organization; unit?: Pick<Unit, 'name'>; sector?: Pick<Sector, 'name' | 'coveragePeriods' | 'defaultStartTime' | 'defaultEndTime' | 'requiredDoctors'>; doctor?: Pick<Doctor, 'name' | 'specialty'>; onClose: () => void;
 }) {
   const { currentUser, saving, updateShiftAgreement, updateShiftFinancials } = useStore();
   const [view, setView] = useState<'details' | 'agreement' | 'settlement' | 'adjustment'>('details');
@@ -166,10 +163,18 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
   const bounds = periodBounds(periodMode, reference);
   const today = saoPauloDate();
 
-  // Every collection is scoped before it participates in filters or joins.
-  const units = useMemo(() => store.units.filter(item => item.organizationId === orgId), [store.units, orgId]);
-  const sectors = useMemo(() => store.sectors.filter(item => item.organizationId === orgId), [store.sectors, orgId]);
-  const doctors = useMemo(() => store.doctors.filter(item => item.organizationId === orgId), [store.doctors, orgId]);
+  const [catalog, setCatalog] = useState<ReportCatalog | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (orgId) void createClient()?.rpc('nv_report_catalog', { org: orgId, financial_only: true }).then(result => {
+      if (live && !result.error) setCatalog(result.data);
+    });
+    return () => { live = false; };
+  }, [orgId]);
+
+  const units = useMemo(() => catalog?.units || store.units.filter(item => item.organizationId === orgId), [catalog, store.units, orgId]);
+  const sectors = useMemo(() => catalog?.sectors || store.sectors.filter(item => item.organizationId === orgId), [catalog, store.sectors, orgId]);
+  const doctors = useMemo(() => catalog?.doctors || store.doctors.filter(item => item.organizationId === orgId), [catalog, store.doctors, orgId]);
   const organizationShifts = useMemo(() => store.shifts.filter(item => item.organizationId === orgId), [store.shifts, orgId]);
   const editing = organizationShifts.find(shift => shift.id === editingId && shift.doctorId);
   const specialties = useMemo(() => [...new Set([
@@ -202,37 +207,11 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
     setPaymentStatus('');
   }
 
-  function exportCsv() {
-    const rows = filteredShifts.map(item => {
-      const doctor = doctors.find(value => value.id === item.doctorId);
-      const unit = units.find(value => value.id === item.unitId);
-      const sector = sectors.find(value => value.id === item.sectorId);
-      return [
-        organization?.name,
-        displayDate(item.date),
-        item.startTime,
-        item.endTime,
-        doctor?.name,
-        doctor ? `${doctor.crm}-${doctor.crmUf}` : '',
-        unit?.name,
-        sector?.name || item.sector,
-        item.specialty,
-        item.employmentType ? employmentLabels[item.employmentType] : '',
-        item.employerName,
-        paymentFrequencyLabels[item.paymentFrequency || 'on_delivery'],
-        (item.paymentAmount || 0).toFixed(2).replace('.', ','),
-        financeStateLabels[financeState(item, today)],
-        item.paymentDueDate ? displayDate(item.paymentDueDate) : '',
-        item.paidAt ? new Date(item.paidAt).toLocaleString('pt-BR') : '',
-        item.paidAmount?.toFixed(2).replace('.', ','),
-      ];
-    });
-    downloadCsv(
-      `financeiro-${safeName(organization?.name || 'empresa')}-${bounds.start ? `${bounds.start}-${bounds.end}` : 'todos-os-periodos'}`,
-      ['Empresa', 'Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Situação', 'Vencimento', 'Pago em', 'Valor pago (R$)'],
-      rows,
-    );
-  }
+  const allDates = filteredShifts.map(item => item.date);
+  const reportParams = new URLSearchParams(Object.fromEntries(Object.entries({
+    empresa: orgId, inicio: bounds.start || allDates[0] || today, fim: bounds.end || allDates.at(-1) || today,
+    unidade: unitId, posto: sectorId, especialidade: specialty, modalidade: frequency, pagamento: paymentStatus, plantao: requestedShift || '',
+  }).filter(([, value]) => value)));
 
   function shiftContext(shift: Shift) {
     return {
@@ -255,7 +234,7 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
             {canEditPermission(store.currentUser, 'configuracoes') && <Link className="nv-button-secondary" href="/financeiro/configuracao">Regras de vencimento</Link>}
             <Link className="nv-button-secondary" href="/configuracoes/valores-plantoes">Valores de plantões</Link>
             {requestedShift && <Link className="nv-button-secondary" href="/financeiro">Ver todos os pagamentos</Link>}
-            <button type="button" className="nv-button" onClick={exportCsv} disabled={!filteredShifts.length}><Download size={16}/>Exportar CSV</button>
+            <Link className="nv-button" href={`/financeiro/relatorio?${reportParams}`}><Download size={16}/>Relatório e exportação</Link>
           </div>
         </header>
 

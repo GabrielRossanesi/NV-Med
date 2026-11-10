@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
+import Dialog from '@/components/Dialog';
+import UserPermissionsPanel from '@/components/UserPermissionsPanel';
 import AccessGuard from '@/components/AccessGuard';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import TemporaryPasswordDialog from '@/components/TemporaryPasswordDialog';
 import { AdditionalPermissions, UserAccount } from '@/types';
-import { ADDITIONAL_PERMISSION_MODULES, roleHasPermission, sanitizeAdditionalPermissions } from '@/lib/permissions';
+import { canPerformAction, sanitizeAdditionalPermissions, SAAS_ROLES, TENANT_ROLES } from '@/lib/permissions';
 import { 
   Users, 
   Plus, 
@@ -47,11 +49,17 @@ export default function AdminUsersPage() {
   const [role, setRole] = useState('Escalista');
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>('active');
   const [additionalPermissions, setAdditionalPermissions] = useState<AdditionalPermissions>({});
-  const canManageUsers = currentUser.role === 'CEO' || currentUser.role === 'Gerente';
-
-  // Available roles by type
-  const saasRoles = ['CEO', 'Gerente', 'Coordenador', 'Administrativo', 'Financeiro', 'Jurídico'];
-  const tenantRoles = ['Diretor', 'Gerente', 'Coordenador de Escalas', 'Escalista', 'Financeiro', 'Jurídico'];
+  const [delegatedPermissions, setDelegatedPermissions] = useState<string[]>([]);
+  const [reason, setReason] = useState('');
+  const [formError, setFormError] = useState('');
+  const isSaas = currentUser.type === 'saas_admin';
+  const canCreate = canPerformAction(currentUser, 'usuarios', 'create');
+  const canManageUsers = canPerformAction(currentUser, 'usuarios', 'edit');
+  const saasRoles = SAAS_ROLES;
+  const tenantRoles = TENANT_ROLES.filter(item => isSaas || (item !== 'Diretor' && (currentUser.role === 'Diretor' || item !== 'Gerente')));
+  const canManageTarget = (user: UserAccount) => user.id !== currentUser.id && (isSaas
+    ? currentUser.role === 'CEO' || user.type === 'tenant_user'
+    : user.type === 'tenant_user' && user.organizationId === currentUser.organizationId && tenantRoles.includes(user.role));
 
   const handleOpenCreateModal = () => {
     setEditingUser(null);
@@ -59,10 +67,13 @@ export default function AdminUsersPage() {
     setEmail('');
     setPhone('');
     setType('tenant_user');
-    setOrganizationId(organizations[0]?.id || null);
+    setOrganizationId(isSaas ? (organizations[0]?.id || null) : currentUser.organizationId);
     setRole('Escalista');
     setStatus('active');
     setAdditionalPermissions({});
+    setDelegatedPermissions([]);
+    setReason('');
+    setFormError('');
     setIsModalOpen(true);
   };
 
@@ -76,6 +87,9 @@ export default function AdminUsersPage() {
     setRole(user.role);
     setStatus(user.status);
     setAdditionalPermissions(user.additionalPermissions || {});
+    setDelegatedPermissions(user.delegatedPermissions || []);
+    setReason('');
+    setFormError('');
     setIsModalOpen(true);
   };
 
@@ -86,7 +100,7 @@ export default function AdminUsersPage() {
       setRole('Gerente');
       setAdditionalPermissions({});
     } else {
-      setOrganizationId(organizations[0]?.id || null);
+      setOrganizationId(isSaas ? (organizations[0]?.id || null) : currentUser.organizationId);
       setRole('Escalista');
       setAdditionalPermissions({});
     }
@@ -94,7 +108,8 @@ export default function AdminUsersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
+    if (!name || !email || saving) return;
+    setFormError('');
 
     const userData = {
       name,
@@ -104,7 +119,9 @@ export default function AdminUsersPage() {
       organizationId: type === 'saas_admin' ? null : organizationId,
       role,
       status,
-      additionalPermissions: sanitizeAdditionalPermissions(additionalPermissions, type, role),
+      additionalPermissions: sanitizeAdditionalPermissions(additionalPermissions, type),
+      delegatedPermissions,
+      reason: reason.trim(),
       avatar: '',
       lastActive: status === 'pending' ? undefined : (editingUser?.lastActive || (status === 'active' ? new Date().toISOString().split('T')[0] : undefined))
     };
@@ -113,12 +130,12 @@ export default function AdminUsersPage() {
       if (!await updateUser({
         ...editingUser,
         ...userData
-      })) return;
+      })) { setFormError(useStore.getState().error || 'Não foi possível salvar o acesso.'); return; }
     } else {
-      if (!await addUser(userData)) return;
+      if (!await addUser(userData)) { setFormError(useStore.getState().error || 'Não foi possível criar o acesso.'); return; }
       const createdUser = useStore.getState().users.find(user => user.email.toLowerCase() === email.trim().toLowerCase());
       setIsModalOpen(false);
-      if (createdUser) setPasswordUser(createdUser);
+      if (createdUser && isSaas) setPasswordUser(createdUser);
       return;
     }
     setIsModalOpen(false);
@@ -128,6 +145,7 @@ export default function AdminUsersPage() {
 
   // Filter logic
   const filteredUsers = users.filter((user) => {
+    if (!isSaas && (user.type !== 'tenant_user' || user.organizationId !== currentUser.organizationId)) return false;
     const matchesSearch = 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -176,10 +194,10 @@ export default function AdminUsersPage() {
               Gestão de Usuários
             </h2>
             <p className="text-sm text-text-muted mt-1">
-              Controle credenciais de acessos de operadores internos (SaaS) e profissionais administrativos de hospitais clientes.
+              {isSaas ? 'Gerencie operadores SaaS e acessos das empresas.' : 'Gerencie os acessos administrativos da sua empresa.'}
             </p>
           </div>
-          {canManageUsers && <button
+          {canCreate && <button
             onClick={handleOpenCreateModal}
             className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-text-inverse hover:bg-primary-hover rounded-xl shadow-glow-primary transition cursor-pointer self-start sm:self-auto"
           >
@@ -349,14 +367,14 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-center gap-2">
-                          {canManageUsers && (currentUser.role === 'CEO' || user.type !== 'saas_admin') && <button
+                          {canManageUsers && canManageTarget(user) && <button
                             onClick={() => handleOpenEditModal(user)}
                             className="p-2 text-text-secondary hover:text-primary hover:bg-surface-muted rounded-lg transition cursor-pointer"
                             title="Editar usuário"
                           >
                             <Edit className="h-4 w-4" />
                           </button>}
-                          {user.id !== currentUser.id && canManageUsers && (currentUser.role === 'CEO' || user.type !== 'saas_admin') && (
+                          {isSaas && canManageUsers && canManageTarget(user) && (
                             <button
                               onClick={() => setPasswordUser(user)}
                               className="p-2 text-text-secondary hover:text-primary hover:bg-surface-muted rounded-lg transition cursor-pointer"
@@ -375,7 +393,7 @@ export default function AdminUsersPage() {
                               Convidar
                             </button>
                           )}
-                          {user.id !== currentUser.id && (currentUser.role === 'CEO' || (currentUser.role === 'Gerente' && user.type === 'tenant_user')) && (
+                          {isSaas && canManageUsers && canManageTarget(user) && (
                             <button
                               onClick={() => setDeletingUser(user)}
                               className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition cursor-pointer"
@@ -404,20 +422,9 @@ export default function AdminUsersPage() {
 
         {/* Modal Create/Edit */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-overlay backdrop-blur-[2px]" />
-            
-            <div className="relative w-full max-w-lg bg-card-bg border border-border rounded-2xl shadow-strong overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-              {/* Header */}
-              <div className="flex items-center justify-between p-5 border-b border-border">
-                <h3 className="text-lg font-bold text-text-primary">
-                  {editingUser ? 'Editar Usuário' : 'Criar Novo Usuário'}
-                </h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-text-muted hover:text-text-primary text-sm font-bold">✕</button>
-              </div>
-
-              {/* Body Form */}
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          <Dialog title={editingUser ? 'Editar Usuário' : 'Criar Novo Usuário'} size="lg" onClose={() => !saving && setIsModalOpen(false)}
+            footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={saving} onClick={() => setIsModalOpen(false)}>Cancelar</button><button type="submit" form="user-access-form" className="nv-button" disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</button></div>}>
+              <form id="user-access-form" onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-text-muted uppercase mb-1">Nome Completo *</label>
@@ -455,11 +462,12 @@ export default function AdminUsersPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-semibold text-text-muted uppercase mb-1">Tipo de Conta</label>
                       <select
                         value={type}
+                        disabled={!isSaas || currentUser.role !== 'CEO' || Boolean(editingUser)}
                         onChange={(e) => handleTypeChange(e.target.value as 'saas_admin' | 'tenant_user')}
                         className="nv-input"
                       >
@@ -472,6 +480,7 @@ export default function AdminUsersPage() {
                       <label className="block text-xs font-semibold text-text-muted uppercase mb-1">Status</label>
                       <select
                         value={status}
+                        disabled={!isSaas && !canPerformAction(currentUser, 'usuarios', 'deactivate') && Boolean(editingUser)}
                         onChange={(e) => setStatus(e.target.value as 'active' | 'pending' | 'inactive')}
                         className="nv-input"
                       >
@@ -487,9 +496,12 @@ export default function AdminUsersPage() {
                       <label className="block text-xs font-semibold text-text-muted uppercase mb-1">Empresa Vinculada</label>
                       <select
                         value={organizationId || ''}
+                        required
+                        disabled={!isSaas || Boolean(editingUser)}
                         onChange={(e) => setOrganizationId(e.target.value)}
                         className="nv-input"
                       >
+                        <option value="">Selecione a empresa</option>
                         {organizations.map(o => (
                           <option key={o.id} value={o.id}>{o.name}</option>
                         ))}
@@ -504,85 +516,26 @@ export default function AdminUsersPage() {
                       onChange={(e) => {
                         const nextRole = e.target.value;
                         setRole(nextRole);
-                        setAdditionalPermissions(current => sanitizeAdditionalPermissions(current, type, nextRole));
                       }}
                       className="nv-input"
                     >
                       {type === 'saas_admin' ? (
                         saasRoles.map(r => <option key={r} value={r}>{r}</option>)
                       ) : (
-                        tenantRoles.map(r => <option key={r} value={r}>{r}</option>)
+                        tenantRoles.filter(item => isSaas || item !== 'Gerente' || editingUser?.role === 'Gerente').map(r => <option key={r} value={r}>{r}</option>)
                       )}
                     </select>
                   </div>
 
                   {type === 'tenant_user' && (
-                    <section className="overflow-hidden rounded-2xl border border-border bg-surface-muted/25">
-                      <div className="border-b border-border px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-primary" />
-                          <h4 className="text-sm font-semibold text-text-primary">Permissões adicionais</h4>
-                        </div>
-                        <p className="mt-1 text-xs leading-relaxed text-text-muted">Libere exceções individuais além do acesso já concedido pelo cargo.</p>
-                      </div>
-                      <div className="divide-y divide-border">
-                        {ADDITIONAL_PERMISSION_MODULES.map(module => {
-                          const inherited = roleHasPermission(type, role, module.key);
-                          const value = inherited ? 'inherited' : (additionalPermissions[module.key] || 'none');
-                          return (
-                            <div key={module.key} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_190px] sm:items-center">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-text-primary">{module.label}</p>
-                                <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">{module.description}</p>
-                              </div>
-                              <select
-                                aria-label={`Permissão adicional para ${module.label}`}
-                                value={value}
-                                disabled={inherited}
-                                onChange={event => {
-                                  const level = event.target.value;
-                                  setAdditionalPermissions(current => {
-                                    const next = { ...current };
-                                    if (level === 'view' || level === 'edit') next[module.key] = level;
-                                    else delete next[module.key];
-                                    return next;
-                                  });
-                                }}
-                                className="w-full rounded-xl border border-input-border bg-input-bg px-3 py-2 text-xs font-medium text-text-primary outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-70"
-                              >
-                                {inherited ? <option value="inherited">Permitido pelo cargo</option> : <>
-                                  <option value="none">Sem acesso adicional</option>
-                                  <option value="view">Somente visualizar</option>
-                                  <option value="edit">Visualizar e editar</option>
-                                </>}
-                              </select>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
+                    <UserPermissionsPanel user={editingUser} actor={currentUser} role={role} permissions={additionalPermissions}
+                      onChange={setAdditionalPermissions} delegations={delegatedPermissions} onDelegationsChange={setDelegatedPermissions} />
                   )}
                 </div>
-
-                {/* Footer Buttons */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 text-sm font-semibold border border-border bg-card-bg hover:bg-state-hover text-text-primary rounded-xl transition cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-semibold bg-primary text-text-inverse hover:bg-primary-hover rounded-xl shadow-glow-primary transition cursor-pointer"
-                  >
-                    Salvar
-                  </button>
-                </div>
+                <label className="nv-label">Motivo da alteração<input className="nv-input" value={reason} onChange={event => setReason(event.target.value)} maxLength={500} placeholder="Opcional" /></label>
+                {formError && <p role="alert" className="text-sm text-danger">{formError}</p>}
               </form>
-            </div>
-          </div>
+          </Dialog>
         )}
         {deletingUser && (
           <DeleteConfirmDialog

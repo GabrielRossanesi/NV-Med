@@ -226,7 +226,7 @@ export interface Shift {
 
 export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection };
 
-export type AdditionalPermissions = Record<string, 'view' | 'edit'>;
+export type AdditionalPermissions = Record<string, 'view' | 'edit' | 'allow' | 'deny'>;
 
 export interface UserAccount {
   authUserId?: string;
@@ -242,4 +242,7 @@ export interface UserAccount {
   lastActive?: string;
   avatar?: string;
   additionalPermissions?: AdditionalPermissions;
+  permissionLocks?: string[];
+  delegatedPermissions?: string[];
+  updatedAt?: string;
 }

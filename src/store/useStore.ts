@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, ShiftWrite, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { vacateShift } from '@/lib/scheduleDeletion';
-import { canEditPermission } from '@/lib/permissions';
+import { canEditPermission, canPerformAction } from '@/lib/permissions';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
@@ -19,7 +19,7 @@ interface NVMedState {
   updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
   updateUnit: (unit: Unit) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
-  addSector: (sector: Omit<Sector, 'id' | 'organizationId'>) => Promise<boolean>;
+  addSector: (sector: Omit<Sector, 'id' | 'organizationId'>) => Promise<Sector | null>;
   updateSector: (sector: Sector) => Promise<boolean>; deleteSector: (id: string) => Promise<boolean>;
   addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>) => Promise<boolean>;
   addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[]) => Promise<boolean>;
@@ -38,8 +38,8 @@ interface NVMedState {
   updateOrganization: (org: Organization) => Promise<boolean>;
   deleteOrganization: (id: string, confirmation: string) => Promise<boolean>;
   updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => Promise<boolean>;
-  addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>) => Promise<boolean>;
-  updateUser: (user: UserAccount) => Promise<boolean>;
+  addUser: (user: Omit<UserAccount, 'id' | 'createdAt'> & { reason?: string }) => Promise<boolean>;
+  updateUser: (user: UserAccount & { reason?: string }) => Promise<boolean>;
   deleteUser: (id: string, confirmation: string) => Promise<boolean>;
   setUserTemporaryPassword: (id: string, password: string) => Promise<boolean>;
   startSimulation: (orgId: string) => void; stopSimulation: () => void;
@@ -76,17 +76,21 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     addDoctor: input => commit(async () => {
       const doctor = { ...input, id: crypto.randomUUID(), organizationId: orgId() };
       // The database trigger creates required document rows in the same transaction.
-      await cloud.saveDoctorToSupabase(doctor);
+      await cloud.saveDoctorToSupabase(doctor, true);
       set({ doctors: [...get().doctors, doctor] });
       try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
       catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
     }),
     updateDoctor: doctor => commit(async () => { await cloud.saveDoctorToSupabase(doctor); set({ doctors: get().doctors.map(d => d.id === doctor.id ? doctor : d) }); }),
     deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
-    addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit); set({ units: [...get().units, unit] }); }),
+    addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit, true); set({ units: [...get().units, unit] }); }),
     updateUnit: unit => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }),
     deleteUnit: id => commit(async () => { await cloud.deleteUnitFromSupabase(id); set({ units: get().units.filter(u => u.id !== id), sectors: get().sectors.filter(s => s.unitId !== id), shifts: get().shifts.filter(s => s.unitId !== id) }); }),
-    addSector: input => commit(async () => { const sector = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveSectorToSupabase(sector); set({ sectors: [...get().sectors, sector] }); }),
+    addSector: async input => {
+      const sector = { ...input, id: crypto.randomUUID(), organizationId: orgId() };
+      const saved = await commit(async () => { await cloud.saveSectorToSupabase(sector, true); set({ sectors: [...get().sectors, sector] }); });
+      return saved ? sector : null;
+    },
     updateSector: sector => commit(async () => { await cloud.saveSectorToSupabase(sector); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
     addShift: input => commit(async () => {
@@ -120,7 +124,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
     deleteShifts: ids => commit(async () => {
-      if (!canEditPermission(get().currentUser, 'escala')) throw new Error('Seu acesso permite apenas visualizar a escala.');
+      if (!canPerformAction(get().currentUser, 'escala', 'delete')) throw new Error('Seu acesso não permite excluir plantões.');
       const uniqueIds = [...new Set(ids)];
       const organizationId = orgId();
       if (!uniqueIds.length || uniqueIds.length > 500 || uniqueIds.some(id => !get().shifts.some(shift => shift.id === id && shift.organizationId === organizationId))) throw new Error('Selecione entre 1 e 500 plantões desta empresa.');

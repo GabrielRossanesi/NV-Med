@@ -1,57 +1,24 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { ADDITIONAL_PERMISSION_MODULES, permissionActionLabels, roleHasAction, roleHasPermission, SAAS_ROLES, TENANT_ROLES } from '@/lib/permissions';
 import AccessGuard from '@/components/AccessGuard';
 import { Shield, Check, X, Building, HelpCircle } from 'lucide-react';
 
 export default function AdminPermissionsPage() {
   const [activeTab, setActiveTab] = useState<'tenant' | 'saas'>('tenant');
 
-  // Tenant/Client Roles & Modules Permissions representation
-  const clientRoles = ['Diretor', 'Gerente', 'Coordenador de Escalas', 'Escalista', 'Financeiro', 'Jurídico'];
-  const clientModules = [
-    { key: 'dashboard', name: 'Dashboard' },
-    { key: 'medicos', name: 'Médicos (Corpo Clínico)' },
-    { key: 'unidades', name: 'Unidades de Atendimento' },
-    { key: 'documentos', name: 'Documentos & Compliance' },
-    { key: 'escala', name: 'Escala de Plantões' },
-    { key: 'configuracoes', name: 'Configurações da Empresa' },
-    { key: 'relatorios', name: 'Relatórios operacionais' },
-    { key: 'financeiro', name: 'Financeiro e conciliação de pagamentos' },
-  ];
-
-  // Map representing checks for Client roles
-  // [role][module] -> boolean (true: allowed, false: blocked)
-  const clientMatrix: Record<string, Record<string, boolean>> = {
-    'Diretor': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: true, relatorios: true, financeiro: true },
-    'Gerente': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: false, relatorios: true, financeiro: true },
-    'Coordenador de Escalas': { dashboard: true, medicos: true, unidades: true, documentos: true, escala: true, configuracoes: false, relatorios: true, financeiro: false },
-    'Escalista': { dashboard: true, medicos: true, unidades: true, documentos: false, escala: true, configuracoes: false, relatorios: true, financeiro: false },
-    'Financeiro': { dashboard: true, medicos: false, unidades: false, documentos: false, escala: true, configuracoes: false, relatorios: true, financeiro: true },
-    'Jurídico': { dashboard: true, medicos: true, unidades: false, documentos: true, escala: false, configuracoes: false, relatorios: true, financeiro: false },
-  };
-
-  // SaaS Admin Roles & SaaS Modules Permissions representation
-  const saasRoles = ['CEO', 'Gerente', 'Coordenador', 'Administrativo', 'Financeiro', 'Jurídico'];
+  const clientRoles = TENANT_ROLES;
+  const clientModules = ADDITIONAL_PERMISSION_MODULES.map(module => ({ ...module, name: module.label }));
+  const saasRoles = SAAS_ROLES;
   const saasModules = [
-    { key: 'admin', name: 'Dashboard SaaS Admin' },
-    { key: 'empresas', name: 'Gestão de Empresas (Tenants)' },
-    { key: 'usuarios', name: 'Gestão de Usuários (Acessos)' },
-    { key: 'permissoes', name: 'Matriz de Permissões (RBAC)' },
-    { key: 'planos', name: 'Gestão de Planos & Preços' },
-    { key: 'simular_acesso', name: 'Simulação de Acesso (Login Tenant)' },
-    { key: 'auditoria', name: 'Logs de Auditoria' },
-    { key: 'suporte', name: 'Suporte Técnico' },
+    { key: 'admin', name: 'Dashboard SaaS' },
+    { key: 'empresas', name: 'Gestão de empresas' },
+    { key: 'usuarios', name: 'Gestão de usuários' },
+    { key: 'permissoes', name: 'Matriz de permissões' },
+    { key: 'simular_acesso', name: 'Simulação de acesso' },
   ];
-
-  const saasMatrix: Record<string, Record<string, boolean>> = {
-    'CEO': { admin: true, empresas: true, usuarios: true, permissoes: true, planos: true, simular_acesso: true, auditoria: true, suporte: true },
-    'Gerente': { admin: true, empresas: true, usuarios: true, permissoes: false, planos: true, simular_acesso: true, auditoria: true, suporte: true },
-    'Coordenador': { admin: true, empresas: true, usuarios: true, permissoes: false, planos: false, simular_acesso: false, auditoria: true, suporte: true },
-    'Administrativo': { admin: true, empresas: true, usuarios: true, permissoes: false, planos: false, simular_acesso: false, auditoria: false, suporte: true },
-    'Financeiro': { admin: true, empresas: true, usuarios: false, permissoes: false, planos: true, simular_acesso: false, auditoria: false, suporte: false },
-    'Jurídico': { admin: true, empresas: true, usuarios: false, permissoes: false, planos: false, simular_acesso: false, auditoria: true, suporte: false },
-  };
 
   return (
     <AccessGuard requiredPermission="permissoes">
@@ -63,8 +30,9 @@ export default function AdminPermissionsPage() {
             Matriz de Permissões (RBAC)
           </h2>
           <p className="text-sm text-text-muted mt-1">
-            Visualização das regras de controle de acesso baseado em cargos (RBAC) da plataforma NV Med.
+            Ações padrão por cargo. Consulte as exceções e os limites de delegação na ficha de cada usuário.
           </p>
+          <Link href="/admin/usuarios" className="nv-button-secondary mt-4">Gerenciar permissões por usuário</Link>
         </div>
 
         {/* Tabs */}
@@ -141,13 +109,15 @@ export default function AdminPermissionsPage() {
                         {module.name}
                       </td>
                       {clientRoles.map(role => {
-                        const allowed = clientMatrix[role]?.[module.key] ?? false;
+                        const allowed = roleHasPermission('tenant_user', role, module.key);
+                        const actions = module.actions.filter(action => roleHasAction('tenant_user', role, module.key, action));
                         return (
                           <td key={role} className="p-4 text-center">
                             <div className="flex justify-center">
                               {allowed ? (
-                                <div className="h-6 w-6 rounded-lg bg-success/10 text-success flex items-center justify-center">
+                                <div title={actions.map(action => permissionActionLabels[action]).join(' · ')} className="h-6 w-6 rounded-lg bg-success/10 text-success flex items-center justify-center">
                                   <Check className="h-3.5 w-3.5" />
+                                  <span className="sr-only">{actions.map(action => permissionActionLabels[action]).join(', ')}</span>
                                 </div>
                               ) : (
                                 <div className="h-6 w-6 rounded-lg bg-danger/10 text-danger flex items-center justify-center">
@@ -167,7 +137,7 @@ export default function AdminPermissionsPage() {
                         {module.name}
                       </td>
                       {saasRoles.map(role => {
-                        const allowed = saasMatrix[role]?.[module.key] ?? false;
+                        const allowed = roleHasPermission('saas_admin', role, module.key);
                         return (
                           <td key={role} className="p-4 text-center">
                             <div className="flex justify-center">
@@ -198,7 +168,7 @@ export default function AdminPermissionsPage() {
           <div className="text-xs space-y-1">
             <p className="font-semibold text-text-primary">Sobre o Controle de Acesso (RBAC)</p>
             <p className="text-text-muted">
-              Esta matriz é lida pelo componente <code className="bg-surface-muted text-text-primary px-1 py-0.5 rounded font-mono">AccessGuard</code> e pela barra de navegação para habilitar, desabilitar ou ocultar abas e ações em toda a interface do NV Med, garantindo segurança e conformidade operacional de inquilinatos.
+              As permissões individuais podem alterar o padrão exibido. O servidor e o banco consultam o acesso efetivo a cada ação. O cargo Coordenador Médico usa as mesmas permissões do médico no portal.
             </p>
           </div>
         </div>

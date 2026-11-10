@@ -12,7 +12,7 @@ function CandidateQueue() {
   const organization = useStore(state => state.activeOrganizationId);
   const filter = useSearchParams().get('filtro');
   const scope = filter === 'exchange' || filter === 'applications' ? filter : undefined;
-  return <AccessGuard requiredPermission="escala"><div className="space-y-5">
+  return <AccessGuard requiredPermission="escala" action="approve"><div className="space-y-5">
     <header className="border-b border-border pb-4">
       <Link href="/escala" className="text-sm font-semibold text-primary underline">Voltar à escala</Link>
       <h1 className="mt-2 text-2xl font-bold">Candidaturas e trocas</h1>

@@ -4,6 +4,8 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Camera, Check, Mail, Phone, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import UserAvatar from '@/components/UserAvatar';
+import Link from 'next/link';
+import { canViewPermission } from '@/lib/permissions';
 
 export default function ProfilePage() {
   const { currentUser, organizations, saving, updateProfile } = useStore();
@@ -57,6 +59,7 @@ export default function ProfilePage() {
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">Conta</p>
         <h1 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">Meu perfil</h1>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">Mantenha seus dados atualizados para que a equipe reconheça quem está gerenciando as escalas.</p>
+        {currentUser.type === 'tenant_user' && canViewPermission(currentUser, 'usuarios') && <Link href="/admin/usuarios" className="nv-button-secondary mt-4">Usuários da empresa</Link>}
       </header>
 
       <form onSubmit={submit} className="grid gap-8 lg:grid-cols-[280px_1fr]">

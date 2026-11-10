@@ -17,10 +17,12 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import AccessGuard from '@/components/AccessGuard';
+import { canPerformAction } from '@/lib/permissions';
 
 function UnitsPageContent() {
   const {
     activeOrganizationId,
+    currentUser,
     organizations,
     units,
     addUnit,
@@ -28,6 +30,8 @@ function UnitsPageContent() {
     saving
   } = useStore();
 
+  const canCreate = canPerformAction(currentUser, 'unidades', 'create');
+  const canDelete = canPerformAction(currentUser, 'unidades', 'delete');
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
   const orgUnits = units.filter((u) => u.organizationId === activeOrganizationId);
 
@@ -122,6 +126,7 @@ function UnitsPageContent() {
   };
 
   const handleDelete = (id: string) => {
+    if (!canDelete) return;
     if (confirm('Deseja excluir esta unidade? Vínculos em plantões e escalas associados serão removidos.')) {
       deleteUnit(id);
     }
@@ -165,6 +170,7 @@ function UnitsPageContent() {
           </p>
         </div>
         <button
+          disabled={!canCreate}
           onClick={openCreateModal}
           className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
@@ -240,7 +246,8 @@ function UnitsPageContent() {
             </p>
           </div>
           <button
-            onClick={openCreateModal}
+            disabled={!canCreate}
+          onClick={openCreateModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-text-inverse rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-sm mx-auto"
           >
             <Plus className="h-4 w-4" />
@@ -302,6 +309,7 @@ function UnitsPageContent() {
                       Ver Detalhes
                     </Link>
                     <button
+                      disabled={!canDelete}
                       onClick={() => handleDelete(unit.id)}
                       className="p-1.5 rounded text-text-muted hover:bg-danger/10 hover:text-danger transition cursor-pointer"
                       title="Excluir"

@@ -5,16 +5,17 @@ import { ShieldAlert, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React from 'react';
-import { canViewPermission, ROLE_PERMISSIONS } from '@/lib/permissions';
+import { canPerformAction, ROLE_PERMISSIONS, type PermissionAction } from '@/lib/permissions';
 
 export { ROLE_PERMISSIONS } from '@/lib/permissions';
 
 interface AccessGuardProps {
   requiredPermission: string;
+  action?: PermissionAction;
   children: React.ReactNode;
 }
 
-export default function AccessGuard({ requiredPermission, children }: AccessGuardProps) {
+export default function AccessGuard({ requiredPermission, children, action = 'view' }: AccessGuardProps) {
   const { currentUser, isSimulating } = useStore();
   const router = useRouter();
 
@@ -23,9 +24,9 @@ export default function AccessGuard({ requiredPermission, children }: AccessGuar
   
   // A SaaS Admin has access to their normal SaaS features.
   // If they are simulating, they also get access to operational tenant features.
-  let hasAccess = canViewPermission(currentUser, requiredPermission);
+  let hasAccess = canPerformAction(currentUser, requiredPermission, action);
   
-  if (currentUser.type === 'saas_admin') {
+  if (currentUser.type === 'saas_admin' && action === 'view') {
     if (requiredPermission === 'admin' || requiredPermission === 'empresas' || requiredPermission === 'usuarios' || requiredPermission === 'permissoes') {
       hasAccess = userPermissions.includes(requiredPermission);
     } else {

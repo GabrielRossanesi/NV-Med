@@ -62,7 +62,12 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'pilot-auth.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '26_shift_payment_agreements.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-payment-agreements.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-26, pré/pós-verificação e suítes de segurança, compatibilidade e acordos financeiros.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '27_effective_permissions.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '28_scoped_sectors_and_reports.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'effective-permissions-and-reports.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'portal.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-payment-agreements.verify.sql'))
+  Write-Output 'PASS: baseline 01-18, migrations 19-28, pré/pós-verificação e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

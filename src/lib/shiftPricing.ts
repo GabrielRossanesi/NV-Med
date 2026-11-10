@@ -21,7 +21,7 @@ export function shiftDurationMinutes(startTime: string, endTime: string) {
 
 const rateFields = ['sector_id', 'unit_id', 'specialty', 'turn', 'duration_minutes', 'shift_type'] as const;
 
-export function chooseShiftRate(rates: ShiftRate[], shift: Shift, sector?: Sector, doctorSpecialty?: string) {
+export function chooseShiftRate(rates: ShiftRate[], shift: Shift, sector?: Pick<Sector, 'coveragePeriods' | 'defaultStartTime' | 'defaultEndTime' | 'requiredDoctors'>, doctorSpecialty?: string) {
   const context: ShiftRateScope = {
     sector_id: shift.sectorId || null,
     unit_id: shift.unitId || null,

@@ -174,6 +174,9 @@ interface DbUserAccount {
   last_active?: string;
   created_at?: string;
   additional_permissions?: UserAccount['additionalPermissions'];
+  permission_locks?: string[];
+  delegated_permissions?: string[];
+  updated_at?: string;
 }
 
 function mapOrgFromDb(row: DbOrganization): Organization {
@@ -336,6 +339,9 @@ export function mapUserFromDb(row: DbUserAccount): UserAccount {
     avatar: row.avatar || '',
     lastActive: row.last_active,
     additionalPermissions: row.additional_permissions || {},
+    permissionLocks: row.permission_locks || [],
+    delegatedPermissions: row.delegated_permissions || [],
+    updatedAt: row.updated_at,
     createdAt: row.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]
   };
 }
@@ -372,7 +378,7 @@ export async function fetchInitialDataFromSupabase() {
   }
   const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
     rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('nv_staff_shifts'),
-    currentUser.type === 'saas_admin' ? rows('user_accounts') : Promise.resolve([profile]),
+    rows('user_accounts'),
     fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
@@ -403,7 +409,7 @@ export async function fetchMedicalDocumentsForOrganization(organizationId: strin
 // OPERAÇÕES DE ESCRITA ASSÍNCRONA (PERSISTÊNCIA EM SEGUNDO PLANO)
 // ==============================================================================
 
-export async function saveDoctorToSupabase(doctor: Doctor) {
+export async function saveDoctorToSupabase(doctor: Doctor, creating = false) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
@@ -425,7 +431,8 @@ export async function saveDoctorToSupabase(doctor: Doctor) {
     linked_units: doctor.linkedUnits
   };
 
-  const { error } = await supabase.from('doctors').upsert(payload).select('id').single();
+  const table = supabase.from('doctors');
+  const { error } = await (creating ? table.insert(payload) : table.update(payload).eq('id', doctor.id)).select('id').single();
   if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
@@ -437,7 +444,7 @@ export async function deleteDoctorFromSupabase(doctorId: string) {
   if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
-export async function saveUnitToSupabase(unit: Unit) {
+export async function saveUnitToSupabase(unit: Unit, creating = false) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
@@ -465,7 +472,8 @@ export async function saveUnitToSupabase(unit: Unit) {
     specialties: unit.specialties
   };
 
-  const { error } = await supabase.from('units').upsert(payload).select('id').single();
+  const table = supabase.from('units');
+  const { error } = await (creating ? table.insert(payload) : table.update(payload).eq('id', unit.id)).select('id').single();
   if (error) throw new Error('Não foi possível salvar: ' + error.message);
 }
 
@@ -477,7 +485,7 @@ export async function deleteUnitFromSupabase(unitId: string) {
   if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
-export async function saveSectorToSupabase(sector: Sector) {
+export async function saveSectorToSupabase(sector: Sector, creating = false) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
   const payload: DbSector = {
@@ -493,7 +501,8 @@ export async function saveSectorToSupabase(sector: Sector) {
     required_doctors: sector.requiredDoctors,
     coverage_periods: sector.coveragePeriods
   };
-  const { error } = await supabase.from('sectors').upsert(payload).select('id').single();
+  const table = supabase.from('sectors');
+  const { error } = await (creating ? table.insert(payload) : table.update(payload).eq('id', sector.id)).select('id').single();
   if (error?.code === '23505' || error?.message.includes('sectors_unit_name_unique')) throw new Error('Já existe um setor com este nome nesta unidade. Edite o setor existente para incluir o período diurno ou noturno.');
   if (error) throw new Error('Não foi possível salvar o setor: ' + error.message);
 }
@@ -634,18 +643,9 @@ export async function saveDocumentToSupabase(doc: MedicalDocument) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
-  const payload: DbMedicalDocument = {
-    id: doc.id,
-    organization_id: doc.organizationId,
-    doctor_id: doc.doctorId,
-    name: doc.name,
-    type: doc.type,
-    status: doc.status,
-    expiry_date: doc.expiryDate,
-    review_note: doc.reviewNote,
-  };
-
-  const { data, error } = await supabase.from('medical_documents').upsert(payload).select('*').single();
+  const { data, error } = await supabase.from('medical_documents')
+    .update({ status: doc.status, expiry_date: doc.expiryDate ?? null, review_note: doc.reviewNote ?? null })
+    .eq('id', doc.id).eq('organization_id', doc.organizationId).select('*').single();
   if (error) throw new Error('Não foi possível salvar: ' + error.message);
   return mapDocumentFromDb(data as DbMedicalDocument);
 }

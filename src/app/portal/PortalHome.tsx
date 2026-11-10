@@ -16,6 +16,7 @@ import { authFlowUrl } from '@/lib/appOrigin';
 
 type Enrollment = {
   doctor_id: string; organization_id: string; organization: string; name: string; status: EnrollmentStatus;
+  portal_role?: 'Médico' | 'Coordenador Médico';
   crm: string; uf: string; cpf: string; phone: string; birth_date: string; specialties: string[]; review_note?: string; legacy_link: boolean;
 };
 type Catalog = { name: string; specialties: string[] };
@@ -227,6 +228,7 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
         <div className="nv-panel p-4 sm:p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">{item.organization}</p>
           <h2 className="mt-1 nv-section-title">{item.name}</h2>
+          <p className="mt-2 text-xs font-medium text-text-secondary">{item.portal_role || 'Médico'}</p>
           <p className={`nv-badge mt-2 ${enrollmentTones[item.status]}`}><ClipboardCheck size={15} aria-hidden="true"/>{enrollmentStatusLabels[item.status]}</p>
           {item.review_note && <p className="mt-2 text-sm">{item.review_note}</p>}
           {item.status === 'correction_requested' && <button className="nv-button-secondary mt-3" disabled={loadingCompany} onClick={() => void findCompany(item.organization_id)}>Corrigir cadastro</button>}

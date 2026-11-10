@@ -520,6 +520,11 @@ DO $$ BEGIN
     THEN RAISE EXCEPTION 'FAIL: suspended tenant permits physician upload'; END IF;
 END $$;
 RESET ROLE;
+-- Keep a responsible account in the tenant while testing session revocation.
+INSERT INTO auth.users(id,aud,role,email,email_confirmed_at) VALUES
+  ('19000000-0000-4000-8000-000000000099','authenticated','authenticated','nv-backup-manager@example.invalid',now());
+INSERT INTO public.user_accounts(id,auth_user_id,name,email,type,organization_id,role) VALUES
+  ('nv-portal-backup-manager','19000000-0000-4000-8000-000000000099','Test','nv-backup-manager@example.invalid','tenant_user','nv-portal-a','Gerente');
 UPDATE public.user_accounts SET status = 'inactive' WHERE id = 'nv-portal-admin';
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"19000000-0000-4000-8000-000000000001","role":"authenticated"}',true);

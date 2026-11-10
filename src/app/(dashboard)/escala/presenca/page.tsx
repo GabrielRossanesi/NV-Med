@@ -63,7 +63,7 @@ function Queue({ organization }: { organization: string }) {
 }
 export default function AttendancePage() {
   const organization = useStore(state => state.activeOrganizationId);
-  return <AccessGuard requiredPermission="escala"><div className="space-y-5">
+  return <AccessGuard requiredPermission="escala" action="approve"><div className="space-y-5">
     <header className="border-b border-border pb-4">
       <Link href="/escala" className="text-sm font-semibold text-primary underline">Voltar à escala</Link>
       <h1 className="mt-2 text-2xl font-bold">Registros manuais de presença</h1>

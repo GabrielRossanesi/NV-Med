@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import { DocumentStatus, DocumentType, DoctorStatus } from '@/types';
@@ -24,6 +24,8 @@ import {
 import Link from 'next/link';
 import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
+import { createClient } from '@/lib/supabase/client';
+import { canPerformAction } from '@/lib/permissions';
 
 export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -35,6 +37,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     units,
     shifts,
     documents,
+    currentUser,
     updateDoctor,
     uploadDocument,
     updateDocumentStatus
@@ -46,6 +49,26 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const docDocs = documents.filter((d) => d.doctorId === doctorId && d.organizationId === activeOrganizationId);
 
   const [selectedFileNames, setSelectedFileNames] = useState<Record<string, File>>({});
+  const [portalRole, setPortalRole] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState('');
+  const [roleSaving, setRoleSaving] = useState(false);
+  const canSetRole = canPerformAction(currentUser, 'medicos', 'edit') && canPerformAction(currentUser, 'medicos', 'approve');
+  useEffect(() => {
+    let live = true;
+    void createClient()?.rpc('nv_doctor_portal_role', { target: doctorId }).then(({ data }) => { if (live) setPortalRole(data); });
+    return () => { live = false; };
+  }, [doctorId]);
+
+  async function savePortalRole(requested: string) {
+    setRoleSaving(true);
+    setRoleError('');
+    try {
+      const result = await createClient()?.rpc('nv_doctor_portal_role', { target: doctorId, requested });
+      if (!result || result.error) throw new Error(result?.error?.message || 'Não foi possível salvar o cargo médico.');
+      setPortalRole(result.data);
+    } catch (error) { setRoleError(error instanceof Error ? error.message : 'Não foi possível salvar o cargo médico.'); }
+    finally { setRoleSaving(false); }
+  }
 
   if (!doctor) {
     return (
@@ -139,6 +162,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="nv-page-title">{doctor.name}</h2>
+            {portalRole && <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-text-secondary">
+              {canSetRole ? <label className="flex items-center gap-2">Cargo no portal<select className="nv-input" value={portalRole} disabled={roleSaving} onChange={event => void savePortalRole(event.target.value)}>
+                <option>Médico</option><option>Coordenador Médico</option>
+              </select></label> : <span>{portalRole}</span>}
+              {roleError && <span role="alert" className="text-danger">{roleError}</span>}
+            </div>}
             <p className="text-xs text-text-muted mt-1">CRM: {doctor.crm}-{doctor.crmUf} • Cadastro: {doctor.status.toUpperCase()}</p>
           </div>
           

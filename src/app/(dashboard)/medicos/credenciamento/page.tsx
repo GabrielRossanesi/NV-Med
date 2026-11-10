@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useStore } from '@/store/useStore';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
+import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
 
 type Request = {
@@ -100,5 +101,5 @@ function EnrollmentQueue({ organization }: { organization: string }) {
 
 export default function EnrollmentQueuePage() {
   const organization = useStore(state => state.activeOrganizationId);
-  return <EnrollmentQueue key={organization} organization={organization}/>;
+  return <AccessGuard requiredPermission="medicos" action="approve"><EnrollmentQueue key={organization} organization={organization}/></AccessGuard>;
 }
