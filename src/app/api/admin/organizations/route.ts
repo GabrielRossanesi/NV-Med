@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 
 type CleanupResult = {
   auth_user_ids?: string[];
@@ -12,7 +13,7 @@ async function authorize(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin) throw new Error('Origem inválida.');
   const client = await createClient();
   if (!client) throw new Error('Conexão indisponível.');
-  const { data: { user } } = await client.auth.getUser();
+  const user = await getAuthorizedUser(client);
   if (!user) throw new Error('Entre novamente.');
   const { data: profile } = await client.from('user_accounts').select('type,role,status').eq('auth_user_id', user.id).single();
   if (profile?.type !== 'saas_admin' || profile.status !== 'active' || profile.role !== 'CEO') throw new Error('Somente o CEO pode excluir empresas.');

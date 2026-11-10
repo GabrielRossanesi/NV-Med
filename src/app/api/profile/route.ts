@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { mapUserFromDb } from '@/services/supabaseService';
 
 const avatarBucket = 'profile-avatars';
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   if (!client || !admin) return NextResponse.json({ error: 'Conexão indisponível.' }, { status: 503 });
 
-  const { data: { user: authUser } } = await client.auth.getUser();
+  const authUser = await getAuthorizedUser(client);
   if (!authUser) return NextResponse.json({ error: 'Sua sessão expirou. Entre novamente.' }, { status: 401 });
 
   try {

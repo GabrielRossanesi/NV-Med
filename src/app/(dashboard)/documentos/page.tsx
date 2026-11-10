@@ -9,24 +9,25 @@ import { documentIsCritical, documentIsNearExpiry, documentNeedsAction, document
 import { getDocumentGovernance, requirementApplies } from '@/lib/documentGovernance';
 import { doctorContractModelShortLabels } from '@/lib/doctorProfile';
 import { doctorHasOperationalUnit, getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
-import { canEditPermission } from '@/lib/permissions';
+import { canEditPermission, canViewPermission } from '@/lib/permissions';
 import type { DocumentStatus } from '@/types';
 import { useStore } from '@/store/useStore';
 
 type ViewMode = 'clinical' | 'files';
-type ComplianceFilter = 'all' | 'pending' | 'critical' | 'review' | 'compliant';
+type ComplianceFilter = 'all' | 'pending' | 'critical' | 'review' | 'compliant' | 'expiring' | 'pending_only';
 
 function DocumentCenter() {
   const searchParams = useSearchParams();
   const store = useStore();
   const { activeOrganizationId, doctors, documents, units, shifts, organizations, currentUser } = store;
+  const queryStatus = searchParams.get('status');
   const [referenceTime] = useState(() => Date.now());
-  const [view, setView] = useState<ViewMode>('clinical');
+  const [view, setView] = useState<ViewMode>(queryStatus === 'expiring' || queryStatus === 'pending_only' ? 'files' : 'clinical');
   const [search, setSearch] = useState('');
   const [unitId, setUnitId] = useState(searchParams.get('unitId') || '');
   const [specialty, setSpecialty] = useState(searchParams.get('specialty') || '');
-  const queryStatus = searchParams.get('status');
-  const [compliance, setCompliance] = useState<ComplianceFilter>(queryStatus === 'critical' ? 'critical' : queryStatus === 'review' ? 'review' : queryStatus === 'not_sent' ? 'pending' : 'all');
+  const [compliance, setCompliance] = useState<ComplianceFilter>(queryStatus === 'critical' || queryStatus === 'review'
+    || queryStatus === 'expiring' || queryStatus === 'pending_only' ? queryStatus : queryStatus === 'not_sent' ? 'pending' : 'all');
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<DocumentStatus>('analyzing');
   const [bulkNote, setBulkNote] = useState('');
@@ -46,7 +47,7 @@ function DocumentCenter() {
 
   const matchesCompliance = (id: string) => {
     const summary = summaries.get(id);
-    if (!summary || compliance === 'all') return true;
+    if (!summary || ['all', 'expiring', 'pending_only'].includes(compliance)) return true;
     if (compliance === 'critical') return summary.critical > 0;
     if (compliance === 'review') return summary.review > 0;
     if (compliance === 'pending') return summary.pending > 0 || summary.nearExpiry > 0;
@@ -74,6 +75,9 @@ function DocumentCenter() {
     .filter(document => compliance !== 'review' || document.status === 'sent' || document.status === 'analyzing')
     .filter(document => compliance !== 'pending' || documentNeedsAction(document) || documentIsCritical(document, referenceTime) || documentIsNearExpiry(document, referenceTime, Math.max(...governance.expiryAlertDays)))
     .filter(document => compliance !== 'compliant' || document.status === 'approved')
+    .filter(document => compliance !== 'pending_only' || ['not_sent','sent','analyzing','rejected'].includes(document.status))
+    .filter(document => compliance !== 'expiring' || document.status === 'expired'
+      || (document.status === 'approved' && (documentIsCritical(document, referenceTime) || documentIsNearExpiry(document, referenceTime, 30))))
     .sort((a, b) => documentStatusOrder[a.status] - documentStatusOrder[b.status] || a.name.localeCompare(b.name, 'pt-BR'));
 
   const pendingDoctors = orgDoctors.filter(doctor => (summaries.get(doctor.id)?.pending || 0) > 0 || (summaries.get(doctor.id)?.nearExpiry || 0) > 0).length;
@@ -101,6 +105,8 @@ function DocumentCenter() {
           <button type="button" onClick={() => setView('files')} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${view === 'files' ? 'bg-primary text-text-inverse shadow-sm' : 'text-text-secondary hover:bg-state-hover'}`}><List size={15}/>Arquivos</button>
         </div>
       </header>
+
+      {canViewPermission(currentUser, 'configuracoes') && <Link href="/configuracoes/documentos" className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-primary transition hover:underline"><ShieldCheck size={15} />Configurar exigências da empresa<ChevronRight size={14} /></Link>}
 
       <section className="grid overflow-hidden rounded-2xl border border-border bg-card-bg sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo documental">
         <div className="p-5"><p className="text-xs text-text-muted">Corpo clínico</p><p className="mt-2 text-2xl font-semibold tabular-nums">{orgDoctors.length}</p><p className="mt-1 text-[11px] text-text-muted">médicos cadastrados</p></div>

@@ -314,7 +314,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                         <h4 className="font-semibold text-xs text-text-primary leading-snug">{doc.name}</h4>
                       </div>
                       
-                      {doc.filePath && <button className="text-primary text-xs underline" onClick={async () => { try { const url = await openDocument(doc.filePath!); window.open(url, '_blank', 'noopener,noreferrer'); } catch (e) { useStore.setState({error: e instanceof Error ? e.message : 'Falha ao abrir documento.'}); } }}>Abrir documento</button>}
+                      {doc.filePath && <button className="text-primary text-xs underline" onClick={async () => { try { const url = await openDocument(doc.id); window.open(url, '_blank', 'noopener,noreferrer'); } catch (e) { useStore.setState({error: e instanceof Error ? e.message : 'Falha ao abrir documento.'}); } }}>Abrir documento</button>}
                       {doc.fileName && (
                         <div className="text-[10px] text-text-muted flex flex-col sm:flex-row sm:gap-4 gap-1 pl-6">
                           <span className="truncate max-w-[200px] font-mono">Arquivo: {doc.fileName}</span>

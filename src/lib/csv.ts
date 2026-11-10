@@ -2,7 +2,7 @@ export type CsvValue = string | number | boolean | null | undefined;
 
 function safeCell(value: CsvValue) {
   let text = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  if (/^(?:[\t\r\n]|\s*[=+\-@])/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 

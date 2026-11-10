@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   Activity,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { withPromiseTimeout } from '@/lib/requestTimeout';
+import { authFlowUrl } from '@/lib/appOrigin';
 
 const scheduleRows = [
   { time: '07:00', label: 'Clínica médica', meta: 'Equipe completa', status: 'confirmado' },
@@ -59,7 +61,9 @@ export default function LoginPage() {
         { timeoutMs: 15_000, message: 'O login demorou mais que o esperado. Verifique sua conexão e tente novamente.' },
       );
       if (signInError) throw new Error('Não foi possível entrar. Confira seu e-mail e senha.');
-      window.location.assign('/escala');
+      const search = new URLSearchParams(window.location.search);
+      const organization = search.get('empresa');
+      window.location.assign(organization ? '/portal?empresa=' + encodeURIComponent(organization) : search.has('portal') ? '/portal' : '/escala');
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Falha de conexão. Tente novamente.');
       setBusy(false);
@@ -67,6 +71,15 @@ export default function LoginPage() {
   }
 
   async function recover() {
+    const origin = window.location.origin;
+    const callback = authFlowUrl('/definir-senha', origin);
+    if (callback.origin !== origin) {
+      const query = new URLSearchParams(window.location.search);
+      const loginUrl = authFlowUrl('/login', origin, query.get('empresa'));
+      if (query.has('portal')) loginUrl.searchParams.set('portal', '1');
+      window.location.assign(loginUrl.href);
+      return;
+    }
     if (!email.trim()) {
       setError('Preencha seu e-mail para recuperar o acesso.');
       return;
@@ -79,7 +92,7 @@ export default function LoginPage() {
       const client = createClient();
       if (!client) throw new Error('Acesso ainda não configurado.');
       const { error: recoveryError } = await withPromiseTimeout(
-        client.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/definir-senha' }),
+        client.auth.resetPasswordForEmail(email.trim(), { redirectTo: callback.href }),
         { timeoutMs: 15_000, message: 'A solicitação demorou mais que o esperado. Tente novamente.' },
       );
       if (recoveryError) throw new Error('Não foi possível solicitar o link. Tente novamente em instantes.');
@@ -285,6 +298,8 @@ export default function LoginPage() {
               <KeyRound size={15} /> Primeiro acesso ou esqueci minha senha
             </button>
           </form>
+
+          <Link href="/portal" className="mt-4 block text-center text-sm font-medium text-teal-800 underline underline-offset-4">Portal e cadastro médico</Link>
 
           <div className="mt-10 border-t border-slate-200 pt-6">
             <div className="flex items-start gap-3 text-xs leading-relaxed text-slate-500">

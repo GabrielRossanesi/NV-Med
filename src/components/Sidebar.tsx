@@ -40,7 +40,7 @@ const operationalItems = [
   { name: 'Documentos', shortName: 'Docs', href: '/documentos', icon: FileText, permission: 'documentos' },
   { name: 'Financeiro', shortName: 'Financeiro', href: '/financeiro', icon: WalletCards, permission: 'financeiro' },
   { name: 'Relatórios', shortName: 'Relatórios', href: '/relatorios', icon: FileSpreadsheet, permission: 'relatorios' },
-  { name: 'Configurações', shortName: 'Ajustes', href: '/configuracoes', icon: Settings, permission: 'configuracoes' },
+  { name: 'Perfil da empresa', shortName: 'Empresa', href: '/configuracoes', icon: Settings, permission: 'configuracoes' },
 ];
 
 const adminItems = [
@@ -236,17 +236,17 @@ export default function Sidebar() {
               <Building2 className="h-[18px] w-[18px] shrink-0 text-primary" />
               {!sidebarCollapsed && <>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[9px] font-semibold uppercase tracking-wider text-text-muted">Empresa ativa</span>
+                  <span className="block text-[9px] font-semibold uppercase tracking-wider text-sidebar-text-muted">Empresa ativa</span>
                   <span className="block truncate text-xs font-semibold">{activeOrg?.name || 'Sem empresa'}</span>
                 </span>
-                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted transition-transform ${orgMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-sidebar-text-muted transition-transform ${orgMenuOpen ? 'rotate-180' : ''}`} />
               </>}
             </button>
           ) : (
             <div className={styles.organizationControl} title={activeOrg?.name || 'Sem empresa'} aria-label={`Empresa ativa: ${activeOrg?.name || 'nenhuma'}`}>
               <Building2 className="h-[18px] w-[18px] shrink-0 text-primary" />
               {!sidebarCollapsed && <span className="min-w-0">
-                <span className="block text-[9px] font-semibold uppercase tracking-wider text-text-muted">Empresa ativa</span>
+                <span className="block text-[9px] font-semibold uppercase tracking-wider text-sidebar-text-muted">Empresa ativa</span>
                 <span className="block truncate text-xs font-semibold">{activeOrg?.name || 'Sem empresa'}</span>
               </span>}
             </div>
@@ -333,10 +333,10 @@ export default function Sidebar() {
               {!sidebarCollapsed && (
                 <>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-semibold text-text-primary">{currentUser.name}</span>
-                    <span className="block truncate text-[10px] text-text-muted">Conta e perfil</span>
+                    <span className="block truncate text-xs font-semibold text-sidebar-text">{currentUser.name}</span>
+                    <span className="block truncate text-[10px] text-sidebar-text-muted">Conta e perfil</span>
                   </span>
-                  <ChevronDown className={`h-3.5 w-3.5 text-text-muted transition-transform duration-150 ${profileMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 text-sidebar-text-muted transition-transform duration-150 ${profileMenuOpen ? 'rotate-180' : ''}`} />
                 </>
               )}
             </button>
@@ -365,14 +365,14 @@ export default function Sidebar() {
           const active = activeHref === item.href;
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={item.href} onNavigate={closeMenus} aria-current={active ? 'page' : undefined} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition ${active ? 'bg-state-selected text-primary' : 'text-text-muted hover:bg-state-hover'}`}>
+            <Link key={item.href} href={item.href} onNavigate={closeMenus} aria-current={active ? 'page' : undefined} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition ${active ? 'bg-state-selected text-primary' : 'text-sidebar-text-muted hover:bg-state-hover'}`}>
               <Icon className="h-5 w-5" />
               <span>{item.shortName}</span>
             </Link>
           );
         })}
         {items.length > 3 && <div ref={mobileMenu} className="relative">
-          <button ref={mobileTrigger} type="button" onClick={() => setMobileMoreOpen((open) => !open)} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition hover:bg-state-hover ${mobileMoreOpen || items.slice(3).some((item) => activeHref === item.href) ? 'bg-state-selected text-primary' : 'text-text-muted'}`} aria-label="Mais páginas" aria-expanded={mobileMoreOpen} aria-controls="mobile-more-navigation">
+          <button ref={mobileTrigger} type="button" onClick={() => setMobileMoreOpen((open) => !open)} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition hover:bg-state-hover ${mobileMoreOpen || items.slice(3).some((item) => activeHref === item.href) ? 'bg-state-selected text-primary' : 'text-sidebar-text-muted'}`} aria-label="Mais páginas" aria-expanded={mobileMoreOpen} aria-controls="mobile-more-navigation">
             <MoreHorizontal className="h-5 w-5" />
             <span>Mais</span>
           </button>
@@ -391,7 +391,7 @@ export default function Sidebar() {
             </motion.div>
           )}
         </div>}
-        <Link href="/perfil" onNavigate={closeMenus} aria-current={pathname.startsWith('/perfil') ? 'page' : undefined} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition hover:bg-state-hover ${pathname.startsWith('/perfil') ? 'bg-state-selected text-primary' : 'text-text-muted'}`}>
+        <Link href="/perfil" onNavigate={closeMenus} aria-current={pathname.startsWith('/perfil') ? 'page' : undefined} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition hover:bg-state-hover ${pathname.startsWith('/perfil') ? 'bg-state-selected text-primary' : 'text-sidebar-text-muted'}`}>
           <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-5 w-5" />
           <span>Perfil</span>
         </Link>

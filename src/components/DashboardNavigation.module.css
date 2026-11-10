@@ -1,5 +1,6 @@
 .sidebar,
 .workspace {
+  position: relative;
   --navigation-width: 240px;
   --navigation-radius: calc(var(--radius-2xl) + var(--radius-lg));
   --navigation-item-radius: var(--radius-2xl);
@@ -20,6 +21,14 @@
   min-height: 100svh;
   flex-direction: column;
   padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  /* Background layers preserve the stacking order of dialogs and navigation. */
+  background:
+    var(--workspace-pattern) right top / auto 100svh no-repeat fixed,
+    var(--workspace-bg);
+}
+
+:global(.dark) .workspace {
+  --navigation-border: var(--border);
 }
 
 .sidebar {
@@ -32,11 +41,8 @@
   border: 1px solid var(--navigation-border);
   border-right: 0;
   border-radius: var(--navigation-radius) 0 0 var(--navigation-radius);
-  background:
-    linear-gradient(165deg, color-mix(in srgb, var(--primary) 16%, transparent), transparent 72%),
-    color-mix(in srgb, var(--sidebar-bg) 94%, transparent);
+  background: var(--sidebar-bg);
   box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface-elevated) 30%, transparent);
-  backdrop-filter: blur(24px);
   transition: width var(--navigation-duration) var(--navigation-easing), background-color 200ms, border-color 200ms;
 }
 
@@ -81,7 +87,7 @@
 
 .brandCopy strong {
   display: block;
-  color: var(--text-primary);
+  color: var(--sidebar-text);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.04em;
@@ -90,7 +96,7 @@
 .brandCopy small {
   display: block;
   margin-top: 2px;
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -106,7 +112,7 @@
   justify-content: center;
   margin-left: auto;
   border-radius: 10px;
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -187,7 +193,7 @@
   gap: 10px;
   padding: 8px 12px;
   border-radius: 12px;
-  color: var(--text-secondary);
+  color: var(--sidebar-text);
   text-align: left;
 }
 
@@ -246,7 +252,7 @@ button.organizationControl:hover {
   align-items: center;
   padding-left: 12px;
   overflow: hidden;
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -275,7 +281,7 @@ button.organizationControl:hover {
   margin-top: 4px;
   padding: 0 16px 0 8px;
   border-radius: var(--navigation-item-radius) 0 0 var(--navigation-item-radius);
-  color: var(--text-secondary);
+  color: var(--sidebar-text);
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
@@ -324,7 +330,7 @@ button.organizationControl:hover {
   justify-content: center;
   border: 1px solid transparent;
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--primary) 4%, transparent);
+  background: transparent;
   transition: background-color 150ms, border-color 150ms;
 }
 
@@ -420,21 +426,24 @@ button.organizationControl:hover {
 
   .workspace {
     position: relative;
-    min-height: calc(100svh - 24px);
+    height: calc(100svh - 24px);
+    min-height: 0;
     margin: 12px 12px 12px calc(var(--navigation-width) + 12px);
     padding-bottom: 0;
+    overflow: auto;
+    overscroll-behavior-y: contain;
     border: 1px solid var(--navigation-border);
     border-left: 0;
     /* Only the outside corners are rounded; the shared edge is continuous. */
     border-radius: 0 var(--navigation-radius) var(--navigation-radius) 0;
-    background: var(--background);
     transition: margin-left var(--navigation-duration) var(--navigation-easing), background-color 200ms;
   }
 
   .workspace > header {
-    top: 12px;
+    top: 0;
     border-radius: 0 var(--navigation-radius) 0 0;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,20 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #F7F9FB;
-  --foreground: #0F172A;
+  --workspace-bg: var(--background);
+  --workspace-pattern: none;
+  --app-frame-bg: #E6EEE9;
+  --sidebar-text: #244D3D;
+  --sidebar-text-muted: #426653;
+  --background: #F5F8F6;
+  --foreground: #172C25;
   
   --surface: #FFFFFF;
   --surface-elevated: #FFFFFF;
-  --surface-muted: #F1F5F9;
-  --border: #E2E8F0;
-  --border-strong: #CBD5E1;
+  --surface-muted: #EBF2ED;
+  --border: #D9E5DE;
+  --border-strong: #B5CBBE;
   
-  --primary: #0F766E;
-  --primary-hover: #115E59;
-  --secondary: #64748B;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
+  --primary: #176B50;
+  --primary-hover: #10553F;
+  --secondary: #5E746A;
+  --muted: #EBF2ED;
+  --muted-foreground: #5E746A;
   
   --accent: #2563EB;
   --success: #16A34A;
@@ -23,40 +28,40 @@
   --info: #0284C7;
   
   /* Text tokens */
-  --text-primary: #0F172A;
-  --text-secondary: #334155;
-  --text-muted: #64748B;
+  --text-primary: #172C25;
+  --text-secondary: #3D554B;
+  --text-muted: #5E746A;
   --text-inverse: #FFFFFF;
   
   /* State tokens */
-  --state-hover: rgba(15, 118, 110, 0.05);
-  --state-active: rgba(15, 118, 110, 0.1);
-  --state-selected: rgba(15, 118, 110, 0.08);
-  --state-disabled: #E2E8F0;
-  --focus-ring: #0F766E;
+  --state-hover: rgba(23, 107, 80, 0.06);
+  --state-active: rgba(23, 107, 80, 0.12);
+  --state-selected: rgba(23, 107, 80, 0.1);
+  --state-disabled: #D9E5DE;
+  --focus-ring: #176B50;
   
   /* Component tokens */
   --card-bg: #FFFFFF;
-  --card-border: #E2E8F0;
-  --sidebar-bg: #FFFFFF;
-  --sidebar-border: #E2E8F0;
-  --header-bg: rgba(247, 249, 251, 0.8);
+  --card-border: #D9E5DE;
+  --sidebar-bg: #C6DED3;
+  --sidebar-border: #AAC9B9;
+  --header-bg: rgba(245, 248, 246, 0.9);
   --modal-bg: #FFFFFF;
   --table-bg: #FFFFFF;
-  --table-row-hover: #F8FAFC;
+  --table-row-hover: #EFF5F1;
   --input-bg: #FFFFFF;
-  --input-border: #E2E8F0;
+  --input-border: #D9E5DE;
   --calendar-bg: #FFFFFF;
   --calendar-day-bg: #FFFFFF;
-  --calendar-day-muted: #F8FAFC;
-  --calendar-today-bg: rgba(15, 118, 110, 0.1);
-  --badge-bg: #F1F5F9;
+  --calendar-day-muted: #EFF5F1;
+  --calendar-today-bg: rgba(23, 107, 80, 0.1);
+  --badge-bg: #EBF2ED;
   
   /* Shadows and depth */
   --shadow-soft: 0 2px 8px -1px rgba(0, 0, 0, 0.05), 0 1px 3px -1px rgba(0, 0, 0, 0.03);
   --shadow-medium: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
   --shadow-strong: 0 12px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.06);
-  --glow-primary: 0 0 12px 0 rgba(15, 118, 110, 0.15);
+  --glow-primary: 0 0 12px 0 rgba(23, 107, 80, 0.15);
   --glow-danger: 0 0 12px 0 rgba(220, 38, 38, 0.15);
   --glow-success: 0 0 12px 0 rgba(22, 163, 74, 0.15);
   
@@ -69,20 +74,25 @@
 }
 
 .dark {
-  --background: #050607;
-  --foreground: #F8FAFC;
+  --workspace-bg: linear-gradient(115deg, #14171B 0%, #0F1216 55%, #090B0E 100%);
+  --workspace-pattern: url("/dashboard-geometry.svg");
+  --app-frame-bg: #090B0E;
+  --sidebar-text: #D9EAE0;
+  --sidebar-text-muted: #ACCABD;
+  --background: #14171B;
+  --foreground: #EDF1F5;
   
-  --surface: #101418;
-  --surface-elevated: #161B22;
-  --surface-muted: #1F2933;
-  --border: #26313D;
-  --border-strong: #334155;
+  --surface: #1C2127;
+  --surface-elevated: #252C34;
+  --surface-muted: #2B333D;
+  --border: #333D49;
+  --border-strong: #485566;
   
-  --primary: #2DD4BF;
-  --primary-hover: #14B8A6;
-  --secondary: #94A3B8;
-  --muted: #1F2933;
-  --muted-foreground: #94A3B8;
+  --primary: #62D4AD;
+  --primary-hover: #83E1BF;
+  --secondary: #A4AFBE;
+  --muted: #2B333D;
+  --muted-foreground: #A4AFBE;
   
   --accent: #38BDF8;
   --success: #22C55E;
@@ -91,40 +101,40 @@
   --info: #38BDF8;
   
   /* Text tokens */
-  --text-primary: #F8FAFC;
-  --text-secondary: #CBD5E1;
-  --text-muted: #94A3B8;
-  --text-inverse: #050607;
+  --text-primary: #EDF1F5;
+  --text-secondary: #CDD5DF;
+  --text-muted: #A4AFBE;
+  --text-inverse: #14171B;
   
   /* State tokens */
-  --state-hover: rgba(45, 212, 191, 0.08);
-  --state-active: rgba(45, 212, 191, 0.15);
-  --state-selected: rgba(45, 212, 191, 0.12);
-  --state-disabled: #161B22;
-  --focus-ring: #2DD4BF;
+  --state-hover: rgba(98, 212, 173, 0.08);
+  --state-active: rgba(98, 212, 173, 0.16);
+  --state-selected: rgba(98, 212, 173, 0.12);
+  --state-disabled: #252C34;
+  --focus-ring: #62D4AD;
   
   /* Component tokens */
-  --card-bg: #101418;
-  --card-border: #26313D;
-  --sidebar-bg: #0A0C0F;
-  --sidebar-border: #1A222B;
-  --header-bg: rgba(5, 6, 7, 0.8);
-  --modal-bg: #101418;
-  --table-bg: #101418;
-  --table-row-hover: #161B22;
-  --input-bg: #0A0C0F;
-  --input-border: #26313D;
-  --calendar-bg: #101418;
-  --calendar-day-bg: #101418;
-  --calendar-day-muted: #0A0C0F;
-  --calendar-today-bg: rgba(45, 212, 191, 0.15);
-  --badge-bg: #1F2933;
+  --card-bg: #1C2127;
+  --card-border: #333D49;
+  --sidebar-bg: #103B30;
+  --sidebar-border: #365D4D;
+  --header-bg: rgba(20, 23, 27, 0.9);
+  --modal-bg: #252C34;
+  --table-bg: #1C2127;
+  --table-row-hover: #252C34;
+  --input-bg: #151A20;
+  --input-border: #485566;
+  --calendar-bg: #1C2127;
+  --calendar-day-bg: #1C2127;
+  --calendar-day-muted: #151A20;
+  --calendar-today-bg: rgba(98, 212, 173, 0.12);
+  --badge-bg: #2B333D;
   
   /* Shadows and depth */
   --shadow-soft: 0 2px 8px -1px rgba(0, 0, 0, 0.3), 0 1px 3px -1px rgba(0, 0, 0, 0.2);
   --shadow-medium: 0 4px 16px -2px rgba(0, 0, 0, 0.4), 0 2px 8px -1px rgba(0, 0, 0, 0.3);
   --shadow-strong: 0 16px 32px -4px rgba(0, 0, 0, 0.5), 0 4px 16px -2px rgba(0, 0, 0, 0.4);
-  --glow-primary: 0 0 16px 0 rgba(45, 212, 191, 0.15);
+  --glow-primary: 0 0 16px 0 rgba(98, 212, 173, 0.15);
   --glow-danger: 0 0 16px 0 rgba(248, 113, 113, 0.15);
   --glow-success: 0 0 16px 0 rgba(34, 197, 94, 0.15);
   
@@ -173,6 +183,8 @@
   --color-card-border: var(--card-border);
   --color-sidebar-bg: var(--sidebar-bg);
   --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-text-muted: var(--sidebar-text-muted);
   --color-header-bg: var(--header-bg);
   --color-modal-bg: var(--modal-bg);
   --color-table-bg: var(--table-bg);

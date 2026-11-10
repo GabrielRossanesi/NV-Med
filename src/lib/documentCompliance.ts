@@ -44,33 +44,37 @@ export function documentIsNearExpiry(document: MedicalDocument, referenceTime = 
 }
 
 export function getDoctorCompliance(
-  doctor: Pick<Doctor, 'id' | 'specialty' | 'linkedUnits'>,
+  doctor: Pick<Doctor, 'id' | 'specialty' | 'linkedUnits'> & Partial<Pick<Doctor, 'crmUf'>>,
   documents: MedicalDocument[],
   referenceTime = Date.now(),
   requirements?: DocumentRequirement[],
   nearExpiryDays = 30,
 ) {
-  const scopedTypes = requirements?.length ? new Set(requirements
+  const scopedTypes = requirements ? new Set(requirements
     .filter(requirement => requirement.required)
+    .filter(requirement => !requirement.states?.length || requirement.states.includes(doctor.crmUf?.toUpperCase() || ''))
     .filter(requirement => !requirement.specialties?.length || requirement.specialties.includes(doctor.specialty))
     .filter(requirement => !requirement.unitIds?.length || doctor.linkedUnits.some(unitId => requirement.unitIds?.includes(unitId)))
     .map(requirement => requirement.type)) : null;
   const doctorDocuments = documents.filter(document => document.doctorId === doctor.id && (!scopedTypes || scopedTypes.has(document.type)));
   const approved = doctorDocuments.filter(document => document.status === 'approved' && !documentIsCritical(document, referenceTime)).length;
-  const critical = doctorDocuments.filter(document => documentIsCritical(document, referenceTime)).length;
+  const present = new Set(doctorDocuments.map(document => document.type));
+  const missing = scopedTypes ? [...scopedTypes].filter(type => !present.has(type)).length : 0;
+  const total = doctorDocuments.length + missing;
+  const critical = doctorDocuments.filter(document => documentIsCritical(document, referenceTime)).length + missing;
   const review = doctorDocuments.filter(document => document.status === 'sent' || document.status === 'analyzing').length;
   const nearExpiry = doctorDocuments.filter(document => documentIsNearExpiry(document, referenceTime, nearExpiryDays)).length;
-  const pending = doctorDocuments.length - approved;
-  const percentage = doctorDocuments.length ? Math.round((approved / doctorDocuments.length) * 100) : 0;
+  const pending = total - approved;
+  const percentage = total ? Math.round((approved / total) * 100) : scopedTypes?.size === 0 ? 100 : 0;
   return {
-    total: doctorDocuments.length,
+    total,
     approved,
     critical,
     review,
     nearExpiry,
     pending,
     percentage,
-    compliant: doctorDocuments.length > 0 && pending === 0 && critical === 0 && nearExpiry === 0,
+    compliant: (doctorDocuments.length > 0 || scopedTypes?.size === 0) && pending === 0 && critical === 0 && nearExpiry === 0,
   };
 }
 

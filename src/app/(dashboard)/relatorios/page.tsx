@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState } from 'react';
 import { AlertTriangle, Banknote, Building2, CalendarRange, CheckCircle2, Download, FileSpreadsheet, ShieldCheck, Users } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
@@ -61,6 +63,7 @@ function ExportRow({ icon: Icon, title, description, count, onExport }: { icon: 
 
 export default function ReportsPage() {
   const store = useStore();
+  const canSeeDocuments = canViewPermission(store.currentUser, 'documentos');
   const [mode, setMode] = useState<PeriodMode>('month');
   const [reference, setReference] = useState(localDate());
   const [unitId, setUnitId] = useState('');
@@ -81,8 +84,8 @@ export default function ReportsPage() {
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
   const financialShifts = periodShifts.filter(item => item.doctorId);
   const totalAmount = financialShifts.reduce((total, item) => total + (item.paymentAmount || 0), 0);
-  const paidAmount = financialShifts.filter(item => item.paymentStatus === 'paid').reduce((total, item) => total + (item.paymentAmount || 0), 0);
-  const pendingAmount = totalAmount - paidAmount;
+  const paidAmount = financialShifts.filter(item => item.paymentStatus === 'paid').reduce((total, item) => total + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
+  const pendingAmount = financialShifts.filter(item => item.paymentStatus !== 'paid').reduce((total, item) => total + (item.paymentAmount || 0), 0);
 
   const compliance = doctors.map(doctor => {
     const doctorDocuments = applicableDocuments(doctor, documents, organization?.settings.requiredDocuments);
@@ -94,8 +97,9 @@ export default function ReportsPage() {
   const doctorFinancials = doctors.map(doctor => {
     const shifts = financialShifts.filter(item => item.doctorId === doctor.id);
     const total = shifts.reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
-    const paid = shifts.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
-    return { doctor, shifts: shifts.length, total, paid, pending: total - paid };
+    const paid = shifts.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
+    const pending = shifts.filter(item => item.paymentStatus !== 'paid').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
+    return { doctor, shifts: shifts.length, total, paid, pending };
   }).filter(item => item.shifts > 0).sort((a, b) => b.total - a.total);
 
   const filenameBase = `${safeName(organization?.name || 'empresa')}-${bounds.start}-${bounds.end}`;
@@ -143,17 +147,20 @@ export default function ReportsPage() {
         <section className="grid overflow-hidden rounded-2xl border border-border bg-card-bg sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo do período">
           <div className="p-5"><p className="text-xs text-text-muted">Período selecionado</p><p className="mt-2 font-semibold tabular-nums">{displayDate(bounds.start)} – {displayDate(bounds.end)}</p></div>
           <div className="border-t border-border p-5 sm:border-l sm:border-t-0"><p className="text-xs text-text-muted">Plantões</p><p className="mt-2 text-2xl font-semibold tabular-nums">{periodShifts.length}</p></div>
-          <div className="border-t border-border p-5 lg:border-l lg:border-t-0"><p className="text-xs text-text-muted">Médicos regulares</p><p className="mt-2 text-2xl font-semibold tabular-nums text-success">{regularDoctors}<span className="text-sm font-normal text-text-muted">/{doctors.length}</span></p></div>
-          <div className="border-t border-border p-5 sm:border-l lg:border-t-0"><p className="text-xs text-text-muted">Pendências documentais</p><p className={`mt-2 text-2xl font-semibold tabular-nums ${compliance.some(item => !item.regular) ? 'text-danger' : 'text-success'}`}>{compliance.filter(item => !item.regular).length}</p></div>
+          {canSeeDocuments && <>
+            <div className="border-t border-border p-5 lg:border-l lg:border-t-0"><p className="text-xs text-text-muted">Médicos regulares</p><p className="mt-2 text-2xl font-semibold tabular-nums text-success">{regularDoctors}<span className="text-sm font-normal text-text-muted">/{doctors.length}</span></p></div>
+            <div className="border-t border-border p-5 sm:border-l lg:border-t-0"><p className="text-xs text-text-muted">Pendências documentais</p><p className={`mt-2 text-2xl font-semibold tabular-nums ${compliance.some(item => !item.regular) ? 'text-danger' : 'text-success'}`}>{compliance.filter(item => !item.regular).length}</p></div>
+          </>}
         </section>
 
+        <Link className="nv-button-secondary" href="/relatorios/plantoes"><FileSpreadsheet size={16}/>Relatório detalhado de plantões</Link>
         {lastExport && <p role="status" className="flex items-center gap-2 text-sm text-primary"><CheckCircle2 size={16}/>{lastExport}</p>}
 
         <div className={`grid gap-8 ${canSeeFinancial ? 'xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]' : ''}`}>
           <section><div className="border-b border-border pb-3"><h2 className="font-semibold">Exportações operacionais</h2><p className="mt-1 text-sm text-text-muted">Os plantões respeitam período e unidade. Médicos e documentos respeitam a unidade selecionada.</p></div>
             <ExportRow icon={CalendarRange} title="Plantões médicos" description="Escala detalhada com unidade, setor, especialidade, vínculo e situação." count={periodShifts.length} onExport={exportShifts}/>
             <ExportRow icon={Users} title="Lista de médicos" description="Corpo clínico, contatos, CRM, especialidade e unidades vinculadas." count={doctors.length} onExport={exportDoctors}/>
-            <ExportRow icon={ShieldCheck} title="Conformidade documental" description="Médicos regulares e pendentes, incluindo cada documento que exige ação." count={compliance.length} onExport={exportCompliance}/>
+            {canSeeDocuments && <ExportRow icon={ShieldCheck} title="Conformidade documental" description="Médicos regulares e pendentes, incluindo cada documento que exige ação." count={compliance.length} onExport={exportCompliance}/>}
           </section>
 
           {canSeeFinancial && <section><div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3"><div><h2 className="font-semibold">Financeiro por médico</h2><p className="mt-1 text-sm text-text-muted">Valores registrados nos plantões do período selecionado.</p></div><div className="flex gap-2"><button className="nv-button-secondary" onClick={exportDoctorSummary} disabled={!doctorFinancials.length}><Download size={14}/>Resumo</button><button className="nv-button-secondary" onClick={exportFinancial} disabled={!financialShifts.length}><Download size={14}/>Detalhado</button></div></div>

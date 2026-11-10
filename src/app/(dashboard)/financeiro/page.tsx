@@ -1,5 +1,8 @@
 'use client';
 
+import Link from 'next/link';
+import { financeState, financeStateLabels, saoPauloDate, type FinanceState } from '@/lib/financeState';
+
 import { useMemo, useState } from 'react';
 import {
   Banknote,
@@ -62,7 +65,7 @@ export default function FinancePage() {
   const [sectorId, setSectorId] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [frequency, setFrequency] = useState<PaymentFrequency | ''>('');
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | ''>('');
+  const [paymentStatus, setPaymentStatus] = useState<FinanceState | ''>('');
   const [view, setView] = useState<FinanceView>('list');
   const [editing, setEditing] = useState<Shift | null>(null);
   const [editAmount, setEditAmount] = useState(0);
@@ -73,6 +76,7 @@ export default function FinancePage() {
   const canEditFinancial = canEditPermission(store.currentUser, 'financeiro');
   const organization = store.organizations.find(item => item.id === orgId);
   const bounds = periodBounds(periodMode, reference);
+  const today = saoPauloDate();
 
   // Every collection is scoped before it participates in filters or joins.
   const units = useMemo(() => store.units.filter(item => item.organizationId === orgId), [store.units, orgId]);
@@ -85,17 +89,17 @@ export default function FinancePage() {
   ] as string[])].sort((a, b) => a.localeCompare(b, 'pt-BR')), [organizationShifts, sectors]);
 
   const filteredShifts = useMemo(() => organizationShifts
-    .filter(item => item.doctorId && item.status !== 'cancelled' && item.date >= bounds.start && item.date <= bounds.end)
+    .filter(item => item.doctorId && (item.status !== 'cancelled' || paymentStatus === 'cancelled') && item.date >= bounds.start && item.date <= bounds.end)
     .filter(item => !unitId || item.unitId === unitId)
     .filter(item => !sectorId || item.sectorId === sectorId)
     .filter(item => !specialty || item.specialty === specialty)
     .filter(item => !frequency || (item.paymentFrequency || 'on_delivery') === frequency)
-    .filter(item => !paymentStatus || (item.paymentStatus || 'pending') === paymentStatus)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)), [organizationShifts, bounds.start, bounds.end, unitId, sectorId, specialty, frequency, paymentStatus]);
+    .filter(item => !paymentStatus || financeState(item, today) === paymentStatus)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)), [organizationShifts, bounds.start, bounds.end, unitId, sectorId, specialty, frequency, paymentStatus, today]);
 
   const total = filteredShifts.reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
-  const paid = filteredShifts.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
-  const pending = total - paid;
+  const paid = filteredShifts.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
+  const pending = filteredShifts.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
   const onDelivery = filteredShifts.filter(item => (item.paymentFrequency || 'on_delivery') === 'on_delivery');
   const monthly = filteredShifts.filter(item => item.paymentFrequency === 'monthly');
   const visibleSectors = sectors.filter(item => !unitId || item.unitId === unitId);
@@ -127,13 +131,15 @@ export default function FinancePage() {
         item.employerName,
         paymentFrequencyLabels[item.paymentFrequency || 'on_delivery'],
         (item.paymentAmount || 0).toFixed(2).replace('.', ','),
-        paymentStatusLabels[item.paymentStatus || 'pending'],
+        financeStateLabels[financeState(item, today)],
+        item.paymentDueDate ? displayDate(item.paymentDueDate) : '',
         item.paidAt ? new Date(item.paidAt).toLocaleString('pt-BR') : '',
+        item.paidAmount?.toFixed(2).replace('.', ','),
       ];
     });
     downloadCsv(
       `financeiro-${safeName(organization?.name || 'empresa')}-${bounds.start}-${bounds.end}`,
-      ['Empresa', 'Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Situação', 'Pago em'],
+      ['Empresa', 'Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Situação', 'Vencimento', 'Pago em', 'Valor pago (R$)'],
       rows,
     );
   }
@@ -147,11 +153,16 @@ export default function FinancePage() {
     setEditError('');
   }
 
-  async function savePayment(event: React.FormEvent) {
+  async function savePayment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editing) return;
     if (!Number.isFinite(editAmount) || editAmount < 0) return setEditError('Informe um valor válido para o plantão.');
-    const ok = await store.updateShiftFinancials(editing.id, editAmount, editFrequency, editStatus);
+    const fields = new FormData(event.currentTarget);
+    const ok = await store.updateShiftFinancials(editing.id, editAmount, editFrequency, editStatus, {
+      amount: editStatus === 'paid' ? Number(fields.get('paidAmount')) : null,
+      date: editStatus === 'paid' ? String(fields.get('paidOn')) : null,
+      note: String(fields.get('note')),
+    });
     if (ok) setEditing(null);
     else setEditError(useStore.getState().error || 'Não foi possível atualizar o pagamento.');
   }
@@ -173,7 +184,10 @@ export default function FinancePage() {
             <h1 className="mt-2 flex items-center gap-2 text-2xl font-bold tracking-tight"><WalletCards className="h-6 w-6 text-primary"/>Pagamentos médicos</h1>
             <p className="mt-1 text-sm text-text-muted">Concilie valores por unidade, setor e especialidade de {organization?.name || 'sua empresa'}.</p>
           </div>
-          <button type="button" className="nv-button" onClick={exportCsv} disabled={!filteredShifts.length}><Download size={16}/>Exportar CSV</button>
+          <div className="flex flex-wrap gap-2">
+            {canEditPermission(store.currentUser, 'configuracoes') && <Link className="nv-button-secondary" href="/financeiro/configuracao">Regras de vencimento</Link>}
+            <button type="button" className="nv-button" onClick={exportCsv} disabled={!filteredShifts.length}><Download size={16}/>Exportar CSV</button>
+          </div>
         </header>
 
         {!canEditFinancial && <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-text-secondary"><ReceiptText size={16} className="shrink-0 text-primary"/><span><strong className="font-semibold text-text-primary">Acesso somente para consulta.</strong> Você pode visualizar e exportar os dados financeiros, sem alterar valores ou pagamentos.</span></div>}
@@ -189,7 +203,10 @@ export default function FinancePage() {
           </div>
           <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:max-w-[620px]">
             <label className="nv-label">Regime de pagamento<select className="nv-input" value={frequency} onChange={event => setFrequency(event.target.value as PaymentFrequency | '')}><option value="">À vista e mensal</option>{Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label className="nv-label">Situação<select className="nv-input" value={paymentStatus} onChange={event => setPaymentStatus(event.target.value as PaymentStatus | '')}><option value="">Pendentes e pagos</option><option value="pending">Pendente</option><option value="paid">Pago</option></select></label>
+            <label className="nv-label">Situação<select className="nv-input" value={paymentStatus} onChange={event => setPaymentStatus(event.target.value as FinanceState | '')}>
+              <option value="">Todos os pagamentos ativos</option>
+              {Object.entries(financeStateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select></label>
           </div>
         </section>
 
@@ -214,7 +231,7 @@ export default function FinancePage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="border-b border-border bg-surface-muted/50 text-[10px] font-semibold uppercase tracking-wider text-text-muted"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Médico</th><th className="px-4 py-3">Unidade · setor</th><th className="px-4 py-3">Especialidade</th><th className="px-4 py-3">Regime</th><th className="px-4 py-3 text-right">Valor</th><th className="px-4 py-3">Situação</th>{canEditFinancial && <th className="px-4 py-3 text-right">Ação</th>}</tr></thead>
-                <tbody className="divide-y divide-border">{filteredShifts.map(shift => { const { doctor, unit, sector } = shiftContext(shift); const status = shift.paymentStatus || 'pending'; return <tr key={shift.id} className="transition hover:bg-state-hover"><td className="px-4 py-3"><span className="block font-medium tabular-nums">{displayDate(shift.date)}</span><span className="text-xs text-text-muted">{shift.startTime}–{shift.endTime}</span></td><td className="px-4 py-3"><span className="block font-medium">{doctor?.name || 'Médico'}</span><span className="text-xs text-text-muted">{doctor ? `${doctor.crm}-${doctor.crmUf}` : ''}</span></td><td className="px-4 py-3"><span className="block max-w-48 truncate font-medium">{unit?.name || 'Unidade'}</span><span className="text-xs text-text-muted">{sector?.name || shift.sector || 'Setor'}</span></td><td className="px-4 py-3 text-text-secondary">{shift.specialty || '—'}</td><td className="px-4 py-3"><span className="rounded-md bg-surface-muted px-2 py-1 text-xs font-medium">{paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']}</span></td><td className="px-4 py-3 text-right font-semibold tabular-nums">{money(shift.paymentAmount || 0)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status === 'paid' ? 'text-success' : 'text-warning'}`}>{status === 'paid' ? <CheckCircle2 size={14}/> : <ReceiptText size={14}/>} {paymentStatusLabels[status]}</span></td>{canEditFinancial && <td className="px-4 py-3 text-right"><button type="button" disabled={store.saving} onClick={() => openPayment(shift)} className="text-xs font-semibold text-primary hover:underline">Editar</button></td>}</tr>; })}</tbody>
+                <tbody className="divide-y divide-border">{filteredShifts.map(shift => { const { doctor, unit, sector } = shiftContext(shift); const status = financeState(shift, today); return <tr key={shift.id} className="transition hover:bg-state-hover"><td className="px-4 py-3"><span className="block font-medium tabular-nums">{displayDate(shift.date)}</span><span className="text-xs text-text-muted">{shift.startTime}–{shift.endTime}</span></td><td className="px-4 py-3"><span className="block font-medium">{doctor?.name || 'Médico'}</span><span className="text-xs text-text-muted">{doctor ? `${doctor.crm}-${doctor.crmUf}` : ''}</span></td><td className="px-4 py-3"><span className="block max-w-48 truncate font-medium">{unit?.name || 'Unidade'}</span><span className="text-xs text-text-muted">{sector?.name || shift.sector || 'Setor'}</span></td><td className="px-4 py-3 text-text-secondary">{shift.specialty || '—'}</td><td className="px-4 py-3"><span className="rounded-md bg-surface-muted px-2 py-1 text-xs font-medium">{paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']}</span></td><td className="px-4 py-3 text-right font-semibold tabular-nums">{money(shift.paymentAmount || 0)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status === 'paid' ? 'text-success' : 'text-warning'}`}>{status === 'paid' ? <CheckCircle2 size={14}/> : <ReceiptText size={14}/>} {financeStateLabels[status]}</span>{shift.paymentDueDate && <span className="block text-xs text-text-muted">Vence em {displayDate(shift.paymentDueDate)}</span>}{shift.paidAmount !== undefined && <span className="block text-xs text-text-muted">{money(shift.paidAmount)} pagos</span>}</td>{canEditFinancial && <td className="px-4 py-3 text-right"><button type="button" disabled={store.saving} onClick={() => openPayment(shift)} className="text-xs font-semibold text-primary hover:underline">Editar</button></td>}</tr>; })}</tbody>
               </table>
             </div>
             {!filteredShifts.length && <div className="py-16 text-center"><Banknote className="mx-auto h-6 w-6 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum pagamento neste recorte</p><p className="mt-1 text-xs text-text-muted">Ajuste o período ou os filtros para consultar outros plantões.</p></div>}
@@ -225,7 +242,13 @@ export default function FinancePage() {
           </div>
         )}
 
-        {editing && canEditFinancial && <Dialog title="Editar pagamento" onClose={() => !store.saving && setEditing(null)}><form className="space-y-4" onSubmit={savePayment}><div className="rounded-xl bg-surface-muted/60 p-4"><p className="text-sm font-semibold">{shiftContext(editing).doctor?.name || 'Médico'}</p><p className="mt-1 text-xs text-text-muted">{displayDate(editing.date)} · {shiftContext(editing).unit?.name} · {shiftContext(editing).sector?.name || editing.sector}</p></div><label className="nv-label">Valor do plantão (R$)<input className="nv-input" type="number" min="0" max="9999999999.99" step="0.01" required value={editAmount} onChange={event => setEditAmount(Number(event.target.value))}/></label><div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Regime de pagamento<select className="nv-input" value={editFrequency} onChange={event => setEditFrequency(event.target.value as PaymentFrequency)}>{Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="nv-label">Situação<select className="nv-input" value={editStatus} onChange={event => setEditStatus(event.target.value as PaymentStatus)}><option value="pending">Pendente</option><option value="paid">Pago</option></select></label></div>{editError && <p role="alert" className="text-sm text-danger">{editError}</p>}<div className="flex justify-end gap-3 pt-2"><button type="button" className="nv-button-secondary" onClick={() => setEditing(null)}>Cancelar</button><button className="nv-button" disabled={store.saving}>{store.saving ? 'Salvando…' : 'Salvar pagamento'}</button></div></form></Dialog>}
+        {editing && canEditFinancial && <Dialog title="Editar pagamento" onClose={() => !store.saving && setEditing(null)}><form className="space-y-4" onSubmit={savePayment}><div className="rounded-xl bg-surface-muted/60 p-4"><p className="text-sm font-semibold">{shiftContext(editing).doctor?.name || 'Médico'}</p><p className="mt-1 text-xs text-text-muted">{displayDate(editing.date)} · {shiftContext(editing).unit?.name} · {shiftContext(editing).sector?.name || editing.sector}</p></div><label className="nv-label">Valor do plantão (R$)<input className="nv-input" type="number" min="0" max="9999999999.99" step="0.01" required disabled={editing.paymentStatus === "paid"} value={editAmount} onChange={event => setEditAmount(Number(event.target.value))}/></label><div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Regime de pagamento<select className="nv-input" value={editFrequency} disabled={editing.paymentStatus === "paid"} onChange={event => setEditFrequency(event.target.value as PaymentFrequency)}>{Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="nv-label">Situação<select className="nv-input" value={editStatus} onChange={event => setEditStatus(event.target.value as PaymentStatus)}><option value="pending">Pendente</option><option value="paid">Pago</option></select></label></div>{editing.paymentDueDate && <p className="text-sm text-text-muted">Vencimento · {displayDate(editing.paymentDueDate)}</p>}
+{editStatus === 'paid' && <div className="grid gap-4 sm:grid-cols-2">
+  <label className="nv-label">Valor pago (R$)<input className="nv-input" name="paidAmount" type="number" min={0} max={9999999999.99} step="0.01" defaultValue={editing.paidAmount ?? editAmount} required/></label>
+  <label className="nv-label">Data do pagamento<input className="nv-input" name="paidOn" type="date" max={today} defaultValue={editing.paidAt ? saoPauloDate(new Date(editing.paidAt)) : today} required/></label>
+</div>}
+<label className="nv-label">Observações<textarea className="nv-input" name="note" maxLength={1000} rows={3} defaultValue={editing.paymentNote}/></label>
+{editError && <p role="alert" className="text-sm text-danger">{editError}</p>}<div className="flex justify-end gap-3 pt-2"><button type="button" className="nv-button-secondary" onClick={() => setEditing(null)}>Cancelar</button><button className="nv-button" disabled={store.saving}>{store.saving ? 'Salvando…' : 'Salvar pagamento'}</button></div></form></Dialog>}
 
         <p className="flex items-center gap-2 text-xs text-text-muted"><Building2 size={14}/>{organization?.name || 'Empresa'} · o acesso e as exportações respeitam o cliente selecionado.</p>
       </div>

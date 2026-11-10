@@ -44,3 +44,13 @@ test('treats an approved document with a past expiry date as non-compliant', () 
   assert.equal(summary.critical, 1);
   assert.equal(summary.compliant, false);
 });
+
+test('counts a missing requirement only when the CRM state matches', () => {
+  const requirements = [{ type: 'crm', name: 'CRM', required: true, states: ['SP'] }];
+  const inScope = getDoctorCompliance({ ...doctor, crmUf: 'SP' }, [], Date.now(), requirements);
+  assert.equal(inScope.critical, 1);
+  assert.equal(inScope.compliant, false);
+  const outOfScope = getDoctorCompliance({ ...doctor, crmUf: 'MG' }, [], Date.now(), requirements);
+  assert.equal(outOfScope.total, 0);
+  assert.equal(outOfScope.compliant, true);
+});

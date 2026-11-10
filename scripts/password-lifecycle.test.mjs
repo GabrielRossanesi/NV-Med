@@ -8,10 +8,11 @@ test('explicitly clears the required-password flag while preserving provider met
     providers: ['email'],
     must_change_password: true,
     temporary_password_set_at: '2026-09-20T12:00:00.000Z',
-  });
+  }, '2026-09-20T12:05:00.000Z');
 
   assert.equal(metadata.must_change_password, false);
   assert.equal(metadata.temporary_password_set_at, null);
+  assert.equal(metadata.password_changed_at, '2026-09-20T12:05:00.000Z');
   assert.equal(metadata.provider, 'email');
   assert.deepEqual(metadata.providers, ['email']);
 });

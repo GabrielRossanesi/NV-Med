@@ -5,6 +5,7 @@ import { useStore } from '@/store/useStore';
 import AccessGuard from '@/components/AccessGuard';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import { Organization } from '@/types';
+import { starterDocumentRequirements } from '@/lib/documentRequirements';
 import { 
   Building, 
   Plus, 
@@ -108,10 +109,7 @@ export default function AdminOrganizationsPage() {
       enabledModules,
       settings: editingOrg?.settings || {
         specialties: ['Clínico Geral', 'Cardiologia', 'Pediatria'],
-        requiredDocuments: [
-          { type: 'rg_cnh', name: 'RG/CNH', required: true },
-          { type: 'diploma_medicina', name: 'Diploma de Medicina', required: true }
-        ]
+        requiredDocuments: starterDocumentRequirements
       }
     };
 

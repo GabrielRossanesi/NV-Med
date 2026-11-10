@@ -20,24 +20,27 @@ export function getDocumentGovernance(organization?: Pick<Organization, 'setting
   };
 }
 
-export function requirementApplies(requirement: DocumentRequirement, doctor: Pick<Doctor, 'specialty' | 'linkedUnits'>) {
+type DocumentDoctor = Pick<Doctor, 'specialty' | 'linkedUnits'> & Partial<Pick<Doctor, 'crmUf'>>;
+
+export function requirementApplies(requirement: DocumentRequirement, doctor: DocumentDoctor) {
   if (!requirement.required) return false;
+  if (requirement.states?.length && !requirement.states.includes(doctor.crmUf?.toUpperCase() || '')) return false;
   if (requirement.specialties?.length && !requirement.specialties.includes(doctor.specialty)) return false;
   if (requirement.unitIds?.length && !doctor.linkedUnits.some(unitId => requirement.unitIds?.includes(unitId))) return false;
   return true;
 }
 
-export function applicableRequirements(doctor: Pick<Doctor, 'specialty' | 'linkedUnits'>, requirements?: DocumentRequirement[]) {
+export function applicableRequirements(doctor: DocumentDoctor, requirements?: DocumentRequirement[]) {
   return (requirements || []).filter(requirement => requirementApplies(requirement, doctor));
 }
 
 export function applicableDocuments(
-  doctor: Pick<Doctor, 'id' | 'specialty' | 'linkedUnits'>,
+  doctor: DocumentDoctor & Pick<Doctor, 'id'>,
   documents: MedicalDocument[],
   requirements?: DocumentRequirement[],
 ) {
   const doctorDocuments = documents.filter(document => document.doctorId === doctor.id);
-  if (!requirements?.length) return doctorDocuments;
+  if (!requirements) return doctorDocuments;
   const types = new Set(applicableRequirements(doctor, requirements).map(requirement => requirement.type));
   return doctorDocuments.filter(document => types.has(document.type));
 }
@@ -56,7 +59,7 @@ export function isBlockingDocument(
 }
 
 export function doctorScheduleCompliance(
-  doctor: Pick<Doctor, 'id' | 'specialty' | 'linkedUnits'>,
+  doctor: DocumentDoctor & Pick<Doctor, 'id'>,
   documents: MedicalDocument[],
   organization?: Pick<Organization, 'settings'> | null,
   referenceTime = Date.now(),

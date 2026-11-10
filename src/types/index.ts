@@ -29,8 +29,10 @@ export interface DocumentRequirement {
   required: boolean;
   blocking?: boolean;
   expiryRequired?: boolean;
+  annualRenewal?: boolean;
   specialties?: string[];
   unitIds?: string[];
+  states?: string[];
 }
 
 export interface DocumentGovernanceSettings {
@@ -93,6 +95,7 @@ export interface Sector {
   organizationId: string;
   unitId: string;
   name: string;
+  description?: string;
   specialties: string[];
   status: SectorStatus;
   defaultStartTime: string;
@@ -154,6 +157,9 @@ export type PaymentStatus = 'pending' | 'paid';
 export type PaymentFrequency = 'on_delivery' | 'monthly';
 
 export interface Shift {
+  exchangeRequested?: boolean;
+  coverageMode?: 'regular' | 'adhoc';
+  coverageReason?: string;
   sectorId?: string;
   sector?: string;
   specialty?: string;
@@ -163,6 +169,9 @@ export interface Shift {
   paymentStatus?: PaymentStatus;
   paymentFrequency?: PaymentFrequency;
   paidAt?: string;
+  paymentDueDate?: string;
+  paidAmount?: number;
+  paymentNote?: string;
   id: string;
   doctorId?: string; // Empty while this staffing position is open
   unitId: string; // Linked Unit ID

@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
-import { DocumentRequirement, Organization, Unit } from '@/types';
+import { Organization } from '@/types';
 import AccessGuard from '@/components/AccessGuard';
 import {
   Building,
@@ -10,55 +10,16 @@ import {
   Plus,
   Briefcase,
   Sun,
-  BellRing,
-  CalendarClock,
-  LockKeyhole,
-  FilePlus2,
-  Trash2,
-  Info
+  ArrowRight
 } from 'lucide-react';
 import { useState } from 'react';
-import { getDocumentGovernance } from '@/lib/documentGovernance';
+import Link from 'next/link';
 import { canEditPermission } from '@/lib/permissions';
-
-const DOCUMENT_NAME_SUGGESTIONS = [
-  'Carteira do CRM',
-  'Certidão Ética do CRM',
-  'Certidão Financeira do CRM',
-  'RQE',
-  'Diploma de Residência ou Especialização',
-  'Comprovante de Endereço',
-  'Certificado ACLS',
-  'Certificado PALS',
-  'Certificado ATLS',
-  'Contrato Social / CNPJ',
-  'Certidões Fiscais',
-  'Dados Bancários',
-];
-
-function documentTypeFromName(name: string, requirements: DocumentRequirement[]) {
-  const normalized = name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80) || 'documento';
-  const base = `custom_${normalized}`;
-  let type = base;
-  let suffix = 2;
-  while (requirements.some(requirement => requirement.type === type)) {
-    type = `${base.slice(0, 96 - String(suffix).length)}_${suffix}`;
-    suffix += 1;
-  }
-  return type;
-}
 
 interface SettingsFormProps {
   activeOrg: Organization;
   activeOrganizationId: string;
   updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => Promise<boolean>;
-  units: Unit[];
   canManageSettings: boolean;
   saving: boolean;
 }
@@ -67,7 +28,6 @@ function SettingsForm({
   activeOrg,
   activeOrganizationId,
   updateOrganizationSettings,
-  units,
   canManageSettings,
   saving,
 }: SettingsFormProps) {
@@ -81,13 +41,6 @@ function SettingsForm({
   const [address, setAddress] = useState(activeOrg?.address || '');
   const [newSpec, setNewSpec] = useState('');
   const [isSaved, setIsSaved] = useState(false);
-  const [documentGovernance, setDocumentGovernance] = useState(() => getDocumentGovernance(activeOrg));
-  const [documentRequirements, setDocumentRequirements] = useState<DocumentRequirement[]>(() => activeOrg.settings.requiredDocuments);
-  const [newDocumentName, setNewDocumentName] = useState('');
-  const [newDocumentExpiryRequired, setNewDocumentExpiryRequired] = useState(false);
-  const [newDocumentBlocking, setNewDocumentBlocking] = useState(true);
-  const [documentFormError, setDocumentFormError] = useState('');
-
   const handleSaveOrgInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManageSettings) return;
@@ -132,63 +85,6 @@ function SettingsForm({
       }
     })) return;
   };
-
-  const updateRequirement = (type: string, updates: Partial<DocumentRequirement>) => {
-    setDocumentRequirements(current => current.map(requirement => requirement.type === type ? { ...requirement, ...updates } : requirement));
-  };
-
-  const toggleScopeValue = (type: string, field: 'specialties' | 'unitIds', value: string) => {
-    const requirement = documentRequirements.find(item => item.type === type);
-    const current = requirement?.[field] || [];
-    updateRequirement(type, { [field]: current.includes(value) ? current.filter(item => item !== value) : [...current, value] });
-  };
-
-  const saveDocumentGovernance = async () => {
-    if (!canManageSettings) return;
-    if (!await updateOrganizationSettings(activeOrganizationId, {
-      settings: {
-        ...activeOrg.settings,
-        requiredDocuments: documentRequirements,
-        documentGovernance,
-      },
-    })) return;
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
-  };
-
-  const addDocumentRequirement = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!canManageSettings) return;
-    const name = newDocumentName.trim();
-    if (name.length < 3) {
-      setDocumentFormError('Informe um nome com pelo menos 3 caracteres.');
-      return;
-    }
-    if (documentRequirements.some(requirement => requirement.name.localeCompare(name, 'pt-BR', { sensitivity: 'base' }) === 0)) {
-      setDocumentFormError('Já existe um documento com esse nome.');
-      return;
-    }
-    setDocumentRequirements(current => [...current, {
-      type: documentTypeFromName(name, current),
-      name,
-      required: true,
-      blocking: newDocumentBlocking,
-      expiryRequired: newDocumentExpiryRequired,
-      specialties: [],
-      unitIds: [],
-    }]);
-    setNewDocumentName('');
-    setNewDocumentExpiryRequired(false);
-    setNewDocumentBlocking(true);
-    setDocumentFormError('');
-  };
-
-  const removeDocumentRequirement = (type: string) => {
-    if (!canManageSettings) return;
-    setDocumentRequirements(current => current.filter(requirement => requirement.type !== type));
-  };
-
-
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -335,105 +231,12 @@ function SettingsForm({
           </div>
         </div>
 
-        <div className="rounded-xl border border-card-border bg-card-bg p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Documentos exigidos pela empresa
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">Monte o checklist de {activeOrg.name} e defina quando cada item se aplica.</p>
-            </div>
-            <button type="button" className="nv-button shrink-0 disabled:cursor-not-allowed disabled:opacity-50" disabled={!canManageSettings || saving} onClick={saveDocumentGovernance}>
-              {saving ? 'Salvando…' : 'Salvar checklist'}
-            </button>
+        <section className="border-y border-border py-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div><h3 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={17} className="text-primary" />Documentação médica</h3><p className="mt-2 max-w-lg text-sm text-text-muted">Configure os documentos obrigatórios de {activeOrg.name} para toda a empresa ou unidades específicas.</p><p className="mt-2 text-xs text-text-muted">{activeOrg.settings.requiredDocuments.length} exigências cadastradas</p></div>
+            <Link href="/configuracoes/documentos" className="nv-button-secondary">Gerenciar exigências <ArrowRight size={15} /></Link>
           </div>
-
-          {!canManageSettings && (
-            <div className="mt-4 flex items-start gap-2 rounded-lg border border-border bg-surface-muted/40 px-3 py-2.5 text-xs text-text-muted">
-              <Info size={15} className="mt-0.5 shrink-0 text-primary" />
-              Esta visualização é somente leitura. Um usuário da empresa com permissão de edição em Configurações pode alterar o catálogo.
-            </div>
-          )}
-
-          <form onSubmit={addDocumentRequirement} className="mt-5 rounded-xl border border-border bg-background/35 p-4">
-            <div className="flex items-start gap-3">
-              <FilePlus2 size={18} className="mt-0.5 shrink-0 text-primary" />
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Adicionar documento</p>
-                <p className="mt-0.5 text-xs text-text-muted">O item será criado também para os médicos já cadastrados após salvar o checklist.</p>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="nv-label flex-1">
-                Nome do documento
-                <input
-                  className="nv-input mt-1"
-                  list="document-name-suggestions"
-                  maxLength={120}
-                  required
-                  disabled={!canManageSettings || saving}
-                  placeholder="Ex.: Carteira do CRM, RQE ou ACLS"
-                  value={newDocumentName}
-                  onChange={event => { setNewDocumentName(event.target.value); setDocumentFormError(''); }}
-                />
-                <datalist id="document-name-suggestions">{DOCUMENT_NAME_SUGGESTIONS.map(name => <option key={name} value={name} />)}</datalist>
-              </label>
-              <button className="nv-button-secondary shrink-0 disabled:cursor-not-allowed disabled:opacity-50" disabled={!canManageSettings || saving}>
-                <Plus size={15} />Adicionar ao checklist
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-text-secondary">
-              <label className="flex items-center gap-2"><input type="checkbox" disabled={!canManageSettings || saving} checked={newDocumentBlocking} onChange={event => setNewDocumentBlocking(event.target.checked)} />Pendência bloqueia escala</label>
-              <label className="flex items-center gap-2"><input type="checkbox" disabled={!canManageSettings || saving} checked={newDocumentExpiryRequired} onChange={event => setNewDocumentExpiryRequired(event.target.checked)} />Exigir data de validade</label>
-            </div>
-            {documentFormError && <p role="alert" className="mt-3 text-xs font-medium text-danger">{documentFormError}</p>}
-          </form>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <label className="flex items-start gap-3 rounded-xl border border-border p-4">
-              <input type="checkbox" className="mt-1" disabled={!canManageSettings || saving} checked={documentGovernance.blockSchedulingOnCritical} onChange={event => setDocumentGovernance(current => ({ ...current, blockSchedulingOnCritical: event.target.checked }))} />
-              <span><span className="flex items-center gap-1.5 text-sm font-semibold"><LockKeyhole size={14} className="text-danger" />Bloquear escala crítica</span><span className="mt-1 block text-xs leading-relaxed text-text-muted">Impede novos plantões quando houver documento obrigatório vencido, reprovado ou ausente.</span></span>
-            </label>
-            <label className="flex items-start gap-3 rounded-xl border border-border p-4">
-              <input type="checkbox" className="mt-1" disabled={!canManageSettings || saving} checked={documentGovernance.internalNotifications} onChange={event => setDocumentGovernance(current => ({ ...current, internalNotifications: event.target.checked }))} />
-              <span><span className="flex items-center gap-1.5 text-sm font-semibold"><BellRing size={14} className="text-primary" />Notificações internas</span><span className="mt-1 block text-xs leading-relaxed text-text-muted">Mostra pendências e vencimentos no cabeçalho e no painel da empresa.</span></span>
-            </label>
-          </div>
-
-          <div className="mt-5 rounded-xl border border-border p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold"><CalendarClock size={15} className="text-primary" />Antecedência dos alertas</p>
-            <p className="mt-1 text-xs text-text-muted">Selecione quando um documento aprovado deve entrar na esteira de vencimento.</p>
-            <div className="mt-3 flex flex-wrap gap-2">{[90, 60, 30, 7].map(day => { const active = documentGovernance.expiryAlertDays.includes(day); return <button type="button" key={day} disabled={!canManageSettings || saving} onClick={() => setDocumentGovernance(current => ({ ...current, expiryAlertDays: active ? current.expiryAlertDays.filter(value => value !== day) : [...current.expiryAlertDays, day].sort((a, b) => b - a) }))} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted hover:bg-state-hover'}`}>{day} dias</button>; })}</div>
-          </div>
-
-          <div className="mt-5 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Checklist ({documentRequirements.length})</p>
-              <span className="text-[11px] text-text-muted">Sem escopo selecionado = todos</span>
-            </div>
-            {!documentRequirements.length && <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">Nenhum documento configurado para esta empresa.</div>}
-            {documentRequirements.map(requirement => (
-              <details key={requirement.type} className="rounded-xl border border-border bg-background/40">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
-                  <span className="min-w-0"><span className="block truncate text-sm font-semibold text-text-primary">{requirement.name}</span><span className="mt-0.5 block text-[10px] text-text-muted">{requirement.specialties?.length ? `${requirement.specialties.length} especialidade(s)` : 'Todas as especialidades'} · {requirement.unitIds?.length ? `${requirement.unitIds.length} unidade(s)` : 'Todas as unidades'}</span></span>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${requirement.required ? 'bg-primary/10 text-primary' : 'bg-surface-muted text-text-muted'}`}>{requirement.required ? 'Obrigatório' : 'Opcional'}</span>
-                </summary>
-                <div className="space-y-4 border-t border-border px-4 py-4">
-                  <div className="flex flex-wrap items-center gap-4 text-xs">
-                    <label className="flex items-center gap-2"><input type="checkbox" disabled={!canManageSettings || saving} checked={requirement.required} onChange={event => updateRequirement(requirement.type, { required: event.target.checked })} />Exigir documento</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" disabled={!canManageSettings || saving} checked={requirement.blocking !== false} onChange={event => updateRequirement(requirement.type, { blocking: event.target.checked })} />Pendência bloqueia escala</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" disabled={!canManageSettings || saving} checked={Boolean(requirement.expiryRequired)} onChange={event => updateRequirement(requirement.type, { expiryRequired: event.target.checked })} />Exigir validade</label>
-                    <button type="button" disabled={!canManageSettings || saving} onClick={() => removeDocumentRequirement(requirement.type)} className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-danger transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={13} />Remover exigência</button>
-                  </div>
-                  <div><p className="text-[11px] font-semibold text-text-muted">Especialidades</p><div className="mt-2 flex flex-wrap gap-1.5">{activeOrg.settings.specialties.map(specialty => <button type="button" disabled={!canManageSettings || saving} key={specialty} onClick={() => toggleScopeValue(requirement.type, 'specialties', specialty)} className={`rounded-md border px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-50 ${requirement.specialties?.includes(specialty) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted'}`}>{specialty}</button>)}</div></div>
-                  <div><p className="text-[11px] font-semibold text-text-muted">Unidades</p><div className="mt-2 flex flex-wrap gap-1.5">{units.map(unit => <button type="button" disabled={!canManageSettings || saving} key={unit.id} onClick={() => toggleScopeValue(requirement.type, 'unitIds', unit.id)} className={`rounded-md border px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-50 ${requirement.unitIds?.includes(unit.id) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-text-muted'}`}>{unit.name}</button>)}{!units.length && <span className="text-xs text-text-muted">Cadastre uma unidade para restringir o escopo.</span>}</div></div>
-                  <p className="text-[11px] leading-relaxed text-text-muted">Ao remover uma exigência, arquivos já enviados permanecem preservados no histórico.</p>
-                </div>
-              </details>
-            ))}
-          </div>
-        </div>
+        </section>
       </div>
 
       {/* Right Column (Theme, Compliance & Demo tools) */}
@@ -495,24 +298,6 @@ function SettingsForm({
           </div>
         </div>
 
-        {/* Document list audit rules */}
-        <div className="bg-card-bg rounded-xl border border-card-border p-5">
-          <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            Documentação de Regulação (Compliance)
-          </h3>
-          
-          <div className="space-y-3.5">
-            {documentRequirements.map((doc) => (
-              <div key={doc.type} className="flex justify-between items-center text-xs pb-2 border-b border-border last:pb-0 last:border-b-0">
-                <span className="font-medium text-text-secondary">{doc.name}</span>
-                <span className={`rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${doc.required ? 'bg-primary/10 text-primary' : 'bg-surface-muted text-text-muted'}`}>
-                  {doc.required ? 'Obrigatório' : 'Opcional'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -522,14 +307,12 @@ export default function SettingsPage() {
   const {
     activeOrganizationId,
     organizations,
-    units,
     updateOrganizationSettings,
     currentUser,
     saving,
   } = useStore();
 
-  const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
-  const activeUnits = units.filter(unit => unit.organizationId === activeOrganizationId);
+  const activeOrg = organizations.find((o) => o.id === activeOrganizationId);
   const canManageSettings = currentUser.type === 'tenant_user' && canEditPermission(currentUser, 'configuracoes');
 
   return (
@@ -537,9 +320,9 @@ export default function SettingsPage() {
       <div className="space-y-6 animate-in fade-in duration-300">
         {/* Page Heading */}
         <div>
-          <h2 className="text-2xl font-bold text-text-primary tracking-tight">Configurações Gerais</h2>
+          <h2 className="text-2xl font-bold text-text-primary tracking-tight">Perfil da empresa</h2>
           <p className="text-sm text-text-muted mt-1">
-            Ajustes cadastrais, regras de compliance, aparência e utilitários da empresa ativa.
+            Dados da empresa, especialidades e exigências de documentação médica.
           </p>
         </div>
 
@@ -548,7 +331,6 @@ export default function SettingsPage() {
           activeOrg={activeOrg}
           activeOrganizationId={activeOrganizationId}
           updateOrganizationSettings={updateOrganizationSettings}
-          units={activeUnits}
           canManageSettings={canManageSettings}
           saving={saving}
         />}

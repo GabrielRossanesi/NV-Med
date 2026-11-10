@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mapUserFromDb } from '@/services/supabaseService';
 import { sanitizeAdditionalPermissions } from '@/lib/permissions';
@@ -9,7 +10,7 @@ async function authorize(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin) throw new Error('Origem inválida.');
   const client = await createClient();
   if (!client) throw new Error('Conexão indisponível.');
-  const { data: { user } } = await client.auth.getUser();
+  const user = await getAuthorizedUser(client);
   if (!user) throw new Error('Entre novamente.');
   const { data: profile } = await client.from('user_accounts').select('id,type,role,status').eq('auth_user_id', user.id).single();
   if (profile?.type !== 'saas_admin' || profile.status !== 'active' || !['CEO', 'Gerente'].includes(profile.role)) throw new Error('Acesso restrito ao administrador.');

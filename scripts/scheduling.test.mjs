@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildRecurringDates, countDoctors, shiftTouchesDay, hasConflict, statusAfterDoctorSelection, summarizeSectorCoverage } from '../src/lib/scheduling.ts';
+import { buildRecurringDates, copyableRegularShifts, countDoctors, shiftTouchesDay, hasConflict, statusAfterDoctorSelection, summarizeSectorCoverage } from '../src/lib/scheduling.ts';
 const base = { id:'a', organizationId:'org', doctorId:'doctor', unitId:'unit', date:'2026-09-20', startTime:'07:00', endTime:'19:00', type:'onsite', status:'confirmed' };
 test('counts unique doctors and excludes cancelled shifts',()=>assert.equal(countDoctors([base,{...base,id:'b'},{...base,id:'c',doctorId:'other',status:'cancelled'}]),1));
 test('overnight shift contributes to both covered days',()=>{const s={...base,startTime:'19:00',endTime:'07:00'};assert.equal(shiftTouchesDay(s,'2026-09-20'),true);assert.equal(shiftTouchesDay(s,'2026-09-21'),true);assert.equal(shiftTouchesDay(s,'2026-09-22'),false);});
@@ -40,4 +40,37 @@ test('replacing a doctor requires confirmation while keeping the same doctor pre
   assert.equal(statusAfterDoctorSelection('confirmed','doctor-a','doctor-a'),'confirmed');
   assert.equal(statusAfterDoctorSelection('open',undefined,'doctor-a'),'pending');
   assert.equal(statusAfterDoctorSelection('confirmed','doctor-a',''),'open');
+});
+
+test('temporary vacancies increase demand only on their dates and keep sector defaults intact', () => {
+  const sector = { coveragePeriods: [{ kind: 'day', startTime: '07:00', endTime: '19:00', requiredDoctors: 1 }], defaultStartTime: '07:00', defaultEndTime: '19:00', requiredDoctors: 1 };
+  const temporary = { ...base, id: 'temporary', doctorId: undefined, status: 'open', coverageMode: 'adhoc', coverageReason: 'Férias CLT' };
+  const summary = summarizeSectorCoverage(sector, [base, temporary]);
+  assert.deepEqual({ required: summary.required, filled: summary.filled, deficit: summary.deficit }, { required: 2, filled: 1, deficit: 1 });
+  assert.equal(sector.coveragePeriods[0].requiredDoctors, 1);
+  assert.equal(summarizeSectorCoverage(sector, [base]).required, 1);
+  assert.equal(summarizeSectorCoverage(sector, [base, { ...temporary, status: 'cancelled' }]).required, 1);
+});
+test('assigned avulsos cannot conceal missing regular positions', () => {
+  const sector = { coveragePeriods: [{ kind: 'day', startTime: '07:00', endTime: '19:00', requiredDoctors: 1 }], defaultStartTime: '07:00', defaultEndTime: '19:00', requiredDoctors: 1 };
+  const summary = summarizeSectorCoverage(sector, [{ ...base, coverageMode: 'adhoc' }]);
+  assert.equal(summary.required, 2);
+  assert.equal(summary.uncreated, 1);
+  assert.equal(summary.deficit, 1);
+});
+test('excess regular assignments do not count an unfilled avulso as covered', () => {
+  const sector = { coveragePeriods: [{ kind: 'day', startTime: '07:00', endTime: '19:00', requiredDoctors: 1 }], defaultStartTime: '07:00', defaultEndTime: '19:00', requiredDoctors: 1 };
+  const summary = summarizeSectorCoverage(sector, [base, { ...base, id: 'extra', doctorId: 'other' }, { ...base, id: 'temporary', doctorId: undefined, coverageMode: 'adhoc', status: 'open' }]);
+  assert.equal(summary.required, 2);
+  assert.equal(summary.deficit, 1);
+  assert.equal(summary.required - summary.deficit, 1);
+});
+test('week and turn copying excludes temporary coverage and cancelled positions', () => {
+  assert.deepEqual(copyableRegularShifts([base, { ...base, id: 'temporary', coverageMode: 'adhoc' }, { ...base, id: 'cancelled', status: 'cancelled' }]).map(item => item.id), ['a']);
+});
+test('a temporary monthly coverage ends on the selected date', () => {
+  const dates = buildRecurringDates('2026-10-01', '2026-10-31', 'daily');
+  assert.equal(dates.length, 31);
+  assert.equal(dates.at(-1), '2026-10-31');
+  assert.ok(dates.every(date => date.startsWith('2026-10')));
 });

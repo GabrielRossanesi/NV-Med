@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Organization, Doctor, Unit, Sector, MedicalDocument, Shift, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
-import { createClient } from '@/lib/supabase/client';
 import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission } from '@/lib/permissions';
 
@@ -26,7 +25,7 @@ interface NVMedState {
   addShifts: (shifts: Omit<Shift, 'id' | 'organizationId'>[]) => Promise<boolean>;
   updateShift: (shift: Shift) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
-  updateShiftFinancials: (id: string, amount: number, frequency: NonNullable<Shift['paymentFrequency']>, status: NonNullable<Shift['paymentStatus']>) => Promise<boolean>;
+  updateShiftFinancials: (...input: Parameters<typeof cloud.updateShiftFinancialsInSupabase>) => Promise<boolean>;
   deleteShift: (id: string) => Promise<boolean>;
   deleteShifts: (ids: string[]) => Promise<boolean>;
   vacateShifts: (ids: string[]) => Promise<boolean>;
@@ -89,19 +88,28 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     addSector: input => commit(async () => { const sector = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveSectorToSupabase(sector); set({ sectors: [...get().sectors, sector] }); }),
     updateSector: sector => commit(async () => { await cloud.saveSectorToSupabase(sector); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
-    addShift: input => commit(async () => { const shift = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveShiftToSupabase(shift); set({ shifts: [...get().shifts, shift] }); }),
-    addShifts: inputs => commit(async () => { const shifts = inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })); await cloud.saveShiftsToSupabase(shifts); set({ shifts: [...get().shifts, ...shifts] }); }),
-    updateShift: shift => commit(async () => { await cloud.saveShiftToSupabase(shift); set({ shifts: get().shifts.map(s => s.id === shift.id ? shift : s) }); }),
+    addShift: input => commit(async () => {
+      const saved = await cloud.saveShiftToSupabase({ ...input, id: crypto.randomUUID(), organizationId: orgId() });
+      set({ shifts: [...get().shifts, saved] });
+    }),
+    addShifts: inputs => commit(async () => {
+      const saved = await cloud.saveShiftsToSupabase(inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })));
+      set({ shifts: [...get().shifts, ...saved] });
+    }),
+    updateShift: shift => commit(async () => {
+      const saved = await cloud.saveShiftToSupabase(shift);
+      set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
+    }),
     updateShiftPayment: (id, status) => commit(async () => {
       const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
       const updated = await cloud.updateShiftPaymentInSupabase(id, status);
       set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
     }),
-    updateShiftFinancials: (id, amount, frequency, status) => commit(async () => {
+    updateShiftFinancials: (id, amount, frequency, status, settlement) => commit(async () => {
       const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
-      const updated = await cloud.updateShiftFinancialsInSupabase(id, amount, frequency, status);
+      const updated = await cloud.updateShiftFinancialsInSupabase(id, amount, frequency, status, settlement);
       set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
     }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
@@ -124,20 +132,18 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (!uniqueIds.length || uniqueIds.length > 500 || selected.some(shift => !shift?.doctorId)) throw new Error('Selecione entre 1 e 500 plantões com médico desta empresa.');
       if (selected.some(shift => shift && (shift.paymentStatus === 'paid' || Number(shift.paymentAmount) > 0)) && !canEditPermission(get().currentUser, 'financeiro')) throw new Error('Você não pode alterar plantões com dados financeiros.');
       const updated = selected.map(shift => vacateShift(shift!));
-      try { await cloud.saveShiftsToSupabase(updated); }
+      let saved: Shift[];
+      try { saved = await cloud.saveShiftsToSupabase(updated); }
       catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
-      const byId = new Map(updated.map(shift => [shift.id, shift]));
+      const byId = new Map(saved.map(shift => [shift.id, shift]));
       set({ shifts: get().shifts.map(shift => byId.get(shift.id) || shift) });
     }),
     uploadDocument: (doctorId, type, file) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());
       if (!doctor) throw new Error('Médico não encontrado nesta empresa.');
       const previous = get().documents.find(d => d.doctorId === doctorId && d.type === type);
-      const uploaded = await cloud.uploadDocumentFileToSupabase(file, doctor.organizationId, doctorId);
-      const doc: MedicalDocument = { ...previous, ...uploaded, id: previous?.id || crypto.randomUUID(), doctorId, organizationId: doctor.organizationId, type, name: previous?.name || type, status: 'sent', uploadDate: new Date().toISOString().slice(0, 10) };
-      let saved: MedicalDocument;
-      try { saved = await cloud.saveDocumentToSupabase(doc); }
-      catch (error) { await createClient()?.storage.from('medical-documents').remove([uploaded.filePath]); throw error; }
+      if (!previous) throw new Error('Atualize a pasta para localizar o documento antes de enviá-lo.');
+      const saved = await cloud.uploadDocumentFileToSupabase(file, previous.id);
       set({ documents: [...get().documents.filter(d => d.id !== saved.id), saved] });
       await refreshDocumentAudits();
     }),

@@ -124,17 +124,21 @@ export function summarizeSectorCoverage(
     const items = activeItems.filter(shift => coverageKindForShift(shift, periods) === period.kind);
     const assigned = items.filter(shift => Boolean(shift.doctorId));
     const vacancies = items.filter(shift => !shift.doctorId);
+    const regularItems = items.filter(shift => shift.coverageMode !== 'adhoc');
+    const regularAssigned = regularItems.filter(shift => Boolean(shift.doctorId));
+    const additional = items.length - regularItems.length;
+    const required = period.requiredDoctors + additional;
     return {
       period,
       items,
       assigned,
       vacancies,
-      required: period.requiredDoctors,
+      required,
       created: items.length,
       filled: assigned.length,
       open: vacancies.length,
-      uncreated: Math.max(period.requiredDoctors - items.length, 0),
-      deficit: Math.max(period.requiredDoctors - assigned.length, 0),
+      uncreated: Math.max(period.requiredDoctors - regularItems.length, 0),
+      deficit: Math.max(period.requiredDoctors - regularAssigned.length, 0) + vacancies.filter(shift => shift.coverageMode === 'adhoc').length,
     };
   });
 
@@ -148,6 +152,10 @@ export function summarizeSectorCoverage(
     uncreated: total.uncreated + summary.uncreated,
     deficit: total.deficit + summary.deficit,
   }), { periods: [], items: [], required: 0, created: 0, filled: 0, open: 0, uncreated: 0, deficit: 0 });
+}
+
+export function copyableRegularShifts(shifts: Shift[]) {
+  return shifts.filter(shift => shift.status !== 'cancelled' && shift.coverageMode !== 'adhoc');
 }
 export const employmentLabels = { clt: 'CLT', concursado: 'Concursado (prefeitura)', pj: 'PJ' };
 export const paymentFrequencyLabels = { on_delivery: 'À vista', monthly: 'Mensal' };

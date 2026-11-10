@@ -1,12 +1,12 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { isSupabaseConfigured } from './isConfigured';
+import { hasVerifiedSupabaseRuntime } from './runtime';
 
 /**
  * Cria o cliente Supabase para execução no servidor (Vercel Server Components / Route Handlers).
  */
 export async function createClient() {
-  if (!isSupabaseConfigured()) {
+  if (!hasVerifiedSupabaseRuntime()) {
     return null;
   }
 

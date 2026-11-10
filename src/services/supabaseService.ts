@@ -85,6 +85,7 @@ interface DbSector {
   organization_id: string;
   unit_id: string;
   name: string;
+  description?: string | null;
   specialties?: string[];
   status: string;
   default_start_time: string;
@@ -128,6 +129,8 @@ interface DbDocumentAudit {
 }
 
 interface DbShift {
+  coverage_mode?: Shift['coverageMode'];
+  coverage_reason?: string | null;
   sector_id?: string;
   sector?: string;
   specialty?: string;
@@ -137,6 +140,9 @@ interface DbShift {
   payment_status?: Shift['paymentStatus'];
   payment_frequency?: Shift['paymentFrequency'];
   paid_at?: string | null;
+  payment_due_date?: string | null;
+  paid_amount?: number | null;
+  payment_note?: string | null;
   id: string;
   organization_id: string;
   doctor_id?: string | null;
@@ -236,6 +242,7 @@ function mapSectorFromDb(row: DbSector): Sector {
     organizationId: row.organization_id,
     unitId: row.unit_id,
     name: row.name,
+    description: row.description || undefined,
     specialties: row.specialties || [],
     status: row.status === 'inactive' ? 'inactive' : 'active',
     defaultStartTime: row.default_start_time || '07:00',
@@ -283,6 +290,8 @@ function mapDocumentAuditFromDb(row: DbDocumentAudit): DocumentAuditEntry {
 
 function mapShiftFromDb(row: DbShift): Shift {
   return {
+    coverageMode: row.coverage_mode || 'regular',
+    coverageReason: row.coverage_reason || undefined,
     sectorId: row.sector_id,
     sector: row.sector,
     specialty: row.specialty,
@@ -292,6 +301,9 @@ function mapShiftFromDb(row: DbShift): Shift {
     paymentStatus: row.payment_status || 'pending',
     paymentFrequency: row.payment_frequency || 'on_delivery',
     paidAt: row.paid_at || undefined,
+    paymentDueDate: row.payment_due_date || undefined,
+    paidAmount: row.paid_amount == null ? undefined : Number(row.paid_amount),
+    paymentNote: row.payment_note || undefined,
     id: row.id,
     organizationId: row.organization_id,
     doctorId: row.doctor_id || undefined,
@@ -354,7 +366,7 @@ export async function fetchInitialDataFromSupabase() {
     }
   }
   const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
-    rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('shifts'),
+    rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('nv_staff_shifts'),
     currentUser.type === 'saas_admin' ? rows('user_accounts') : Promise.resolve([profile]),
     fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
@@ -468,6 +480,7 @@ export async function saveSectorToSupabase(sector: Sector) {
     organization_id: sector.organizationId,
     unit_id: sector.unitId,
     name: sector.name,
+    description: sector.description?.trim() || null,
     specialties: sector.specialties,
     status: sector.status,
     default_start_time: sector.defaultStartTime,
@@ -488,36 +501,9 @@ export async function deleteSectorFromSupabase(sectorId: string) {
 }
 
 export async function saveShiftToSupabase(shift: Shift) {
-  const supabase = createClient();
-  if (!supabase) throw new Error('Conexão não configurada.');
-
-  const payload: DbShift = {
-    id: shift.id,
-    sector_id: shift.sectorId,
-    sector: shift.sector,
-    specialty: shift.specialty,
-    employment_type: shift.employmentType,
-    employer_name: shift.employerName,
-    payment_amount: shift.paymentAmount || 0,
-    payment_status: shift.paymentStatus || 'pending',
-    payment_frequency: shift.paymentFrequency || 'on_delivery',
-    paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
-    organization_id: shift.organizationId,
-    doctor_id: shift.doctorId || null,
-    unit_id: shift.unitId,
-    date: shift.date,
-    start_time: shift.startTime,
-    end_time: shift.endTime,
-    type: shift.type,
-    status: shift.status,
-    notes: shift.notes
-  };
-
-  const { error } = await withAbortTimeout(
-    async signal => await supabase.from('shifts').upsert(payload).select('id').abortSignal(signal).single(),
-    { message: 'O servidor demorou para confirmar o plantão. Verifique sua conexão e tente novamente.' }
-  );
-  if (error) throw new Error('Não foi possível salvar: ' + error.message);
+  const [saved] = await saveShiftsToSupabase([shift]);
+  if (!saved) throw new Error('Plantão salvo. Recarregue a escala para atualizar os detalhes.');
+  return saved;
 }
 
 export async function saveShiftsToSupabase(shifts: Shift[]) {
@@ -525,6 +511,8 @@ export async function saveShiftsToSupabase(shifts: Shift[]) {
   if (!supabase) throw new Error('Conexão não configurada.');
   const payload = shifts.map((shift): DbShift => ({
     id: shift.id,
+    coverage_mode: shift.coverageMode || 'regular',
+    coverage_reason: shift.coverageMode === 'adhoc' ? shift.coverageReason?.trim() : null,
     sector_id: shift.sectorId,
     sector: shift.sector,
     specialty: shift.specialty,
@@ -544,11 +532,12 @@ export async function saveShiftsToSupabase(shifts: Shift[]) {
     status: shift.status,
     notes: shift.notes
   }));
-  const { error } = await withAbortTimeout(
-    async signal => await supabase.from('shifts').upsert(payload).select('id').abortSignal(signal),
+  const { data, error } = await withAbortTimeout(
+    async signal => await supabase.rpc('nv_save_operational_shifts', { records: payload }).abortSignal(signal),
     { message: 'O servidor demorou para confirmar os postos. Verifique sua conexão e tente novamente.' }
   );
   if (error) throw new Error('Não foi possível salvar os postos: ' + error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
 }
 
 export async function deleteShiftFromSupabase(shiftId: string) {
@@ -591,15 +580,19 @@ export async function updateShiftFinancialsInSupabase(
   paymentAmount: number,
   paymentFrequency: NonNullable<Shift['paymentFrequency']>,
   paymentStatus: NonNullable<Shift['paymentStatus']>,
+  settlement: { amount: number | null; date: string | null; note: string },
 ) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
-  const { data, error } = await supabase.rpc('nv_update_shift_financials', {
-    target_id: shiftId,
-    next_amount: paymentAmount,
-    next_frequency: paymentFrequency,
-    next_status: paymentStatus,
+  const { data, error } = await supabase.rpc('nv_save_shift_payment', {
+    target: shiftId,
+    agreed: paymentAmount,
+    frequency: paymentFrequency,
+    state: paymentStatus,
+    amount_paid: settlement.amount,
+    paid_on: settlement.date,
+    note: settlement.note,
   });
   if (error) throw new Error('Não foi possível atualizar os dados financeiros: ' + error.message);
   const row = Array.isArray(data) ? data[0] : data;
@@ -618,10 +611,7 @@ export async function saveDocumentToSupabase(doc: MedicalDocument) {
     name: doc.name,
     type: doc.type,
     status: doc.status,
-    upload_date: doc.uploadDate,
     expiry_date: doc.expiryDate,
-    file_name: doc.fileName,
-    file_path: doc.filePath,
     review_note: doc.reviewNote,
   };
 
@@ -640,10 +630,7 @@ export async function saveDocumentsToSupabase(documents: MedicalDocument[]) {
     name: doc.name,
     type: doc.type,
     status: doc.status,
-    upload_date: doc.uploadDate,
     expiry_date: doc.expiryDate,
-    file_name: doc.fileName,
-    file_path: doc.filePath,
     review_note: doc.reviewNote,
   }));
   const { data, error } = await supabase.from('medical_documents').upsert(payload).select('*');
@@ -702,23 +689,26 @@ export async function updateOrganizationInSupabase(org: Organization) {
 // STORAGE: UPLOAD DE DOCUMENTOS PARA O BUCKET 'medical-documents'
 // ==============================================================================
 
-export async function uploadDocumentFileToSupabase(file: File, organizationId: string, doctorId: string) {
+export async function uploadDocumentFileToSupabase(file: File, documentId: string) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size > 10 * 1024 * 1024 || file.size === 0) {
-    throw new Error('Selecione um PDF, JPG ou PNG de até 10 MB.');
+  const body = new FormData();
+  body.set('file', file);
+  const response = await fetch('/api/portal/documents/' + encodeURIComponent(documentId), { method: 'POST', body });
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error || 'Não foi possível enviar o arquivo.');
   }
-  const ext = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' }[file.type];
-  const filePath = organizationId + '/' + doctorId + '/' + crypto.randomUUID() + '.' + ext;
-  const { error } = await supabase.storage.from('medical-documents').upload(filePath, file, { upsert: false, contentType: file.type });
-  if (error) throw new Error('Não foi possível enviar o arquivo: ' + error.message);
-  return { filePath, fileName: file.name };
+  const { data, error } = await supabase.from('medical_documents').select('*').eq('id', documentId).single();
+  if (error || !data) throw new Error('Arquivo enviado. Atualize a pasta para visualizar a nova versão.');
+  return mapDocumentFromDb(data);
 }
 
-export async function openDocument(filePath: string) {
-  const supabase = createClient();
-  if (!supabase) throw new Error('Conexão não configurada.');
-  const { data, error } = await supabase.storage.from('medical-documents').createSignedUrl(filePath, 60);
-  if (error) throw new Error('Não foi possível abrir o documento.');
-  return data.signedUrl;
+export async function openDocument(documentId: string, revision?: string) {
+  const query = new URLSearchParams({ preview: '1' });
+  if (revision) query.set('revision', revision);
+  const response = await fetch('/api/portal/documents/' + encodeURIComponent(documentId) + '?' + query, { cache: 'no-store' });
+  if (!response.ok) throw new Error('Não foi possível abrir o documento.');
+  const data: { url: string } = await response.json();
+  return data.url;
 }

@@ -11,6 +11,11 @@ export async function PATCH(request: NextRequest) {
   if (!client) return NextResponse.json({ error: 'Conexão indisponível.' }, { status: 503 });
   const { data: { user } } = await client.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Abra novamente o link de acesso ou entre com a senha temporária.' }, { status: 401 });
+  const { data: allowed, error: accessError } = await client.rpc('nv_password_change_allowed');
+  if (accessError || allowed !== true) {
+    return NextResponse.json({ error: 'Entre novamente com a senha temporária ou solicite um novo link de recuperação.' },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  }
 
   try {
     const input = await request.json();

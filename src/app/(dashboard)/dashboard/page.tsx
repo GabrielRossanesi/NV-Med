@@ -18,9 +18,13 @@ import { localDate, sectorCoveragePeriods, shiftTouchesDay } from '@/lib/schedul
 import { documentIsCritical, documentIsNearExpiry, documentStatusLabels, getDoctorCompliance } from '@/lib/documentCompliance';
 import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
+import OperationalIndicators from '@/components/OperationalIndicators';
+import NotificationInbox from '@/components/NotificationInbox';
+import { canViewPermission } from '@/lib/permissions';
 
 export default function DashboardPage() {
-  const { activeOrganizationId, organizations, doctors, units, sectors, shifts, documents } = useStore();
+  const { activeOrganizationId, organizations, doctors, units, sectors, shifts, documents, currentUser } = useStore();
+  const canSeeDocuments = canViewPermission(currentUser, 'documentos');
 
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
   const [documentUnitFilter, setDocumentUnitFilter] = useState('');
@@ -113,6 +117,9 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      <OperationalIndicators key={activeOrganizationId} organization={activeOrganizationId} />
+      <NotificationInbox/>
+
       {isOrgEmpty ? (
         <div className="bg-card-bg border border-border p-8 rounded-2xl shadow-soft text-center max-w-3xl mx-auto space-y-6 my-8">
           <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -194,8 +201,7 @@ export default function DashboardPage() {
               </div>
             </Link>
 
-            {/* Active Units */}
-            <Link
+            {canSeeDocuments && <Link
               href="/documentos?status=critical"
               className="bg-card-bg p-5 rounded-xl border border-card-border flex items-center justify-between transition-all duration-250 cursor-pointer hover:border-danger/55 hover:shadow-medium group"
             >
@@ -210,7 +216,7 @@ export default function DashboardPage() {
               <div className={`p-2.5 rounded-xl ${pendingDocsCount ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
                 <FileCheck2 className="h-5 w-5" />
               </div>
-            </Link>
+            </Link>}
 
             {/* Month Shifts */}
             <Link
@@ -317,7 +323,7 @@ export default function DashboardPage() {
                         <span className="font-medium text-text-secondary truncate pr-4 group-hover:text-primary transition-colors">{ub.name}</span>
                         <span className="font-bold text-text-primary flex-shrink-0">{ub.count} plantões ({percentage}%)</span>
                       </div>
-                      <p className="text-[10px] text-text-muted">Conformidade documental: <span className={ub.compliance === 100 ? 'font-semibold text-success' : 'font-semibold text-warning'}>{ub.compliance}%</span></p>
+                      {canSeeDocuments && <p className="text-[10px] text-text-muted">Conformidade documental · <span className={ub.compliance === 100 ? 'font-semibold text-success' : 'font-semibold text-warning'}>{ub.compliance}%</span></p>}
                       <div className="h-2 w-full bg-surface-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-all duration-500"
@@ -338,7 +344,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Document workflow */}
-            <div className="overflow-hidden rounded-xl border border-card-border bg-card-bg lg:col-span-2">
+            {canSeeDocuments && <div className="overflow-hidden rounded-xl border border-card-border bg-card-bg lg:col-span-2">
               <div className="flex flex-col gap-4 border-b border-border p-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">Esteira documental</h3>
@@ -376,7 +382,7 @@ export default function DashboardPage() {
                 })}
                 {!filteredPendingDocumentItems.length && <p className="w-full py-4 text-center text-xs text-success">Nenhuma pendência para os filtros selecionados.</p>}
               </div>
-            </div>
+            </div>}
 
             {/* Specialty Breakdown */}
             <div className="bg-card-bg rounded-xl border border-card-border p-5">
@@ -392,7 +398,7 @@ export default function DashboardPage() {
                       <div className="h-2 w-2 rounded-full bg-primary group-hover/spec:scale-125 transition-transform" />
                       <span className="font-medium text-text-secondary group-hover/spec:text-primary dark:group-hover/spec:text-primary transition-colors">{sb.name}</span>
                     </div>
-                    <span className="text-right"><span className="block font-bold text-text-primary">{sb.count}</span><span className={`text-[9px] ${sb.compliance === 100 ? 'text-success' : 'text-warning'}`}>{sb.compliance}% regular</span></span>
+                    <span className="text-right"><span className="block font-bold text-text-primary">{sb.count}</span>{canSeeDocuments && <span className={`text-[9px] ${sb.compliance === 100 ? 'text-success' : 'text-warning'}`}>{sb.compliance}% regular</span>}</span>
                   </Link>
                 ))}
                 {specialtiesBreakdown.length === 0 && (

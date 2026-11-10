@@ -17,10 +17,12 @@ export default async function DashboardLayout({
   const { data: { user } } = await client.auth.getUser();
   if (!user) redirect('/login');
   if (user.app_metadata?.must_change_password === true) redirect('/definir-senha?required=1');
+  const { data: staff } = await client.from('user_accounts').select('id').eq('auth_user_id', user.id).maybeSingle();
+  if (!staff) redirect('/portal');
   return (
     <StoreHydrator>
       <AppBackground />
-      <div className="min-h-screen text-text-primary">
+      <div className="flow-root min-h-screen text-text-primary">
         {/* Navigation Sidebar */}
         <Sidebar />
 

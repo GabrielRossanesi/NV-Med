@@ -1,11 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
+import { hasVerifiedSupabaseRuntime } from '@/lib/supabase/runtime';
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
   const publicPath = ['/login', '/definir-senha', '/auth/confirm'].includes(request.nextUrl.pathname);
-  if (!isSupabaseConfigured()) return publicPath ? response : NextResponse.redirect(new URL('/login', request.url));
+  if (!hasVerifiedSupabaseRuntime()) return publicPath ? response : NextResponse.redirect(new URL('/login', request.url));
   const client = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       getAll: () => request.cookies.getAll(),
