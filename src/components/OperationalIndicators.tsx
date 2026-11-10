@@ -2,63 +2,82 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, CalendarX2, ClipboardCheck, Repeat2, UserRoundPlus, type LucideIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { canViewPermission } from '@/lib/permissions';
-import { useStore } from '@/store/useStore';
 
 type Counts = {
-  today: string; from: string; to: string; enrollments: number | null;
-  docs_pending: number | null; docs_expiring: number | null; open: number; exchanges: number | null;
-  applications: number | null; shifts_today: number; checkins_pending: number | null; completed: number;
-  payments_pending: number | null; payments_overdue: number | null;
+  today: string;
+  enrollments: number | null;
+  exchanges: number | null;
+  applications: number | null;
+  checkins_pending: number | null;
 };
 
-export default function OperationalIndicators({ organization }: { organization: string }) {
-  const user = useStore(state => state.currentUser);
-  const isSimulating = useStore(state => state.isSimulating);
-  const [counts, setCounts] = useState<Counts | null>(null);
-  const [error, setError] = useState(false);
+export function useOperationalCounts(organization: string, enabled: boolean) {
+  const [result, setResult] = useState<{ counts: Counts | null; error: boolean } | null>(null);
   useEffect(() => {
+    if (!organization || !enabled) return;
     const client = createClient();
     let active = true;
-    if (client && organization) void client.rpc('nv_operational_counts', { org: organization }).then(result => {
-      if (!active) return;
-      if (result.error) setError(true);
-      else setCounts(result.data);
-    });
+    void (async () => {
+      try {
+        const response = await client?.rpc('nv_operational_counts', { org: organization });
+        if (!response || response.error || !response.data) throw new Error();
+        if (active) setResult({ counts: response.data, error: false });
+      } catch {
+        if (active) setResult({ counts: null, error: true });
+      }
+    })();
     return () => { active = false; };
-  }, [organization]);
+  }, [organization, enabled]);
+  return enabled ? result : null;
+}
 
-  if (!counts) return error ? <p role="alert" className="nv-feedback text-warning">Os indicadores operacionais estão indisponíveis.</p> : null;
-  const report = (from: string, to: string, filters: Record<string, string> = {}) =>
-    '/relatorios/plantoes?' + new URLSearchParams({ empresa: organization, inicio: from, fim: to, ...filters }).toString();
-  const cards = [
-    { label: 'Cadastros médicos aguardando aprovação', count: counts.enrollments, href: '/medicos/credenciamento' },
-    { label: 'Documentos pendentes', count: counts.docs_pending, href: '/documentos?status=pending_only' },
-    { label: 'Documentos vencidos ou a vencer', count: counts.docs_expiring, href: '/documentos?status=expiring' },
-    { label: 'Vagas em aberto', count: counts.open, href: report(counts.today, counts.to, { situacao: 'open' }) },
-    { label: 'Solicitações de troca', count: counts.exchanges, href: '/escala/candidaturas?filtro=exchange' },
-    { label: 'Candidaturas aguardando decisão', count: counts.applications, href: '/escala/candidaturas?filtro=applications' },
-    { label: 'Plantões do dia', count: counts.shifts_today, href: report(counts.today, counts.today, { situacao: 'active' }) },
-    { label: 'Check-ins pendentes hoje', count: counts.checkins_pending, href: report(counts.today, counts.today, { presenca: 'pending' }) },
-    { label: 'Plantões finalizados', count: counts.completed, href: report(counts.from, counts.today, { situacao: 'completed' }) },
-    { label: 'Pagamentos pendentes', count: counts.payments_pending, href: report(counts.from, counts.to, { pagamento: 'unpaid' }) },
-    { label: 'Pagamentos vencidos', count: counts.payments_overdue, href: report(counts.from, counts.to, { pagamento: 'overdue' }) },
-  ];
-  const visibleCards = cards.filter(item => item.count != null && (
-    isSimulating || canViewPermission(user, item.href.split(/[/?]/)[1])
-  ));
-  if (!visibleCards.length) return null;
-  return <section className="nv-panel overflow-hidden" aria-label="Fila operacional">
-    <header className="px-4 py-4 sm:px-5"><h2 className="nv-section-title">Fila operacional</h2>
-      <p className="mt-1 text-sm text-text-muted">Vagas dos próximos dois meses, plantões concluídos do último mês e pagamentos do período operacional.</p></header>
-    <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 xl:grid-cols-3">
-      {visibleCards.map(item => <Link key={item.label} href={item.href}
-        className="group flex min-h-16 items-center justify-between gap-3 bg-card-bg px-4 py-3 transition-colors hover:bg-table-row-hover focus-visible:outline-offset-[-3px] sm:px-5">
-        <span className="text-sm font-medium text-text-secondary group-hover:text-text-primary">{item.label}</span>
-        <span className="flex shrink-0 items-center gap-2 text-xl font-semibold tabular-nums">{item.count}<ArrowUpRight size={15} className="text-text-muted group-hover:text-primary" aria-hidden="true"/></span>
-      </Link>)}
+type Metric = {
+  label: string;
+  value: number | null;
+  href: string;
+  icon: LucideIcon;
+  action: string;
+  highlight?: boolean;
+};
+
+function MetricCard({ label, value, href, icon: Icon, action, highlight }: Metric) {
+  const tone = highlight ? (value ? 'text-danger bg-danger/10' : 'text-primary bg-primary/10') : 'text-accent bg-accent/10';
+  return <Link href={href} className={`group flex min-w-0 flex-col rounded-2xl border p-3.5 shadow-soft transition-[background-color,border-color,box-shadow] hover:border-primary/35 hover:shadow-medium motion-reduce:transition-none sm:p-5 ${highlight ? 'border-accent/25 bg-[var(--dashboard-wash)]' : 'border-card-border bg-card-bg'}`}>
+    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+      <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={18} aria-hidden="true" /></span>
+      <p className={`text-3xl font-semibold leading-none tracking-[-0.06em] tabular-nums sm:text-4xl ${highlight && value ? 'text-danger' : 'text-text-primary'}`}>
+        {value ?? <span aria-label="Carregando indicador" className="text-text-muted">—</span>}
+      </p>
+      <ArrowUpRight size={16} aria-hidden="true" className="ml-auto hidden shrink-0 self-start text-text-muted group-hover:text-primary min-[390px]:block" />
     </div>
+    <p className="mt-3 flex-1 text-sm font-semibold leading-snug text-text-primary">{label}</p>
+    <p className="mt-2 text-xs font-medium leading-snug text-text-muted group-hover:text-primary">{action}</p>
+  </Link>;
+}
+
+export default function OperationalIndicators({ today, gaps, canSeeSchedule, canSeeDoctors, result }: {
+  today: string; gaps: number; canSeeSchedule: boolean; canSeeDoctors: boolean;
+  result: ReturnType<typeof useOperationalCounts>;
+}) {
+  const counts = result?.counts;
+  const loading = result === null;
+  const metrics: Metric[] = [];
+  if (canSeeSchedule) {
+    metrics.push({ label: 'Postos descobertos hoje', value: gaps, href: `/escala?date=${today}&coverage=deficit`, icon: CalendarX2, action: 'Ver cobertura do dia', highlight: true });
+    if (loading || counts?.exchanges != null) metrics.push({ label: 'Solicitações de troca', value: counts?.exchanges ?? null, href: '/escala/candidaturas?filtro=exchange', icon: Repeat2, action: 'Revisar trocas' });
+    if (loading || counts?.applications != null) metrics.push({ label: 'Candidaturas aguardando decisão', value: counts?.applications ?? null, href: '/escala/candidaturas?filtro=applications', icon: UserRoundPlus, action: 'Analisar candidaturas' });
+  }
+  if (canSeeDoctors && (loading || counts?.enrollments != null)) metrics.push({ label: 'Credenciamentos pendentes', value: counts?.enrollments ?? null, href: '/medicos/credenciamento', icon: ClipboardCheck, action: 'Abrir credenciamento' });
+  if (!metrics.length && !result?.error) return null;
+
+  return <section aria-labelledby="operational-title">
+    <h2 id="operational-title" className="nv-section-title">Visão operacional</h2>
+    <p className="mb-3 mt-1 text-sm text-text-muted">Cobertura de hoje e solicitações que aguardam análise.</p>
+    <div className="nv-priority-grid grid grid-cols-2 gap-3 lg:gap-4">
+      {metrics.map(metric => <MetricCard key={metric.label} {...metric} />)}
+    </div>
+    {result?.error && <p role="alert" className="mt-3 text-sm text-warning">Não foi possível consultar as filas de aprovação. Os dados da escala continuam disponíveis.</p>}
   </section>;
 }

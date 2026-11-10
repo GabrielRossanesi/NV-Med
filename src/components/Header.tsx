@@ -1,44 +1,63 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Bell, ChevronDown, EyeOff, LoaderCircle, LogOut, Moon, Sun, UserRound } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Building2, ChevronDown, EyeOff, LoaderCircle, LogOut, Moon, Search, Sun, UserRound } from 'lucide-react';
 import { logoutCurrentSession } from '@/lib/auth/logout';
+import { doctorsWithDocumentIssues } from '@/lib/dashboardOverview';
+import { getDocumentGovernance } from '@/lib/documentGovernance';
+import { canViewPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
+import DashboardSearch from './DashboardSearch';
+import NotificationInbox from './NotificationInbox';
+import SaveFeedback from './SaveFeedback';
 import UserAvatar from './UserAvatar';
-import { documentIsCritical, documentIsNearExpiry } from '@/lib/documentCompliance';
-import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
+
+const actions = 'grid size-10 shrink-0 cursor-pointer place-items-center rounded-full text-text-secondary transition-colors hover:bg-state-hover hover:text-primary';
+const navigation = [
+  { label: 'Visão geral', href: '/dashboard', permission: 'dashboard' },
+  { label: 'Escalas', href: '/escala', permission: 'escala' },
+  { label: 'Pendências', href: '/dashboard#pendencias', permission: 'dashboard' },
+  { label: 'Relatórios', href: '/relatorios', permission: 'relatorios' },
+];
 
 export default function Header() {
+  const pathname = usePathname();
+  const router = useRouter();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState('');
-  const [documentReferenceTime] = useState(() => Date.now());
+  const [referenceTime] = useState(Date.now);
   const profileMenu = useRef<HTMLDivElement>(null);
-  const {
-    activeOrganizationId,
-    organizations,
-    documents,
-    doctors,
-    theme,
-    setTheme,
-    currentUser,
-    isSimulating,
-    stopSimulation,
-  } = useStore();
+  const profileTrigger = useRef<HTMLButtonElement>(null);
+  const { activeOrganizationId, organizations, setActiveOrganizationId, theme, setTheme, currentUser, isSimulating, stopSimulation, doctors, documents, shifts } = useStore();
 
-  const activeOrg = organizations.find((organization) => organization.id === activeOrganizationId) || organizations[0];
-  const governance = getDocumentGovernance(activeOrg);
-  const organizationDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
-  const effectiveIds = new Set(doctors.filter(doctor => doctor.organizationId === activeOrganizationId).flatMap(doctor => applicableDocuments(doctor, organizationDocuments, activeOrg?.settings.requiredDocuments).map(document => document.id)));
-  const alerts = organizationDocuments.filter(document => effectiveIds.has(document.id) && (document.status !== 'approved' || documentIsCritical(document, documentReferenceTime) || documentIsNearExpiry(document, documentReferenceTime, Math.max(...governance.expiryAlertDays)))).length;
+  const activeOrg = organizations.find(organization => organization.id === activeOrganizationId);
+  const canSwitch = currentUser.type === 'saas_admin' && organizations.length > 1;
+  const showSearch = ['medicos', 'unidades', 'escala'].some(permission => canViewPermission(currentUser, permission));
+  const canSeeDocuments = canViewPermission(currentUser, 'documentos');
+  const documentAlerts = useMemo(() => {
+    const governance = getDocumentGovernance(activeOrg);
+    if (!canSeeDocuments || !activeOrg || !governance.internalNotifications) return 0;
+    return doctorsWithDocumentIssues(
+      doctors.filter(doctor => doctor.organizationId === activeOrganizationId),
+      documents.filter(document => document.organizationId === activeOrganizationId),
+      shifts.filter(shift => shift.organizationId === activeOrganizationId),
+      referenceTime, activeOrg.settings.requiredDocuments, Math.max(...governance.expiryAlertDays),
+    ).length;
+  }, [activeOrg, activeOrganizationId, canSeeDocuments, doctors, documents, referenceTime, shifts]);
 
   useEffect(() => {
+    if (!profileOpen) return;
     const close = (event: PointerEvent) => {
       if (!profileMenu.current?.contains(event.target as Node)) setProfileOpen(false);
     };
     const closeWithKeyboard = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setProfileOpen(false);
+      if (event.key !== 'Escape') return;
+      setProfileOpen(false);
+      profileTrigger.current?.focus();
     };
     window.addEventListener('pointerdown', close);
     window.addEventListener('keydown', closeWithKeyboard);
@@ -46,9 +65,9 @@ export default function Header() {
       window.removeEventListener('pointerdown', close);
       window.removeEventListener('keydown', closeWithKeyboard);
     };
-  }, []);
+  }, [profileOpen]);
 
-  const logout = async () => {
+  async function logout() {
     setLogoutPending(true);
     setLogoutError('');
     try {
@@ -57,75 +76,88 @@ export default function Header() {
       setLogoutError(error instanceof Error ? error.message : 'Não foi possível sair da conta.');
       setLogoutPending(false);
     }
-  };
+  }
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-border bg-header-bg/90 px-4 backdrop-blur-xl md:px-7">
-      <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-text-muted">{currentUser.type === 'saas_admin' && !isSimulating ? 'Administração SaaS' : 'Operação médica'}</p>
-        <p className="truncate text-sm font-semibold text-text-primary">{activeOrg?.name || 'NV Med'}</p>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        {isSimulating && (
-          <div className="mr-1 flex items-center gap-2 rounded-lg border border-warning/25 bg-warning/10 px-2.5 py-1.5 text-xs font-semibold text-warning">
-            <EyeOff className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Visualizando empresa</span>
-            <button type="button" onClick={stopSimulation} className="underline underline-offset-2">Sair</button>
-          </div>
-        )}
-
-        {governance.internalNotifications && alerts > 0 && (
-          <Link href="/documentos" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition hover:bg-state-hover hover:text-text-primary" aria-label={`${alerts} pendências documentais`}>
-            <Bell className="h-[18px] w-[18px]" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-danger ring-2 ring-header-bg" />
-          </Link>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setTheme(useStore.getState().theme === 'dark' ? 'light' : 'dark')}
-          className="flex h-11 w-11 shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-lg text-text-muted transition hover:bg-state-hover hover:text-text-primary [&>*]:pointer-events-none"
-          aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
-        >
-          {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
-        </button>
-
-        <div ref={profileMenu} className="relative">
-          <button
-            type="button"
-            onClick={() => { setProfileOpen((open) => !open); setLogoutError(''); }}
-            className="ml-1 flex h-11 min-w-11 shrink-0 cursor-pointer touch-manipulation items-center gap-2 rounded-xl pl-1.5 pr-2 transition hover:bg-state-hover [&>*]:pointer-events-none"
-            aria-label={`Abrir menu do perfil de ${currentUser.name}`}
-            aria-expanded={profileOpen}
-            aria-haspopup="menu"
-            aria-controls="header-profile-menu"
-          >
-            <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-8 w-8" />
-            <span className="hidden max-w-36 truncate text-xs font-semibold text-text-primary sm:block">{currentUser.name.split(' ')[0]}</span>
-            <ChevronDown className={`hidden h-3.5 w-3.5 text-text-muted transition-transform duration-150 sm:block ${profileOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          {profileOpen && (
-            <div id="header-profile-menu" role="menu" className="absolute right-0 mt-2 w-64 origin-top-right animate-in rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong fade-in zoom-in-95 duration-150">
-              <div className="flex items-center gap-3 border-b border-border px-2 py-2.5">
-                <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-10 w-10" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text-primary">{currentUser.name}</p>
-                  <p className="truncate text-[11px] text-text-muted">{currentUser.email}</p>
-                </div>
+    <header className="nv-topbar sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-md">
+      <div className="nv-topbar-inner mx-auto w-full max-w-[112rem] px-3 py-2.5 sm:px-6 xl:px-9">
+        <div className="nv-topbar-context flex min-w-0 items-center gap-2.5">
+          <span className="hidden size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary min-[390px]:grid" aria-hidden="true">
+            <Building2 size={18} />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-medium text-text-muted">{currentUser.type === 'saas_admin' && !isSimulating ? 'Administração SaaS' : 'Operação médica'}</p>
+            {canSwitch ? (
+              <div className="relative flex min-w-0 items-center gap-0.5">
+                <select aria-label="Empresa ativa" value={activeOrganizationId} title={activeOrg?.name}
+                  onChange={event => { setActiveOrganizationId(event.target.value); router.refresh(); }}
+                  className="min-h-6 min-w-0 max-w-full cursor-pointer appearance-none truncate rounded-sm pr-4 text-xs font-semibold text-text-primary sm:text-sm">
+                  {organizations.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+                </select>
+                <ChevronDown size={13} aria-hidden="true" className="pointer-events-none absolute right-0 text-text-muted" />
               </div>
-              <Link role="menuitem" href="/perfil" onClick={() => setProfileOpen(false)} className="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-text-secondary transition hover:bg-state-hover hover:text-text-primary">
-                <UserRound className="h-4 w-4" /> Meu perfil
-              </Link>
-              <button role="menuitem" type="button" onClick={logout} disabled={logoutPending} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger transition hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
-                {logoutPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} {logoutPending ? 'Saindo…' : 'Sair da conta'}
-              </button>
-              {logoutError && <p role="alert" className="px-3 pb-1 pt-2 text-xs leading-relaxed text-danger">{logoutError}</p>}
-            </div>
-          )}
+            ) : <p title={activeOrg?.name} className="truncate text-xs font-semibold text-text-primary sm:text-sm">{activeOrg?.name || 'NV Med'}</p>}
+          </div>
         </div>
+
+        <nav aria-label="Atalhos da operação" className="nv-topbar-nav flex w-fit max-w-full items-center gap-0.5 rounded-[1.25rem] border border-border bg-surface p-1 shadow-soft">
+          {navigation.filter(item => canViewPermission(currentUser, item.permission)).map(item => {
+            const active = pathname === item.href || pathname.startsWith(item.href + '/');
+            const className = `inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-full px-1.5 text-xs font-semibold transition-colors min-[390px]:px-2.5 sm:px-3.5 ${active ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:bg-state-hover hover:text-primary'}`;
+            if (pathname === '/dashboard' && item.href === '/dashboard#pendencias') {
+              return <a key={item.href} href="#pendencias" className={className}>{item.label}</a>;
+            }
+            return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
+              className={className}>
+              {item.label}
+            </Link>;
+          })}
+        </nav>
+
+        <div className="nv-topbar-actions flex items-center rounded-full border border-border bg-surface p-0.5 shadow-soft sm:gap-0.5 sm:p-1">
+          {showSearch && <button type="button" className={actions} aria-label="Pesquisar na empresa" aria-haspopup="dialog" title="Pesquisar na empresa" onClick={() => setSearchOpen(true)}><Search size={18} aria-hidden="true" /></button>}
+          <NotificationInbox key={currentUser.id} variant="header" documentAlerts={documentAlerts} />
+          <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={actions}
+            aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}>
+            {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          </button>
+          <div ref={profileMenu} className="relative border-l border-border pl-0.5 sm:pl-1">
+            <button ref={profileTrigger} type="button" onClick={() => { setProfileOpen(open => !open); setLogoutError(''); }}
+              className="flex h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-full transition-colors hover:bg-state-hover sm:gap-2 sm:pl-1 sm:pr-2"
+              aria-label={`Abrir menu do perfil de ${currentUser.name}`} aria-expanded={profileOpen} aria-controls={profileOpen ? 'header-profile-menu' : undefined}>
+              <UserAvatar name={currentUser.name} src={currentUser.avatar} className="size-8" />
+              <span className="hidden max-w-24 truncate text-xs font-semibold text-text-primary sm:block">{currentUser.name.split(' ')[0]}</span>
+              <ChevronDown size={14} aria-hidden="true" className={`hidden text-text-muted transition-transform motion-reduce:transition-none sm:block ${profileOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {profileOpen && (
+              <div id="header-profile-menu" className="nv-topbar-popover absolute right-0 mt-3 w-64 rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong">
+                <div className="flex items-center gap-3 border-b border-border px-2 py-2.5">
+                  <UserAvatar name={currentUser.name} src={currentUser.avatar} className="size-10" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-text-primary">{currentUser.name}</p>
+                    <p className="truncate text-xs text-text-muted">{currentUser.email}</p>
+                  </div>
+                </div>
+                <Link href="/perfil" onClick={() => setProfileOpen(false)} className="mt-1 flex min-h-11 items-center gap-2.5 rounded-xl px-3 text-sm text-text-secondary transition-colors hover:bg-state-hover hover:text-text-primary">
+                  <UserRound size={16} aria-hidden="true" /> Meu perfil
+                </Link>
+                <button type="button" onClick={logout} disabled={logoutPending} className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 text-sm text-danger transition-colors hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
+                  {logoutPending ? <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" /> : <LogOut size={16} aria-hidden="true" />} {logoutPending ? 'Saindo…' : 'Sair da conta'}
+                </button>
+                {logoutError && <p role="alert" className="px-3 pb-1 pt-2 text-xs leading-relaxed text-danger">{logoutError}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {isSimulating && <div className="nv-topbar-simulation flex w-fit items-center gap-2 rounded-full bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">
+          <EyeOff size={15} aria-hidden="true" /> Visualizando empresa
+          <button type="button" onClick={stopSimulation} className="underline underline-offset-2">Sair</button>
+        </div>}
       </div>
+      <SaveFeedback />
+      {searchOpen && <DashboardSearch key={activeOrganizationId} onClose={() => setSearchOpen(false)} />}
     </header>
   );
 }

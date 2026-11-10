@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { financeState, financeStateLabels, saoPauloDate, type FinanceState } from '@/lib/financeState';
 
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Banknote,
   Building2,
@@ -23,8 +24,9 @@ import { canEditPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
 import type { PaymentFrequency, PaymentStatus, Shift } from '@/types';
 
-type PeriodMode = 'week' | 'month';
+type PeriodMode = 'week' | 'month' | 'all';
 type FinanceView = 'list' | 'kanban';
+type PaymentFilter = FinanceState | 'unpaid' | '';
 
 const paymentStatusLabels: Record<PaymentStatus, string> = { pending: 'Pendente', paid: 'Pago' };
 
@@ -35,6 +37,7 @@ function addDays(value: string, amount: number) {
 }
 
 function periodBounds(mode: PeriodMode, reference: string) {
+  if (mode === 'all') return { start: '', end: '' };
   const date = new Date(`${reference}T12:00:00`);
   if (mode === 'week') {
     const start = addDays(reference, -((date.getDay() + 6) % 7));
@@ -57,15 +60,18 @@ function safeName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-export default function FinancePage() {
+function FinancePageContent({ params }: { params: URLSearchParams }) {
   const store = useStore();
-  const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
-  const [reference, setReference] = useState(localDate());
+  const month = params.get('month') || '';
+  const initialFrequency = params.get('frequency');
+  const initialStatus = params.get('status');
+  const [periodMode, setPeriodMode] = useState<PeriodMode>(params.get('period') === 'all' ? 'all' : 'month');
+  const [reference, setReference] = useState(/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month + '-01' : localDate());
   const [unitId, setUnitId] = useState('');
   const [sectorId, setSectorId] = useState('');
   const [specialty, setSpecialty] = useState('');
-  const [frequency, setFrequency] = useState<PaymentFrequency | ''>('');
-  const [paymentStatus, setPaymentStatus] = useState<FinanceState | ''>('');
+  const [frequency, setFrequency] = useState<PaymentFrequency | ''>(initialFrequency === 'on_delivery' || initialFrequency === 'monthly' ? initialFrequency : '');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentFilter>(initialStatus === 'unpaid' ? initialStatus : '');
   const [view, setView] = useState<FinanceView>('list');
   const [editing, setEditing] = useState<Shift | null>(null);
   const [editAmount, setEditAmount] = useState(0);
@@ -89,12 +95,12 @@ export default function FinancePage() {
   ] as string[])].sort((a, b) => a.localeCompare(b, 'pt-BR')), [organizationShifts, sectors]);
 
   const filteredShifts = useMemo(() => organizationShifts
-    .filter(item => item.doctorId && (item.status !== 'cancelled' || paymentStatus === 'cancelled') && item.date >= bounds.start && item.date <= bounds.end)
+    .filter(item => item.doctorId && (item.status !== 'cancelled' || paymentStatus === 'cancelled') && (!bounds.start || (item.date >= bounds.start && item.date <= bounds.end)))
     .filter(item => !unitId || item.unitId === unitId)
     .filter(item => !sectorId || item.sectorId === sectorId)
     .filter(item => !specialty || item.specialty === specialty)
     .filter(item => !frequency || (item.paymentFrequency || 'on_delivery') === frequency)
-    .filter(item => !paymentStatus || financeState(item, today) === paymentStatus)
+    .filter(item => !paymentStatus || (paymentStatus === 'unpaid' ? item.paymentStatus !== 'paid' : financeState(item, today) === paymentStatus))
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)), [organizationShifts, bounds.start, bounds.end, unitId, sectorId, specialty, frequency, paymentStatus, today]);
 
   const total = filteredShifts.reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
@@ -138,7 +144,7 @@ export default function FinancePage() {
       ];
     });
     downloadCsv(
-      `financeiro-${safeName(organization?.name || 'empresa')}-${bounds.start}-${bounds.end}`,
+      `financeiro-${safeName(organization?.name || 'empresa')}-${bounds.start ? `${bounds.start}-${bounds.end}` : 'todos-os-periodos'}`,
       ['Empresa', 'Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Situação', 'Vencimento', 'Pago em', 'Valor pago (R$)'],
       rows,
     );
@@ -194,8 +200,8 @@ export default function FinancePage() {
 
         <section aria-label="Filtros financeiros" className="nv-panel p-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <label className="nv-label">Período<select className="nv-input" value={periodMode} onChange={event => setPeriodMode(event.target.value as PeriodMode)}><option value="week">Semanal</option><option value="month">Mensal</option></select></label>
-            <label className="nv-label">Referência<input className="nv-input" type={periodMode === 'week' ? 'date' : 'month'} value={periodMode === 'week' ? reference : reference.slice(0, 7)} onChange={event => setReference(periodMode === 'week' ? event.target.value : `${event.target.value}-01`)}/></label>
+            <label className="nv-label">Período<select className="nv-input" value={periodMode} onChange={event => setPeriodMode(event.target.value as PeriodMode)}><option value="week">Semanal</option><option value="month">Mensal</option><option value="all">Todos os períodos</option></select></label>
+            <label className="nv-label">Referência<input className="nv-input" disabled={periodMode === 'all'} type={periodMode === 'week' ? 'date' : 'month'} value={periodMode === 'week' ? reference : reference.slice(0, 7)} onChange={event => setReference(periodMode === 'week' ? event.target.value : `${event.target.value}-01`)}/></label>
             <label className="nv-label">Unidade<select className="nv-input" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); }}><option value="">Todas</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
             <label className="nv-label">Setor<select className="nv-input" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos</option>{visibleSectors.map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label>
             <label className="nv-label">Especialidade<select className="nv-input" value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">Todas</option>{specialties.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -203,8 +209,9 @@ export default function FinancePage() {
           </div>
           <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:max-w-[620px]">
             <label className="nv-label">Regime de pagamento<select className="nv-input" value={frequency} onChange={event => setFrequency(event.target.value as PaymentFrequency | '')}><option value="">À vista e mensal</option>{Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label className="nv-label">Situação<select className="nv-input" value={paymentStatus} onChange={event => setPaymentStatus(event.target.value as FinanceState | '')}>
+            <label className="nv-label">Situação<select className="nv-input" value={paymentStatus} onChange={event => setPaymentStatus(event.target.value as PaymentFilter)}>
               <option value="">Todos os pagamentos ativos</option>
+              <option value="unpaid">Aguardando pagamento</option>
               {Object.entries(financeStateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select></label>
           </div>
@@ -219,7 +226,7 @@ export default function FinancePage() {
         </section>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-          <div><h2 className="font-semibold">Conciliação do período</h2><p className="mt-1 text-sm text-text-muted">{displayDate(bounds.start)} – {displayDate(bounds.end)} · dados exclusivos da empresa ativa.</p></div>
+          <div><h2 className="font-semibold">Conciliação do período</h2><p className="mt-1 text-sm text-text-muted">{bounds.start ? `${displayDate(bounds.start)} – ${displayDate(bounds.end)}` : 'Todos os períodos'} · dados exclusivos da empresa ativa.</p></div>
           <div className="nv-segment self-start" role="group" aria-label="Modo de exibição">
             <button type="button" onClick={() => setView('list')} aria-pressed={view === 'list'} className="inline-flex items-center justify-center gap-2"><List size={15}/>Lista</button>
             <button type="button" onClick={() => setView('kanban')} aria-pressed={view === 'kanban'} className="inline-flex items-center justify-center gap-2"><Columns3 size={15}/>Kanban</button>
@@ -254,4 +261,13 @@ export default function FinancePage() {
       </div>
     </AccessGuard>
   );
+}
+
+function FinanceRoute() {
+  const params = useSearchParams();
+  return <FinancePageContent key={params.toString()} params={params} />;
+}
+
+export default function FinancePage() {
+  return <Suspense fallback={<p role="status">Carregando financeiro…</p>}><FinanceRoute /></Suspense>;
 }

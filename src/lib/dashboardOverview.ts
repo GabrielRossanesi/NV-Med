@@ -1,0 +1,83 @@
+import { documentIsCritical, getDoctorCompliance } from './documentCompliance.ts';
+import { applicableDocuments } from './documentGovernance.ts';
+import { getDoctorOperationalUnitIds } from './doctorUnits.ts';
+import { financeState } from './financeState.ts';
+import { localDate, summarizeSectorCoverage } from './scheduling.ts';
+import type { Doctor, DocumentRequirement, MedicalDocument, Sector, Shift } from '../types/index.ts';
+
+export function shiftScheduleHref(shift: Pick<Shift, 'date' | 'id'>) {
+  return '/escala?' + new URLSearchParams({ date: shift.date, shiftId: shift.id }) + '#plantao';
+}
+
+export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], length: number) {
+  const shiftsByTurn = new Map<string, Shift[]>();
+  for (const shift of shifts) {
+    if (shift.status === 'cancelled') continue;
+    const key = `${shift.date}/${shift.sectorId}`;
+    const items = shiftsByTurn.get(key) || [];
+    items.push(shift);
+    shiftsByTurn.set(key, items);
+  }
+
+  return Array.from({ length }, (_, offset) => {
+    const date = new Date(`${today}T12:00:00`);
+    date.setDate(date.getDate() + offset);
+    const day = localDate(date);
+    const totals = { day, required: 0, deficit: 0 };
+    for (const sector of sectors) {
+      const summary = summarizeSectorCoverage(sector, shiftsByTurn.get(`${day}/${sector.id}`) || []);
+      totals.required += summary.required;
+      totals.deficit += summary.deficit;
+    }
+    return totals;
+  });
+}
+
+export function doctorsWithDocumentIssues(
+  doctors: Doctor[], documents: MedicalDocument[], shifts: Shift[], reference: number,
+  requirements: DocumentRequirement[] | undefined, alertDays: number,
+) {
+  const byDoctor = new Map<string, MedicalDocument[]>();
+  const shiftsByDoctor = new Map<string, Shift[]>();
+  for (const document of documents) {
+    const items = byDoctor.get(document.doctorId) || [];
+    items.push(document);
+    byDoctor.set(document.doctorId, items);
+  }
+  for (const shift of shifts) {
+    if (!shift.doctorId) continue;
+    const items = shiftsByDoctor.get(shift.doctorId) || [];
+    items.push(shift);
+    shiftsByDoctor.set(shift.doctorId, items);
+  }
+  return doctors.flatMap(doctor => {
+    const linkedUnits = getDoctorOperationalUnitIds(shiftsByDoctor.get(doctor.id) || [], doctor.id);
+    const context = { ...doctor, linkedUnits };
+    const scopedDocuments = applicableDocuments(context, byDoctor.get(doctor.id) || [], requirements);
+    const summary = getDoctorCompliance(context, scopedDocuments, reference, requirements, alertDays);
+    if (!summary.pending && !summary.nearExpiry) return [];
+    const expired = scopedDocuments.filter(document => document.status === 'expired'
+      || (document.status === 'approved' && documentIsCritical(document, reference))).length;
+    return [{ doctor, linkedUnits, expired, ...summary }];
+  }).sort((a, b) => b.critical - a.critical || b.pending - a.pending || a.doctor.name.localeCompare(b.doctor.name, 'pt-BR'));
+}
+
+export function dashboardPayments(shifts: Shift[], today: string) {
+  const assigned = shifts.filter(shift => shift.doctorId && shift.status !== 'cancelled');
+  const unpaid = assigned.filter(shift => shift.paymentStatus !== 'paid');
+  const amount = (items: Shift[]) => items.reduce((total, shift) => total + (shift.paymentAmount || 0), 0);
+  const onDelivery = unpaid.filter(shift => (shift.paymentFrequency || 'on_delivery') === 'on_delivery');
+  const upcoming = new Map<string, number>();
+  for (const shift of unpaid) {
+    if (!shift.paymentDueDate || shift.paymentDueDate < today) continue;
+    upcoming.set(shift.paymentDueDate, (upcoming.get(shift.paymentDueDate) || 0) + (shift.paymentAmount || 0));
+  }
+  const month = today.slice(0, 7);
+  return {
+    pending: amount(unpaid),
+    overdue: amount(unpaid.filter(shift => financeState(shift, today) === 'overdue')),
+    onDelivery: { count: onDelivery.length, amount: amount(onDelivery) },
+    paidThisMonth: assigned.filter(shift => shift.paymentStatus === 'paid' && shift.date.startsWith(month)).length,
+    nextDue: [...upcoming.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, 2),
+  };
+}

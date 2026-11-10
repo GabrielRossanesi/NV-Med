@@ -119,7 +119,7 @@ function Report({ initial, activeOrganization }: { initial: Record<string, strin
     {report && <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-muted">{report.total} {report.total === 1 ? 'plantão encontrado' : 'plantões encontrados'}{report.total > 100 && ' · Prévia dos primeiros 100'}</p>
-        <div className="flex gap-2">{(['csv','xlsx'] as const).map(format => <button type="button" className="nv-button-secondary" disabled={busy || !report.total} onClick={() => void download(format)} key={format}>
+        <div className="flex flex-wrap gap-2">{(['csv','xlsx'] as const).map(format => <button type="button" className="nv-button-secondary" disabled={busy || !report.total} onClick={() => void download(format)} key={format}>
           <Download size={15}/>Exportar {format.toUpperCase()}
         </button>)}</div>
       </div>

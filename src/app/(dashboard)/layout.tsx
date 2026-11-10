@@ -1,10 +1,8 @@
-import SaveFeedback from '@/components/SaveFeedback';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import StoreHydrator from '@/components/StoreHydrator';
-import AppBackground from '@/components/AppBackground';
 import DashboardChrome from '@/components/DashboardChrome';
 
 export default async function DashboardLayout({
@@ -21,16 +19,13 @@ export default async function DashboardLayout({
   if (!staff) redirect('/portal');
   return (
     <StoreHydrator>
-      <AppBackground />
-      <div className="flow-root min-h-screen text-text-primary">
-        {/* Navigation Sidebar */}
+      <div className="nv-app-shell text-text-primary">
         <Sidebar />
 
-        {/* Main Content Area */}
         <DashboardChrome>
+          <a href="#conteudo" className="nv-skip-link">Pular para o conteúdo</a>
           <Header />
-          <SaveFeedback />
-          <main className="nv-content mx-auto w-full min-w-0 max-w-[90rem] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main id="conteudo" tabIndex={-1} className="nv-content isolate mx-auto w-full min-w-0 max-w-[112rem] flex-1 px-4 py-6 sm:px-6 xl:px-9 xl:py-8">
             {children}
           </main>
         </DashboardChrome>

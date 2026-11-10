@@ -50,8 +50,8 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
   if (!days.length) return <div className="rounded-xl border border-dashed border-border py-16 text-center"><List className="mx-auto h-6 w-6 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum plantão individual neste período</p><p className="mt-1 text-xs text-text-muted">Crie um posto ou plantão avulso para as datas solicitadas.</p></div>;
   return <section className="space-y-3">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-base font-semibold">Plantões individuais</h2><p className="mt-1 text-xs text-text-muted">Cada linha representa um posto salvo. Use a ação para preencher uma vaga ou substituir o médico.</p></div><span className="text-xs font-medium text-text-muted">{shifts.length} {shifts.length === 1 ? 'plantão criado' : 'plantões criados'}</span></div>
-    <div className="overflow-hidden rounded-xl border border-border bg-card-bg">
-      <div className="hidden grid-cols-[105px_110px_minmax(180px,1fr)_minmax(180px,1fr)_100px_125px_150px] gap-3 border-b border-border bg-surface-muted/60 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted lg:grid"><span>Plantão</span><span>Horário</span><span>Unidade · setor</span><span>Médico</span><span>Vínculo</span><span>Situação</span><span>Ação</span></div>
+    <div className="@container overflow-hidden rounded-xl border border-border bg-card-bg">
+      <div className="hidden grid-cols-[105px_110px_minmax(180px,1fr)_minmax(180px,1fr)_100px_125px_150px] gap-3 border-b border-border bg-surface-muted/60 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted @min-[68rem]:grid"><span>Plantão</span><span>Horário</span><span>Unidade · setor</span><span>Médico</span><span>Vínculo</span><span>Situação</span><span>Ação</span></div>
       {days.map(day => { const dayItems = shifts.filter(item => item.date === day); const assigned = dayItems.filter(item => item.doctorId).length; const vacancies = dayItems.length - assigned; return <section key={day} className="border-b border-border last:border-0">
         <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-muted/25 px-4 py-3"><div><p className="text-sm font-semibold capitalize text-text-primary">{new Date(day + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</p><p className="mt-0.5 text-[11px] text-text-muted">{dayItems.length} {dayItems.length === 1 ? 'plantão individual' : 'plantões individuais'}</p></div><div className="flex items-center gap-3 text-xs"><span className="flex items-center gap-1.5 text-success"><Users size={14}/>{assigned} escalado{assigned === 1 ? '' : 's'}</span>{vacancies > 0 && <span className="flex items-center gap-1.5 font-medium text-warning"><AlertTriangle size={14}/>{vacancies} {vacancies === 1 ? 'vaga aberta' : 'vagas abertas'}</span>}</div></div>
         <div className="divide-y divide-border">{dayItems.map(item => {
@@ -63,7 +63,7 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
           const kind: CoveragePeriodKind = item.startTime >= '18:00' || item.startTime < '06:00' ? 'night' : 'day';
           const PeriodIcon = kind === 'day' ? Sun : Moon;
           const warning = doctor ? doctorWarnings.get(doctor.id) : undefined;
-          return <div key={item.id} className="grid gap-3 px-4 py-4 transition hover:bg-state-hover lg:grid-cols-[105px_110px_minmax(180px,1fr)_minmax(180px,1fr)_100px_125px_150px] lg:items-center">
+          return <div key={item.id} className="grid gap-3 px-4 py-4 transition hover:bg-state-hover @min-[68rem]:grid-cols-[105px_110px_minmax(180px,1fr)_minmax(180px,1fr)_100px_125px_150px] @min-[68rem]:items-center">
             <span className="flex items-center gap-2"><PeriodIcon size={14} className={kind === 'day' ? 'text-warning' : 'text-primary'}/><span><strong className="block text-xs text-text-primary">{item.coverageMode === 'adhoc' ? 'Avulso' : 'Plantão'} {String(sequence).padStart(2, '0')}</strong><span className="text-[10px] text-text-muted">{coveragePeriodLabel(kind)}</span></span></span>
             <span className="flex items-center gap-1.5 text-xs font-medium tabular-nums text-text-secondary"><Clock3 size={13}/>{item.startTime}–{item.endTime}</span>
             <span className="min-w-0"><span className="block truncate text-sm font-semibold text-text-primary">{unit?.name || 'Unidade'}</span><span className="mt-0.5 block truncate text-xs text-text-muted">{sector?.name || item.sector || 'Setor'}{item.specialty ? ` · ${item.specialty}` : ''}</span>{item.coverageMode === 'adhoc' && <span className="mt-1 block text-xs text-primary">{item.coverageReason}</span>}</span>
@@ -79,22 +79,23 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
   </section>;
 }
 
-function Schedule() {
+function Schedule({ params }: { params: URLSearchParams }) {
   const store = useStore();
-  const params = useSearchParams();
   const today = localDate();
+  const requestedShiftId = params.get('shiftId');
+  const requestedCoverage = params.get('coverage');
   const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '') ? params.get('date')! : today;
   const [date, setDate] = useState(initialDate);
-  const [view, setView] = useState<ViewMode>('week');
+  const [view, setView] = useState<ViewMode>(requestedShiftId ? 'list' : 'week');
   const [unitId, setUnitId] = useState(params.get('unitId') || '');
-  const [sectorId, setSectorId] = useState('');
+  const [sectorId, setSectorId] = useState(params.get('sectorId') || '');
   const [employment, setEmployment] = useState<EmploymentType | ''>('');
   const [specialty, setSpecialty] = useState('');
   const [doctorId, setDoctorId] = useState('');
   const [periodKind, setPeriodKind] = useState<CoveragePeriodKind | ''>('');
   const [documentFilter, setDocumentFilter] = useState<'all' | 'regular' | 'pending'>('all');
   const [coverageModeFilter, setCoverageModeFilter] = useState<'all' | 'regular' | 'adhoc'>('all');
-  const [coverageFilter, setCoverageFilter] = useState<CoverageFilter>('all');
+  const [coverageFilter, setCoverageFilter] = useState<CoverageFilter>(requestedCoverage === 'deficit' ? 'deficit' : 'all');
   const [statusFilter, setStatusFilter] = useState<Shift['status'] | 'all' | 'exchange'>('all');
   const [form, setForm] = useState<Shift | null>(null);
   const [exchangeState, setExchangeState] = useState<{ organization: string; ids: Set<string> } | null>(null);
@@ -165,6 +166,7 @@ function Schedule() {
     .sort((a, b) => Number(b.day >= today) - Number(a.day >= today) || a.day.localeCompare(b.day) || b.period.deficit - a.period.deficit).slice(0, 4);
   const employers = [...new Set(shifts.map(item => item.employerName).filter(Boolean))] as string[];
   const listShifts = shifts
+    .filter(item => !requestedShiftId || item.id === requestedShiftId)
     .filter(item => item.date.startsWith(month) && (statusFilter === 'all' ? item.status !== 'cancelled'
       : statusFilter === (item.exchangeRequested ? 'exchange' : item.status)))
     .filter(item => coverageModeFilter === 'all' || (item.coverageMode || 'regular') === coverageModeFilter)
@@ -347,7 +349,10 @@ function Schedule() {
       {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </select></label>
     <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3"><span className="mr-1 text-xs text-text-muted">Plantões:</span>{([['all', 'Todos'], ['regular', 'Regulares'], ['adhoc', 'Avulsos']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={coverageModeFilter === value && view === 'list'} onClick={() => { setCoverageModeFilter(value); setView('list'); }} className={`min-h-9 rounded-lg px-3 text-xs font-medium transition ${coverageModeFilter === value && view === 'list' ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-state-hover'}`}>{label}</button>)}</div>
-    {view === 'list' ? <ScheduleList days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift} onDelete={canEditSchedule ? item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date }) : undefined}/> : view === 'doctor' ? <ScheduleDoctorView doctors={visibleDoctors} sectors={sectors} units={units} shifts={listShifts} allShifts={shifts} month={month} canSeeFinancial={canSeeFinancial} onEdit={openShift}/> : view === 'specialty' ? <ScheduleSpecialtyView doctors={doctors} shifts={listShifts} allShifts={shifts} month={month} onEdit={openShift}/> : <ScheduleCalendarView
+    {view === 'list' ? <div id="plantao" tabIndex={-1} className="space-y-3">
+      {requestedShiftId && <Link className="nv-button-secondary" href={'/escala?' + new URLSearchParams({ date })}>Voltar para a escala do dia</Link>}
+      <ScheduleList days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift} onDelete={canEditSchedule ? item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date }) : undefined}/>
+    </div> : view === 'doctor' ? <ScheduleDoctorView doctors={visibleDoctors} sectors={sectors} units={units} shifts={listShifts} allShifts={shifts} month={month} canSeeFinancial={canSeeFinancial} onEdit={openShift}/> : view === 'specialty' ? <ScheduleSpecialtyView doctors={doctors} shifts={listShifts} allShifts={shifts} month={month} onEdit={openShift}/> : <ScheduleCalendarView
       key={focusedTurn?.nonce || 0}
       view={view}
       date={date}
@@ -399,4 +404,12 @@ function Schedule() {
   </div>;
 }
 
-export default function SchedulePage() { const orgId = useStore(state => state.activeOrganizationId); return <AccessGuard requiredPermission="escala"><Suspense fallback={<p>Carregando escala…</p>}><Schedule key={orgId}/></Suspense></AccessGuard>; }
+function ScheduleRoute() {
+  const organization = useStore(state => state.activeOrganizationId);
+  const params = useSearchParams();
+  return <Schedule key={organization + '?' + params.toString()} params={params} />;
+}
+
+export default function SchedulePage() {
+  return <AccessGuard requiredPermission="escala"><Suspense fallback={<p role="status">Carregando escala…</p>}><ScheduleRoute /></Suspense></AccessGuard>;
+}

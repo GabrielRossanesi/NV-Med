@@ -16,8 +16,7 @@ import { useStore } from '@/store/useStore';
 type ViewMode = 'clinical' | 'files';
 type ComplianceFilter = 'all' | 'pending' | 'critical' | 'review' | 'compliant' | 'expiring' | 'pending_only';
 
-function DocumentCenter() {
-  const searchParams = useSearchParams();
+function DocumentCenter({ searchParams }: { searchParams: URLSearchParams }) {
   const store = useStore();
   const { activeOrganizationId, doctors, documents, units, shifts, organizations, currentUser } = store;
   const queryStatus = searchParams.get('status');
@@ -27,7 +26,7 @@ function DocumentCenter() {
   const [unitId, setUnitId] = useState(searchParams.get('unitId') || '');
   const [specialty, setSpecialty] = useState(searchParams.get('specialty') || '');
   const [compliance, setCompliance] = useState<ComplianceFilter>(queryStatus === 'critical' || queryStatus === 'review'
-    || queryStatus === 'expiring' || queryStatus === 'pending_only' ? queryStatus : queryStatus === 'not_sent' ? 'pending' : 'all');
+    || queryStatus === 'expiring' || queryStatus === 'pending_only' || queryStatus === 'pending' ? queryStatus : queryStatus === 'not_sent' ? 'pending' : 'all');
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<DocumentStatus>('analyzing');
   const [bulkNote, setBulkNote] = useState('');
@@ -148,5 +147,10 @@ function DocumentCenter() {
 }
 
 export default function DocumentsPage() {
-  return <AccessGuard requiredPermission="documentos"><Suspense fallback={<div className="flex h-48 items-center justify-center"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary"/></div>}><DocumentCenter/></Suspense></AccessGuard>;
+  return <AccessGuard requiredPermission="documentos"><Suspense fallback={<div className="flex h-48 items-center justify-center"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary"/></div>}><DocumentRoute/></Suspense></AccessGuard>;
+}
+
+function DocumentRoute() {
+  const searchParams = useSearchParams();
+  return <DocumentCenter key={searchParams.toString()} searchParams={searchParams} />;
 }

@@ -7,7 +7,7 @@ export default function SaveFeedback() {
   if (!saving && !error && !notice) return null;
   const Icon = saving ? LoaderCircle : error ? AlertCircle : CheckCircle2;
   return (
-    <div className="sticky top-16 z-30 mx-auto w-full max-w-[90rem] px-4 pt-3 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[112rem] px-4 pb-2 sm:px-6 xl:px-9">
       <div className={`nv-feedback items-center justify-between ${saving ? 'text-info' : error ? 'text-danger' : 'text-success'}`}>
         <div role={error && !saving ? 'alert' : 'status'} className="flex min-w-0 items-center gap-2">
           <Icon size={17} className={saving ? 'shrink-0 motion-safe:animate-spin' : 'shrink-0'} aria-hidden="true" />
