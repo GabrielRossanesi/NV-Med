@@ -341,15 +341,15 @@ function DashboardContent({ organization }: { organization: string }) {
   const reportDay = result?.counts?.today || today;
   const checkinHref = canSeeReports ? '/relatorios/plantoes?' + new URLSearchParams({ empresa: organization, inicio: reportDay, fim: reportDay, presenca: 'pending' }) : undefined;
 
-  return <div className="nv-overview mx-auto max-w-[104rem] space-y-6 lg:space-y-7">
-    <header className="flex flex-wrap items-end justify-between gap-3">
+  return <div className="nv-overview mx-auto max-w-[104rem] space-y-6 max-md:space-y-4 lg:space-y-7">
+    <header className="flex flex-wrap items-end justify-between gap-3 max-md:gap-2">
       <div className="min-w-0">
         <p className="flex items-center gap-2 text-xs font-semibold text-primary"><span className="size-1.5 rounded-full bg-primary" aria-hidden="true" /> Operação médica</p>
-        <h1 className="nv-page-title mt-2 text-3xl sm:text-[2.75rem]">Painel de controle</h1>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">{activeOrg?.name ? <>Acompanhe as escalas e as pendências de <strong className="font-semibold text-text-secondary">{activeOrg.name}</strong>.</> : 'Acompanhe as escalas e as pendências da empresa ativa.'}</p>
+        <h1 className="nv-page-title mt-2 text-3xl max-md:mt-1 sm:text-[2.75rem]">Painel de controle</h1>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted max-md:mt-1 max-md:leading-snug">{activeOrg?.name ? <>Acompanhe as escalas e as pendências de <strong className="font-semibold text-text-secondary">{activeOrg.name}</strong>.</> : 'Acompanhe as escalas e as pendências da empresa ativa.'}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2.5">
-        <time dateTime={today} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-surface px-3.5 text-xs font-medium text-text-secondary">
+        <time dateTime={today} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-surface px-3.5 text-xs font-medium text-text-secondary max-md:px-2.5">
           <CalendarDays size={15} aria-hidden="true" className="text-accent" />{displayDay(today)}
         </time>
         {canSeeSchedule && organization && <Link href={`/escala?date=${today}`} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-3.5 text-xs font-semibold text-text-inverse transition-colors hover:bg-primary-hover">Abrir escala <ArrowRight size={15} aria-hidden="true" /></Link>}

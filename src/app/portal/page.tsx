@@ -1,6 +1,9 @@
+import type { Viewport } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import PortalHome from './PortalHome';
+
+export const viewport: Viewport = { viewportFit: 'cover' };
 
 export default async function PortalPage({ searchParams }: { searchParams: Promise<{ empresa?: string }> }) {
   const { empresa } = await searchParams;

@@ -285,6 +285,98 @@ body:has(.nv-app-shell) {
 .nv-topbar-actions { grid-area: actions; justify-self: end; }
 .nv-topbar-simulation { grid-column: 1 / -1; }
 
+@media (width < 48rem) {
+  :root { --nv-mobile-bar-height: 56px; }
+
+  html:has(.nv-app-shell), html:has(.nv-portal-content) {
+    scrollbar-gutter: auto;
+    scroll-padding-top: calc(68px + env(safe-area-inset-top));
+    scroll-padding-bottom: calc(var(--nv-mobile-bar-height) + env(safe-area-inset-bottom) + 12px);
+  }
+  html:has(.nv-topbar-simulation) { scroll-padding-top: calc(105px + env(safe-area-inset-top)); }
+  body:has(.nv-app-shell), body:has(.nv-portal-content) { overflow-x: visible; }
+
+  .nv-topbar { padding-top: env(safe-area-inset-top); }
+  .nv-topbar-inner {
+    grid-template-areas: 'context actions';
+    padding-block: .25rem;
+    padding-left: max(.75rem, env(safe-area-inset-left));
+    padding-right: max(.75rem, env(safe-area-inset-right));
+  }
+  .nv-topbar-nav, .nv-topbar-secondary { display: none; }
+  .nv-topbar-actions > button { width: 44px; height: 44px; }
+  .nv-topbar-context select { min-height: 44px; font-size: 1rem; }
+
+  .nv-app-shell main.nv-content, .nv-portal-content {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  .nv-portal-content { padding-top: calc(1rem + env(safe-area-inset-top)); }
+  .nv-portal-content:has(.nv-mobile-bar) { padding-bottom: calc(var(--nv-mobile-bar-height) + env(safe-area-inset-bottom) + 1rem); }
+
+  .nv-mobile-bar {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    box-sizing: border-box;
+    height: calc(var(--nv-mobile-bar-height) + env(safe-area-inset-bottom));
+    padding: 0 max(.5rem, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(.5rem, env(safe-area-inset-left));
+    border-top: 1px solid var(--sidebar-border);
+    background: var(--sidebar-bg);
+  }
+  .nv-mobile-link {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .125rem;
+    border-radius: .75rem;
+    color: var(--sidebar-text-muted);
+    font-size: .6875rem;
+    font-weight: 600;
+  }
+  .nv-mobile-link[aria-current], .nv-mobile-link[data-active] {
+    color: var(--primary);
+    background: var(--state-selected);
+  }
+  .nv-mobile-sheet {
+    position: fixed;
+    z-index: 41;
+    left: max(.75rem, env(safe-area-inset-left));
+    right: max(.75rem, env(safe-area-inset-right));
+    bottom: calc(var(--nv-mobile-bar-height) + env(safe-area-inset-bottom) + .5rem);
+    max-height: min(65dvh, calc(100dvh - var(--nv-mobile-bar-height) - env(safe-area-inset-bottom) - env(safe-area-inset-top) - 1rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-2xl);
+    padding: .5rem;
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-strong);
+  }
+
+  :is(.nv-content, .nv-dialog) .nv-input {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    font-size: 1rem;
+  }
+  :is(.nv-content, .nv-dialog) input.nv-input:is([type="date"], [type="month"], [type="time"]) {
+    display: block;
+  }
+  :is(.nv-content, .nv-dialog) input.nv-input::-webkit-date-and-time-value {
+    min-inline-size: 0;
+    text-align: start;
+  }
+}
+
 @container (min-width: 57rem) {
   .nv-topbar-inner {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

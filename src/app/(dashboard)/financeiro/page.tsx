@@ -7,6 +7,8 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Banknote,
+  ChevronDown,
+  SlidersHorizontal,
   Building2,
   CheckCircle2,
   Columns3,
@@ -160,6 +162,8 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
   const [frequency, setFrequency] = useState<PaymentFrequency | ''>(initialFrequency === 'on_delivery' || initialFrequency === 'monthly' ? initialFrequency : '');
   const [paymentStatus, setPaymentStatus] = useState<PaymentFilter>(initialStatus === 'unpaid' ? initialStatus : '');
   const [view, setView] = useState<FinanceView>('list');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount = [unitId, sectorId, specialty, frequency, paymentStatus].filter(Boolean).length;
   const requestedShift = params.get('shiftId');
   const [editingId, setEditingId] = useState<string | null>(requestedShift);
   const orgId = store.activeOrganizationId;
@@ -229,39 +233,54 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
 
   return (
     <>
-      <div className="space-y-6 animate-in fade-in duration-300">
-        <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="space-y-6 max-md:space-y-4 animate-in fade-in duration-300">
+        <header className="flex flex-wrap items-end justify-between gap-4 max-md:gap-2.5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Gestão financeira</p>
             <h1 className="nv-page-title mt-2 flex items-center gap-2"><WalletCards className="h-6 w-6 text-primary"/>Repasses PJ</h1>
             <p className="mt-1 text-sm text-text-muted">Concilie valores por unidade, setor e especialidade de {organization?.name || 'sua empresa'}.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canEditPermission(store.currentUser, 'configuracoes') && <Link className="nv-button-secondary" href="/financeiro/configuracao">Regras de vencimento</Link>}
-            <Link className="nv-button-secondary" href="/configuracoes/valores-plantoes">Valores de plantões</Link>
-            {requestedShift && <Link className="nv-button-secondary" href="/financeiro">Ver todos os pagamentos</Link>}
-            <Link className="nv-button" href={`/financeiro/relatorio?${reportParams}`}><Download size={16}/>Relatório e exportação</Link>
+            {canEditPermission(store.currentUser, 'configuracoes') && <Link className="nv-button-secondary max-md:min-h-10 max-md:px-2.5 max-md:text-xs" href="/financeiro/configuracao">Regras de vencimento</Link>}
+            <Link className="nv-button-secondary max-md:min-h-10 max-md:px-2.5 max-md:text-xs" href="/configuracoes/valores-plantoes">Valores de plantões</Link>
+            {requestedShift && <Link className="nv-button-secondary max-md:min-h-10 max-md:px-2.5 max-md:text-xs" href="/financeiro">Ver todos os pagamentos</Link>}
+            <Link className="nv-button max-md:min-h-10 max-md:px-2.5 max-md:text-xs" href={`/financeiro/relatorio?${reportParams}`}><Download size={16}/>Relatório e exportação</Link>
           </div>
         </header>
 
         {!canEditPermission(store.currentUser, 'financeiro') && <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-text-secondary"><ReceiptText size={16} className="shrink-0 text-primary"/><span><strong className="font-semibold text-text-primary">Acesso somente para consulta.</strong> Você pode visualizar e exportar os dados financeiros, sem alterar valores ou pagamentos.</span></div>}
 
-        <section aria-label="Filtros financeiros" className="nv-panel p-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <label className="nv-label">Período<select className="nv-input" value={periodMode} onChange={event => setPeriodMode(event.target.value as PeriodMode)}><option value="week">Semanal</option><option value="month">Mensal</option><option value="all">Todos os períodos</option></select></label>
-            <label className="nv-label">Referência<input className="nv-input" disabled={periodMode === 'all'} type={periodMode === 'week' ? 'date' : 'month'} value={periodMode === 'week' ? reference : reference.slice(0, 7)} onChange={event => setReference(periodMode === 'week' ? event.target.value : `${event.target.value}-01`)}/></label>
-            <label className="nv-label">Unidade<select className="nv-input" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); }}><option value="">Todas</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
-            <label className="nv-label">Setor<select className="nv-input" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos</option>{visibleSectors.map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label>
-            <label className="nv-label">Especialidade<select className="nv-input" value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">Todas</option>{specialties.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
-            <button type="button" className="nv-button-secondary self-end" onClick={resetFilters}><RotateCcw size={15}/>Limpar filtros</button>
-          </div>
-          <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:max-w-[620px]">
-            <label className="nv-label">Regime de pagamento<select className="nv-input" value={frequency} onChange={event => setFrequency(event.target.value as PaymentFrequency | '')}><option value="">À vista e mensal</option>{Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label className="nv-label">Situação<select className="nv-input" value={paymentStatus} onChange={event => setPaymentStatus(event.target.value as PaymentFilter)}>
-              <option value="">Todos os pagamentos ativos</option>
-              <option value="unpaid">Aguardando pagamento</option>
-              {Object.entries(financeStateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select></label>
+        <section aria-label="Filtros financeiros" className="nv-panel min-w-0 p-4 max-md:p-3">
+          <button type="button" aria-expanded={filtersOpen} aria-controls="finance-filter-fields"
+            onClick={() => setFiltersOpen(open => !open)}
+            className="flex min-h-11 w-full items-center gap-2 rounded-lg text-left md:hidden">
+            <SlidersHorizontal size={17} aria-hidden="true" className="shrink-0 text-primary"/>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">Filtros</span>
+              <span className="block text-xs text-text-muted">
+                {periodMode === 'week' ? 'Semanal' : periodMode === 'month' ? 'Mensal' : 'Todos os períodos'}
+                {activeFilterCount > 0 && ` · ${activeFilterCount} ${activeFilterCount === 1 ? 'filtro ativo' : 'filtros ativos'}`}
+              </span>
+            </span>
+            <ChevronDown size={16} aria-hidden="true" className={`shrink-0 text-text-muted ${filtersOpen ? 'rotate-180' : ''}`}/>
+          </button>
+          <div id="finance-filter-fields" className={filtersOpen ? 'min-w-0 max-md:mt-2' : 'hidden min-w-0 md:block'}>
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <label className="nv-label">Período<select className="nv-input" value={periodMode} onChange={event => setPeriodMode(event.target.value as PeriodMode)}><option value="week">Semanal</option><option value="month">Mensal</option><option value="all">Todos os períodos</option></select></label>
+              <label className="nv-label">Referência<input className="nv-input" disabled={periodMode === 'all'} type={periodMode === 'week' ? 'date' : 'month'} value={periodMode === 'week' ? reference : reference.slice(0, 7)} onChange={event => setReference(periodMode === 'week' ? event.target.value : `${event.target.value}-01`)}/></label>
+              <label className="nv-label">Unidade<select className="nv-input" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); }}><option value="">Todas</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+              <label className="nv-label">Setor<select className="nv-input" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos</option>{visibleSectors.map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label>
+              <label className="nv-label">Especialidade<select className="nv-input" value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">Todas</option>{specialties.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
+              <button type="button" className="nv-button-secondary self-end" onClick={resetFilters}><RotateCcw size={15}/>Limpar filtros</button>
+            </div>
+            <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:max-w-[620px]">
+              <label className="nv-label">Regime de pagamento<select className="nv-input" value={frequency} onChange={event => setFrequency(event.target.value as PaymentFrequency | '')}><option value="">À vista e mensal</option>{Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label className="nv-label">Situação<select className="nv-input" value={paymentStatus} onChange={event => setPaymentStatus(event.target.value as PaymentFilter)}>
+                <option value="">Todos os pagamentos ativos</option>
+                <option value="unpaid">Aguardando pagamento</option>
+                {Object.entries(financeStateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select></label>
+            </div>
           </div>
         </section>
 

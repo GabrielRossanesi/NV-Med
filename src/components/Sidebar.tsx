@@ -14,7 +14,6 @@ import {
   ChevronDown,
   FileText,
   LayoutDashboard,
-  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   FileSpreadsheet,
@@ -30,6 +29,7 @@ import { useStore } from '@/store/useStore';
 import { canViewPermission } from '@/lib/permissions';
 import { logoutCurrentSession } from '@/lib/auth/logout';
 import UserAvatar from './UserAvatar';
+import MobileStaffNavigation from './MobileStaffNavigation';
 import styles from './DashboardNavigation.module.css';
 
 const operationalItems = [
@@ -57,14 +57,11 @@ export default function Sidebar() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState('');
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [tooltip, setTooltip] = useState<{ label: string; top: number; left: number } | null>(null);
   const organizationMenu = useRef<HTMLDivElement>(null);
   const profileMenu = useRef<HTMLDivElement>(null);
-  const mobileMenu = useRef<HTMLDivElement>(null);
   const organizationTrigger = useRef<HTMLButtonElement>(null);
   const profileTrigger = useRef<HTMLButtonElement>(null);
-  const mobileTrigger = useRef<HTMLButtonElement>(null);
   const navigation = useRef<HTMLElement>(null);
   const activeLink = useRef<HTMLAnchorElement>(null);
   const reduceMotion = useReducedMotion();
@@ -99,7 +96,6 @@ export default function Sidebar() {
   const closeMenus = () => {
     setOrgMenuOpen(false);
     setProfileMenuOpen(false);
-    setMobileMoreOpen(false);
     setTooltip(null);
   };
 
@@ -157,16 +153,13 @@ export default function Sidebar() {
     const close = (event: PointerEvent) => {
       if (!profileMenu.current?.contains(event.target as Node)) setProfileMenuOpen(false);
       if (!organizationMenu.current?.contains(event.target as Node)) setOrgMenuOpen(false);
-      if (!mobileMenu.current?.contains(event.target as Node)) setMobileMoreOpen(false);
     };
     const closeWithKeyboard = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (profileMenuOpen) profileTrigger.current?.focus();
       else if (orgMenuOpen) organizationTrigger.current?.focus();
-      else if (mobileMoreOpen) mobileTrigger.current?.focus();
       setProfileMenuOpen(false);
       setOrgMenuOpen(false);
-      setMobileMoreOpen(false);
       setTooltip(null);
     };
     window.addEventListener('pointerdown', close);
@@ -175,7 +168,7 @@ export default function Sidebar() {
       window.removeEventListener('pointerdown', close);
       window.removeEventListener('keydown', closeWithKeyboard);
     };
-  }, [profileMenuOpen, orgMenuOpen, mobileMoreOpen]);
+  }, [profileMenuOpen, orgMenuOpen]);
 
   const logout = async () => {
     setLogoutPending(true);
@@ -360,42 +353,8 @@ export default function Sidebar() {
         </div>
       </motion.aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[calc(68px+env(safe-area-inset-bottom))] items-center justify-around border-t border-sidebar-border bg-sidebar-bg/96 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden" aria-label="Navegação móvel">
-        {items.slice(0, 3).map((item) => {
-          const active = activeHref === item.href;
-          const Icon = item.icon;
-          return (
-            <Link key={item.href} href={item.href} onNavigate={closeMenus} aria-current={active ? 'page' : undefined} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition ${active ? 'bg-state-selected text-primary' : 'text-sidebar-text-muted hover:bg-state-hover'}`}>
-              <Icon className="h-5 w-5" />
-              <span>{item.shortName}</span>
-            </Link>
-          );
-        })}
-        {items.length > 3 && <div ref={mobileMenu} className="relative">
-          <button ref={mobileTrigger} type="button" onClick={() => setMobileMoreOpen((open) => !open)} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition hover:bg-state-hover ${mobileMoreOpen || items.slice(3).some((item) => activeHref === item.href) ? 'bg-state-selected text-primary' : 'text-sidebar-text-muted'}`} aria-label="Mais páginas" aria-expanded={mobileMoreOpen} aria-controls="mobile-more-navigation">
-            <MoreHorizontal className="h-5 w-5" />
-            <span>Mais</span>
-          </button>
-          {mobileMoreOpen && (
-            <motion.div id="mobile-more-navigation" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.18 }} className="fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] max-h-[calc(100svh-100px-env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-surface-elevated p-2 shadow-strong">
-              <p className="px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Navegação</p>
-              {items.slice(3).map((item) => {
-                const Icon = item.icon;
-                const active = activeHref === item.href;
-                return (
-                  <Link key={item.href} href={item.href} onNavigate={closeMenus} aria-current={active ? 'page' : undefined} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-state-hover ${active ? 'bg-state-selected text-primary' : 'text-text-secondary'}`}>
-                    <Icon className="h-4 w-4 shrink-0" /> <span className="flex-1">{item.name}</span>{active && <Check className="h-4 w-4" />}
-                  </Link>
-                );
-              })}
-            </motion.div>
-          )}
-        </div>}
-        <Link href="/perfil" onNavigate={closeMenus} aria-current={pathname.startsWith('/perfil') ? 'page' : undefined} className={`flex min-h-11 min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition hover:bg-state-hover ${pathname.startsWith('/perfil') ? 'bg-state-selected text-primary' : 'text-sidebar-text-muted'}`}>
-          <UserAvatar name={currentUser.name} src={currentUser.avatar} className="h-5 w-5" />
-          <span>Perfil</span>
-        </Link>
-      </nav>
+      <MobileStaffNavigation key={pathname} items={items} activeHref={activeHref} pathname={pathname}
+        onLogout={logout} logoutPending={logoutPending} logoutError={logoutError}/>
       {sidebarCollapsed && tooltip && createPortal(
         <span id="sidebar-navigation-tooltip" role="tooltip" className={styles.tooltip} style={{ top: tooltip.top, left: tooltip.left }}>{tooltip.label}</span>,
         document.body,

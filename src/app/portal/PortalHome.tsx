@@ -215,8 +215,8 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
     }
   }
   const previous = enrollments?.find(item => item.organization_id === organization);
-  return <main className="nv-content mx-auto min-h-svh max-w-5xl space-y-5 px-4 py-6 sm:space-y-6 sm:px-8 sm:py-10">
-    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-5">
+  return <main className="nv-content nv-portal-content mx-auto min-h-svh max-w-5xl space-y-5 px-4 py-6 sm:space-y-6 sm:px-8 sm:py-10">
+    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-5 max-md:pb-3">
       <div><p className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="grid size-8 place-items-center rounded-lg bg-primary/10"><Activity size={17} aria-hidden="true"/></span>NV Med</p><h1 className="nv-page-title mt-2">Portal do médico</h1></div>
       {email && <button className="nv-button-secondary" onClick={() => void logoutCurrentSession().catch(failure => setError(failure.message))}>Sair</button>}
     </header>
@@ -224,7 +224,7 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
     {!email ? <RegisterAccount organization={initialOrganization}/> : <>
       {enrollments === null && !error && <p role="status" className="nv-feedback items-center text-info"><LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true"/>Carregando credenciamento…</p>}
       {enrollments?.some(item => item.status === 'approved') && <PortalSchedule/>}
-      {enrollments?.map(item => <section key={item.doctor_id} className="space-y-3">
+      {enrollments?.map((item, index) => <section key={item.doctor_id} id={index === 0 ? 'portal-perfil' : undefined} className="space-y-3">
         <div className="nv-panel p-4 sm:p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">{item.organization}</p>
           <h2 className="mt-1 nv-section-title">{item.name}</h2>

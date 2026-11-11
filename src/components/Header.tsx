@@ -81,17 +81,17 @@ export default function Header() {
   return (
     <header className="nv-topbar sticky top-0 z-20 bg-background/95 backdrop-blur-md">
       <div className="nv-topbar-inner mx-auto w-full max-w-[112rem] px-3 py-2.5 sm:px-6 xl:px-9">
-        <div className="nv-topbar-context flex min-w-0 items-center gap-2.5">
-          <span className="hidden size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary min-[390px]:grid" aria-hidden="true">
+        <div className="nv-topbar-context flex min-w-0 items-center gap-2.5 max-md:gap-2">
+          <span className="hidden size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary min-[390px]:grid max-md:size-8" aria-hidden="true">
             <Building2 size={18} />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 max-md:flex-1">
             <p className="truncate text-[11px] font-medium text-text-muted">{currentUser.type === 'saas_admin' && !isSimulating ? 'Administração SaaS' : 'Operação médica'}</p>
             {canSwitch ? (
               <div className="relative flex min-w-0 items-center gap-0.5">
                 <select aria-label="Empresa ativa" value={activeOrganizationId} title={activeOrg?.name}
                   onChange={event => { setActiveOrganizationId(event.target.value); router.refresh(); }}
-                  className="min-h-6 min-w-0 max-w-full cursor-pointer appearance-none truncate rounded-sm pr-4 text-xs font-semibold text-text-primary sm:text-sm">
+                  className="min-h-6 min-w-0 max-w-full cursor-pointer appearance-none truncate rounded-sm pr-4 text-xs font-semibold text-text-primary sm:text-sm max-md:w-full">
                   {organizations.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
                 </select>
                 <ChevronDown size={13} aria-hidden="true" className="pointer-events-none absolute right-0 text-text-muted" />
@@ -117,11 +117,11 @@ export default function Header() {
         <div className="nv-topbar-actions flex items-center rounded-full border border-border bg-surface p-0.5 shadow-soft sm:gap-0.5 sm:p-1">
           {showSearch && <button type="button" className={actions} aria-label="Pesquisar na empresa" aria-haspopup="dialog" title="Pesquisar na empresa" onClick={() => setSearchOpen(true)}><Search size={18} aria-hidden="true" /></button>}
           <NotificationInbox key={currentUser.id} variant="header" documentAlerts={documentAlerts} />
-          <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={actions}
+          <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`${actions} nv-topbar-secondary`}
             aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}>
             {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
-          <div ref={profileMenu} className="relative border-l border-border pl-0.5 sm:pl-1">
+          <div ref={profileMenu} className="nv-topbar-secondary relative border-l border-border pl-0.5 sm:pl-1">
             <button ref={profileTrigger} type="button" onClick={() => { setProfileOpen(open => !open); setLogoutError(''); }}
               className="flex h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-full transition-colors hover:bg-state-hover sm:gap-2 sm:pl-1 sm:pr-2"
               aria-label={`Abrir menu do perfil de ${currentUser.name}`} aria-expanded={profileOpen} aria-controls={profileOpen ? 'header-profile-menu' : undefined}>

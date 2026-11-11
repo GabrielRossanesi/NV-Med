@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Repeat2, XCircle } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock3, List, Repeat2, UserRound, XCircle } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import EmploymentBadge from '@/components/schedule/EmploymentBadge';
 import type { EmploymentType } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
 import PresencePanel from '@/components/schedule/PresencePanel';
+import { useLocationHash } from '@/components/useLocationHash';
 
 type Status = 'open' | 'exchange' | 'confirmed' | 'cancelled' | 'completed' | 'pending';
 type ApplicationStatus = 'pending' | 'selected' | 'not_selected' | 'cancelled';
@@ -91,6 +92,7 @@ export default function PortalSchedule() {
   const [today] = useState(() => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const [month, setMonth] = useState(today.slice(0, 7));
   const [day, setDay] = useState(today);
+  const hash = useLocationHash();
   const [tab, setTab] = useState<'agenda' | 'schedule' | 'applications'>('agenda');
   const [schedule, setSchedule] = useState<Shift[] | null>(null);
   const [applications, setApplications] = useState<Application[] | null>(null);
@@ -131,14 +133,32 @@ export default function PortalSchedule() {
     existing.push(shift);
     grouped.set(shift.date, existing);
   }
-  return <section className="nv-panel space-y-4 p-4 sm:p-6">
+  function selectTab(value: typeof tab) {
+    if (tab === value) return;
+    setTab(value);
+    setSchedule(null);
+    setApplications(null);
+    setError('');
+    setNotice('');
+  }
+  const tabs = [
+    { value: 'agenda', desktop: 'Minha agenda', mobile: 'Agenda', icon: CalendarDays },
+    { value: 'schedule', desktop: 'Escalas', mobile: 'Escalas', icon: List },
+    { value: 'applications', desktop: 'Minhas candidaturas', mobile: 'Candidaturas', icon: ClipboardList },
+  ] as const;
+  return <section id="portal-plantoes" className="nv-panel space-y-4 p-4 sm:p-6">
     <h2 className="nv-section-title flex items-center gap-2"><CalendarDays size={21} className="text-primary"/>Plantões</h2>
-    <nav aria-label="Visualizações dos plantões" className="nv-segment">
-      {(['agenda', 'schedule', 'applications'] as const).map(value => <button key={value} type="button"
-        aria-pressed={tab === value} onClick={() => {
-          if (tab === value) return;
-          setTab(value); setSchedule(null); setApplications(null); setError(''); setNotice('');
-        }}>{value === 'agenda' ? 'Minha agenda' : value === 'schedule' ? 'Escalas' : 'Minhas candidaturas'}</button>)}
+    <nav aria-label="Visualizações dos plantões" className="nv-segment max-md:hidden">
+      {tabs.map(({ value, desktop }) => <button key={value} type="button" aria-pressed={tab === value} onClick={() => selectTab(value)}>{desktop}</button>)}
+    </nav>
+    <nav className="nv-mobile-bar md:hidden" aria-label="Navegação do médico">
+      {tabs.map(({ value, mobile, icon: Icon }) => <a key={value} href="#portal-plantoes" className="nv-mobile-link"
+        aria-current={tab === value && hash !== '#portal-perfil' ? 'location' : undefined} onClick={() => selectTab(value)}>
+        <Icon size={20} aria-hidden="true"/><span>{mobile}</span>
+      </a>)}
+      <a href="#portal-perfil" className="nv-mobile-link" aria-current={hash === '#portal-perfil' ? 'location' : undefined}>
+        <UserRound size={20} aria-hidden="true"/><span>Perfil</span>
+      </a>
     </nav>
     {notice && <p role="status" className="nv-feedback text-success">{notice}</p>}
     {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
