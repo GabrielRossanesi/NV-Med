@@ -9,7 +9,9 @@ CREATE TABLE auth.users (
   raw_app_meta_data jsonb DEFAULT '{}'::jsonb, updated_at timestamptz DEFAULT now(),
   banned_until timestamptz, deleted_at timestamptz
 );
-CREATE TABLE auth.sessions (id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id), created_at timestamptz);
+CREATE TABLE auth.sessions (
+  id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id), created_at timestamptz, not_after timestamptz
+);
 CREATE TABLE auth.identities (id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id));
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;

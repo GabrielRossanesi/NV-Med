@@ -300,15 +300,37 @@ END $$;
 RESET ROLE;
 
 INSERT INTO storage.objects(bucket_id,name) VALUES ('medical-documents','nv-portal-a/' || current_setting('nv.test.doctor_a') || '/teste.pdf');
+INSERT INTO auth.sessions(id,user_id,created_at,not_after) VALUES
+  ('29000000-0000-4000-8000-000000000004','19000000-0000-4000-8000-000000000002',now(),NULL),
+  ('29000000-0000-4000-8000-000000000005','19000000-0000-4000-8000-000000000003',now(),NULL),
+  ('29000000-0000-4000-8000-000000000006','19000000-0000-4000-8000-000000000002',now() - interval '2 days',now() - interval '1 day'),
+  ('29000000-0000-4000-8000-000000000007','19000000-0000-4000-8000-000000000001',now(),NULL);
 SET LOCAL ROLE service_role;
-DO $$ BEGIN
-  IF NOT public.nv_save_portal_document('19000000-0000-4000-8000-000000000002',current_setting('nv.test.document'),
-    'nv-portal-a/' || current_setting('nv.test.doctor_a') || '/teste.pdf','teste.pdf',NULL) THEN
+SELECT set_config('request.jwt.claims','{"role":"service_role"}',true);
+DO $$ DECLARE
+  actor uuid := '19000000-0000-4000-8000-000000000002';
+  valid_session uuid := '29000000-0000-4000-8000-000000000004';
+  foreign_session uuid := '29000000-0000-4000-8000-000000000005';
+  expired_session uuid := '29000000-0000-4000-8000-000000000006';
+  doc text := current_setting('nv.test.document');
+  path text := 'nv-portal-a/' || current_setting('nv.test.doctor_a') || '/teste.pdf';
+  original_claims text := current_setting('request.jwt.claims');
+BEGIN
+  IF public.nv_save_portal_document(actor,doc,path,'teste.pdf',NULL)
+    OR public.nv_save_portal_document(actor,doc,path,'teste.pdf',NULL,foreign_session)
+    OR public.nv_save_portal_document(actor,doc,path,'teste.pdf',NULL,expired_session) THEN
+    RAISE EXCEPTION 'FAIL: upload accepted without a live matching session';
+  END IF;
+  IF NOT public.nv_save_portal_document(actor,doc,path,'teste.pdf',NULL,valid_session) THEN
     RAISE EXCEPTION 'FAIL: authorized document upload';
   END IF;
-  IF public.nv_save_portal_document('19000000-0000-4000-8000-000000000003',current_setting('nv.test.document'),
-    'nv-portal-a/' || current_setting('nv.test.doctor_a') || '/teste.pdf','teste.pdf',
-    'nv-portal-a/' || current_setting('nv.test.doctor_a') || '/teste.pdf') THEN RAISE EXCEPTION 'FAIL: foreign document write'; END IF;
+  IF public.nv_save_portal_document('19000000-0000-4000-8000-000000000003',doc,path,'teste.pdf',path,foreign_session) THEN
+    RAISE EXCEPTION 'FAIL: foreign document write';
+  END IF;
+  IF current_setting('request.jwt.claims') IS DISTINCT FROM original_claims
+    OR nullif(current_setting('nvmed.document_upload_actor',true),'') IS NOT NULL THEN
+    RAISE EXCEPTION 'FAIL: upload changed the request identity or leaked the audit actor';
+  END IF;
 END $$;
 RESET ROLE;
 SET LOCAL ROLE authenticated;
@@ -373,15 +395,23 @@ INSERT INTO storage.objects(bucket_id,name) VALUES
 SET LOCAL ROLE service_role;
 DO $$ DECLARE doc text := current_setting('nv.test.document'); folder text := 'nv-portal-a/' || current_setting('nv.test.doctor_a'); BEGIN
   IF public.nv_save_portal_document('19000000-0000-4000-8000-000000000002',doc,
-    'nv-portal-a/' || current_setting('nv.test.doctor_b') || '/outro.pdf','outro.pdf',folder || '/teste.pdf') THEN
+    'nv-portal-a/' || current_setting('nv.test.doctor_b') || '/outro.pdf','outro.pdf',folder || '/teste.pdf',
+    '29000000-0000-4000-8000-000000000004') THEN
     RAISE EXCEPTION 'FAIL: foreign storage key accepted';
   END IF;
-  IF NOT public.nv_save_portal_document('19000000-0000-4000-8000-000000000002',doc,
-    folder || '/substituto.png','substituto.png',folder || '/teste.pdf') THEN RAISE EXCEPTION 'FAIL: upload replacement'; END IF;
+  IF NOT public.nv_save_portal_document('19000000-0000-4000-8000-000000000001',doc,
+    folder || '/substituto.png','substituto.png',folder || '/teste.pdf',
+    '29000000-0000-4000-8000-000000000007') THEN RAISE EXCEPTION 'FAIL: staff upload replacement'; END IF;
   IF public.nv_save_portal_document('19000000-0000-4000-8000-000000000002',doc,
-    folder || '/teste.pdf','teste.pdf',folder || '/teste.pdf') THEN RAISE EXCEPTION 'FAIL: stale update overwrote replacement'; END IF;
+    folder || '/teste.pdf','teste.pdf',folder || '/teste.pdf',
+    '29000000-0000-4000-8000-000000000004') THEN RAISE EXCEPTION 'FAIL: stale update overwrote replacement'; END IF;
 END $$;
 RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.document_audit_logs WHERE document_id=current_setting('nv.test.document')
+    AND actor_auth_id='19000000-0000-4000-8000-000000000001' AND actor_user_id='nv-portal-admin'
+    AND action='file_replaced') THEN RAISE EXCEPTION 'FAIL: staff upload audit actor'; END IF;
+END $$;
 SELECT set_config('nv.test.revision',(SELECT id::text FROM public.document_audit_logs
   WHERE document_id = current_setting('nv.test.document') AND action = 'file_replaced' LIMIT 1),true);
 

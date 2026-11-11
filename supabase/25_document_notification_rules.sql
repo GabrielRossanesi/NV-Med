@@ -126,9 +126,21 @@ FOR EACH ROW EXECUTE FUNCTION public.nv_validate_document_review();
 ALTER TABLE public.document_audit_logs ADD COLUMN actor_auth_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 CREATE FUNCTION public.nv_document_audit_actor()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE physician_name text;
+DECLARE
+  physician_name text;
+  profile_id text;
+  profile_name text;
 BEGIN
   NEW.actor_auth_id := auth.uid();
+  -- The service-only upload supplies an audit actor without impersonating the caller.
+  IF current_setting('role', true) = 'service_role'
+    AND nullif(current_setting('nvmed.document_upload_actor', true), '') IS NOT NULL THEN
+    NEW.actor_auth_id := current_setting('nvmed.document_upload_actor')::uuid;
+    SELECT id, name INTO profile_id, profile_name
+    FROM public.user_accounts WHERE auth_user_id = NEW.actor_auth_id;
+    NEW.actor_user_id := profile_id;
+    NEW.actor_name := coalesce(profile_name, NEW.actor_name);
+  END IF;
   IF NEW.actor_user_id IS NULL THEN
     SELECT d.name INTO physician_name FROM public.doctor_enrollments e JOIN public.doctors d ON d.id = e.doctor_id
     WHERE e.doctor_id = NEW.doctor_id AND e.auth_user_id = NEW.actor_auth_id;
@@ -183,6 +195,25 @@ RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
     AND path ~ '^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+\.(pdf|jpe?g|png)$', false);
 $$;
 
+CREATE FUNCTION public.nv_document_upload_allowed(actor uuid, org text, doctor text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.doctor_enrollments e
+    JOIN public.doctors d ON d.id = e.doctor_id AND d.organization_id = e.organization_id
+    JOIN public.organizations o ON o.id = e.organization_id
+    WHERE e.organization_id = org AND e.doctor_id = doctor AND e.auth_user_id = actor
+      AND d.status <> 'inactive' AND o.status = 'active' AND e.status <> 'rejected'
+      AND (NOT e.legacy_link OR e.status = 'approved')
+  ) OR EXISTS (
+    SELECT 1 FROM public.user_accounts u
+    WHERE u.auth_user_id = actor AND u.status = 'active'
+      AND ((u.type = 'saas_admin' AND u.role IN ('CEO','Gerente','Coordenador','Jurídico'))
+        OR (u.type = 'tenant_user' AND u.organization_id = org AND
+          (u.role IN ('Diretor','Gerente','Coordenador de Escalas','Jurídico')
+            OR u.additional_permissions->>'documentos' = 'edit')))
+  );
+$$;
+
 CREATE FUNCTION public.nv_portal_document_target(target text, operation text DEFAULT 'read', revision uuid DEFAULT NULL)
 RETURNS TABLE(doctor_id text, organization_id text, file_path text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -195,8 +226,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     SELECT CASE WHEN revision IS NULL THEN d.file_path ELSE history.changes->>'previousFilePath' END AS path
   ) candidate
   WHERE d.id = target AND (
-    (operation = 'write' AND revision IS NULL AND (public.nv_owns_doctor(d.organization_id, d.doctor_id) OR
-      (public.nv_can_read_documents(d.organization_id) AND public.nv_can_write(d.organization_id,'medical_documents'))))
+    (operation = 'write' AND revision IS NULL
+      AND public.nv_document_upload_allowed(public.nv_session_actor(), d.organization_id, d.doctor_id))
     OR
     (operation = 'read' AND (public.nv_can_read_documents(d.organization_id) OR
       (revision IS NULL AND public.nv_owns_doctor(d.organization_id, d.doctor_id)))
@@ -209,12 +240,13 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
 $$;
 
 CREATE FUNCTION public.nv_save_portal_document(actor uuid, target text, path text, filename text, previous_path text, actor_session uuid DEFAULT NULL)
-RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
-SET request.jwt.claims = '' SET request.jwt.claim = '' SET request.jwt.claim.sub = '' AS $$
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  previous_audit_actor text := current_setting('nvmed.document_upload_actor', true);
+  saved boolean;
 BEGIN
-  IF actor IS NULL THEN RETURN false; END IF;
-  PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', actor, 'session_id', actor_session)::text, true);
-  PERFORM set_config('request.jwt.claim.sub', actor::text, true);
+  IF actor IS NULL OR actor_session IS NULL THEN RETURN false; END IF;
+  PERFORM set_config('nvmed.document_upload_actor', actor::text, true);
   UPDATE public.medical_documents d SET file_path = path, file_name = filename, file_url = NULL,
     status = 'sent', upload_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date::text,
     expiry_date = NULL, review_note = NULL, reviewed_by = NULL, reviewed_at = NULL
@@ -222,12 +254,23 @@ BEGIN
     AND public.nv_document_path_matches(d.organization_id, d.doctor_id, path)
     AND EXISTS (SELECT 1 FROM storage.objects obj JOIN storage.buckets b ON b.id = obj.bucket_id
       WHERE b.id = 'medical-documents' AND b.public = false AND obj.name = path)
-    AND (public.nv_owns_doctor(d.organization_id, d.doctor_id) OR
-      (public.nv_can_read_documents(d.organization_id) AND public.nv_can_write(d.organization_id,'medical_documents')));
-  RETURN FOUND;
+    AND EXISTS (
+      SELECT 1 FROM auth.users u JOIN auth.sessions s ON s.user_id = u.id
+      WHERE u.id = actor AND s.id = actor_session AND (s.not_after IS NULL OR s.not_after > now())
+        AND u.deleted_at IS NULL AND (u.banned_until IS NULL OR u.banned_until <= now())
+        AND u.raw_app_meta_data->>'must_change_password' IS DISTINCT FROM 'true'
+        AND (u.raw_app_meta_data->>'password_changed_at' IS NULL
+          OR s.created_at >= (u.raw_app_meta_data->>'password_changed_at')::timestamptz)
+        AND NOT EXISTS (SELECT 1 FROM public.user_accounts p WHERE p.auth_user_id = u.id AND p.status <> 'active')
+    )
+    AND public.nv_document_upload_allowed(actor, d.organization_id, d.doctor_id);
+  saved := FOUND;
+  PERFORM set_config('nvmed.document_upload_actor', coalesce(previous_audit_actor, ''), true);
+  RETURN saved;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.nv_document_path_matches(text,text,text),
+  public.nv_document_upload_allowed(uuid,text,text),
   public.nv_save_portal_document(uuid,text,text,text,text,uuid),
   public.nv_portal_document_target(text,text,uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.nv_portal_document_target(text,text,uuid) TO authenticated;
