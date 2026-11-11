@@ -5,6 +5,7 @@ import { buildReportCsv, buildReportWorkbook } from '@/lib/shiftReportExport';
 import { buildReportPdf } from '@/lib/shiftReportPdf';
 import { summarizeReport } from '@/lib/reportSummary';
 import { financeStateLabels } from '@/lib/financeState';
+import { employmentLabels } from '@/lib/scheduling';
 import {
   presenceReportStates, reportFilterKeys, reportFrequencyLabels, reportPeriodLabels, shiftReportStates,
   type ReportCatalog, type ShiftReport,
@@ -26,6 +27,7 @@ function describe(filters: Record<string, string>, catalog?: ReportCatalog) {
     ['Setor', filters.sector && (catalog?.sectors.find(item => item.id === filters.sector)?.name || filters.sector)],
     ['Médico', filters.doctor && (catalog?.doctors.find(item => item.id === filters.doctor)?.name || filters.doctor)],
     ['Especialidade', filters.specialty], ['Plantão', filters.shift_id],
+    ['Contratação', filters.employment && labels({ ...employmentLabels, undefined: 'Não definida' }, filters.employment)],
     ['Início a partir de', filters.start_hour], ['Fim até', filters.end_hour],
     ['Turno', filters.period && labels(reportPeriodLabels, filters.period)],
     ['Situação do plantão', filters.state && labels({ active: 'Ativos', ...shiftReportStates }, filters.state)],

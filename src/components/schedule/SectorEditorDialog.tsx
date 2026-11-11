@@ -2,10 +2,12 @@
 
 import { useId, useState } from 'react';
 import Dialog from '@/components/Dialog';
-import { canPerformAction } from '@/lib/permissions';
-import { coveragePeriodLabel, sectorCoveragePeriods } from '@/lib/scheduling';
+import { canEditPermission, canPerformAction, canViewPermission } from '@/lib/permissions';
+import { coveragePeriodLabel, paymentFrequencyLabels, sectorCoveragePeriods } from '@/lib/scheduling';
+import { formatShiftMoneyInput, parseMoneyCents, sectorFinanceDefaults } from '@/lib/shiftPricing';
+import { useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
 import { useStore } from '@/store/useStore';
-import type { CoveragePeriodKind, Sector, Unit } from '@/types';
+import type { CoveragePeriodKind, PaymentFrequency, Sector, SectorFinanceDefaults, Unit } from '@/types';
 
 type Props = {
   unit: Unit; organizationName: string; specialties: string[]; sector?: Sector; initialSpecialty?: string;
@@ -14,6 +16,8 @@ type Props = {
 const defaultCoverage = (kind: CoveragePeriodKind): Sector['coveragePeriods'][number] => ({
   kind, startTime: kind === 'day' ? '07:00' : '19:00', endTime: kind === 'day' ? '19:00' : '07:00', requiredDoctors: 1,
 });
+type FinanceDraft = { amount: string; day: string; night: string; frequency: PaymentFrequency | ''; notes: string };
+const moneyInput = (cents: number | null) => cents == null ? '' : formatShiftMoneyInput(cents);
 
 export default function SectorEditorDialog({ unit, organizationName, specialties, sector, initialSpecialty, initialPeriod, onClose, onSaved }: Props) {
   const id = useId();
@@ -24,8 +28,16 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
   const [selected, setSelected] = useState(sector?.specialties || (initialSpecialty ? [initialSpecialty] : []));
   const [periods, setPeriods] = useState(sector ? sectorCoveragePeriods(sector) : [initialPeriod || defaultCoverage('day')]);
   const [error, setError] = useState('');
+  const [financialDraft, setFinancialDraft] = useState<FinanceDraft>();
   const available = [...new Set([...specialties, ...(sector?.specialties || [])])];
   const canSave = canPerformAction(store.currentUser, 'unidades', sector ? 'edit' : 'create');
+  const canSeeFinance = canViewPermission(store.currentUser, 'financeiro');
+  const canEditFinance = canSave && canEditPermission(store.currentUser, 'financeiro');
+  const rateQuery = useShiftRates(unit.organizationId, Boolean(sector) && canSeeFinance);
+  const configured = sectorFinanceDefaults(rateQuery.rates, sector?.id);
+  const finance = financialDraft ?? { amount: moneyInput(configured.amount_cents), day: moneyInput(configured.day_cents),
+    night: moneyInput(configured.night_cents), frequency: configured.frequency || '', notes: configured.notes };
+  const changeFinance = (patch: Partial<FinanceDraft>) => setFinancialDraft({ ...finance, ...patch });
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -36,7 +48,17 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
     const payload = { name: name.trim(), description: description.trim(), specialties: selected, status, unitId: unit.id,
       defaultStartTime: primary.startTime, defaultEndTime: primary.endTime, requiredDoctors: primary.requiredDoctors, coveragePeriods: periods };
     const updated = sector && { ...payload, id: sector.id, organizationId: sector.organizationId };
-    const saved = updated ? (await store.updateSector(updated) ? updated : null) : await store.addSector(payload);
+    let defaults: SectorFinanceDefaults | undefined;
+    if (financialDraft && canEditFinance) {
+      const value = (text: string) => text.trim() ? parseMoneyCents(text) : null;
+      const day = periods.some(period => period.kind === 'day') ? finance.day : '';
+      const night = periods.some(period => period.kind === 'night') ? finance.night : '';
+      if ([finance.amount, day, night].some(text => text.trim() && value(text) == null)) {
+        return setError('Informe os valores em reais, com até duas casas decimais.');
+      }
+      defaults = { amount_cents: value(finance.amount), day_cents: value(day), night_cents: value(night), frequency: finance.frequency || null, notes: finance.notes.trim() };
+    }
+    const saved = updated ? (await store.updateSector(updated, defaults) ? updated : null) : await store.addSector(payload, defaults);
     if (saved) onSaved(saved);
     else setError(useStore.getState().error || 'Não foi possível salvar o setor.');
   }
@@ -67,6 +89,20 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
           </div>;
         })}</div>
       </fieldset>
+      {canSeeFinance && (sector || canEditFinance) && <fieldset className="min-w-0 space-y-3 rounded-xl border border-border p-3">
+        <legend className="px-1 text-sm font-semibold">Configuração financeira</legend>
+        <p className="text-xs text-text-muted">Referências para novos plantões. Uma regra em Valores de plantões pode ter prioridade no mesmo recorte. Valores já acordados são preservados.</p>
+        {sector && !rateQuery.ready ? <p role="status" className="text-xs text-text-muted">{rateQuery.error || 'Carregando referências…'}{rateQuery.error && <button type="button" className="ml-2 text-primary underline" onClick={rateQuery.reload}>Tentar novamente</button>}</p> :
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="nv-label">Valor padrão do plantão (R$)<input className="nv-input" inputMode="decimal" placeholder="Sem valor padrão" readOnly={!canEditFinance} value={finance.amount} onChange={event => changeFinance({ amount: event.target.value })}/></label>
+              <label className="nv-label">Modalidade padrão<select aria-label="Modalidade padrão" className="nv-input" disabled={!canEditFinance} value={finance.frequency} onChange={event => changeFinance({ frequency: event.target.value as FinanceDraft['frequency'] })}><option value="">Sem modalidade padrão</option>{Object.entries(paymentFrequencyLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+              {(['day', 'night'] as const).filter(kind => periods.some(period => period.kind === kind)).map(kind => <label key={kind} className="nv-label">Valor {coveragePeriodLabel(kind).toLowerCase()} (R$)
+                <input className="nv-input" inputMode="decimal" placeholder="Usar valor padrão" readOnly={!canEditFinance} value={finance[kind]} onChange={event => changeFinance({ [kind]: event.target.value })}/></label>)}
+            </div>
+            <label className="nv-label">Observações financeiras<textarea className="nv-input" maxLength={1000} rows={2} placeholder="Opcional" readOnly={!canEditFinance} value={finance.notes} onChange={event => changeFinance({ notes: event.target.value })}/></label>
+          </>}
+      </fieldset>}
       {sector && <label className="nv-label">Situação<select className="nv-input" value={status} onChange={event => setStatus(event.target.value as Sector['status'])}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </form>

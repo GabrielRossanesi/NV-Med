@@ -6,10 +6,12 @@ import {
   Doctor,
   Unit,
   Sector,
+  SectorFinanceDefaults,
   MedicalDocument,
   Shift,
   ShiftWrite,
   ShiftRate,
+  ShiftRateRow,
   ShiftAgreementSelection,
   UserAccount,
   DocumentStatus,
@@ -139,7 +141,7 @@ interface DbShift {
   specialty?: string;
   employment_type?: Shift['employmentType'];
   employer_name?: string;
-  payment_amount?: number | string;
+  payment_amount?: number | string | null;
   payment_status?: Shift['paymentStatus'];
   payment_frequency?: Shift['paymentFrequency'];
   paid_at?: string | null;
@@ -304,7 +306,7 @@ function mapShiftFromDb(row: DbShift): Shift {
     specialty: row.specialty,
     employmentType: row.employment_type,
     employerName: row.employer_name,
-    paymentAmount: Number(row.payment_amount || 0),
+    paymentAmount: row.payment_amount == null ? undefined : Number(row.payment_amount),
     paymentStatus: row.payment_status || 'pending',
     paymentFrequency: row.payment_frequency || 'on_delivery',
     paidAt: row.paid_at || undefined,
@@ -485,7 +487,7 @@ export async function deleteUnitFromSupabase(unitId: string) {
   if (error) throw new Error('Não foi possível excluir: ' + error.message);
 }
 
-export async function saveSectorToSupabase(sector: Sector, creating = false) {
+export async function saveSectorToSupabase(sector: Sector, creating = false, finance?: SectorFinanceDefaults) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
   const payload: DbSector = {
@@ -502,7 +504,9 @@ export async function saveSectorToSupabase(sector: Sector, creating = false) {
     coverage_periods: sector.coveragePeriods
   };
   const table = supabase.from('sectors');
-  const { error } = await (creating ? table.insert(payload) : table.update(payload).eq('id', sector.id)).select('id').single();
+  const { error } = finance
+    ? await supabase.rpc('nv_save_sector_with_finance', { sector: payload, creating, defaults: finance })
+    : await (creating ? table.insert(payload) : table.update(payload).eq('id', sector.id)).select('id').single();
   if (error?.code === '23505' || error?.message.includes('sectors_unit_name_unique')) throw new Error('Já existe um setor com este nome nesta unidade. Edite o setor existente para incluir o período diurno ou noturno.');
   if (error) throw new Error('Não foi possível salvar o setor: ' + error.message);
 }
@@ -532,7 +536,7 @@ export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
     specialty: shift.specialty,
     employment_type: shift.employmentType,
     employer_name: shift.employerName,
-    payment_amount: shift.paymentAmount || 0,
+    payment_amount: shift.paymentAmount ?? null,
     payment_status: shift.paymentStatus || 'pending',
     payment_frequency: shift.paymentFrequency || 'on_delivery',
     paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
@@ -620,7 +624,7 @@ export async function fetchShiftRates(organization: string) {
   if (!client) throw new Error('Conexão não configurada.');
   const { data, error } = await client.rpc('nv_shift_rates', { org: organization });
   if (error) throw new Error('Não foi possível consultar os valores padrão.');
-  return data as ShiftRate[];
+  return data as ShiftRateRow[];
 }
 
 export async function saveShiftRate(organization: string, target: string | null, rule: Omit<ShiftRate, 'organization_id' | 'id'>) {

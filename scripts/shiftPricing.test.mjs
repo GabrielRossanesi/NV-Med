@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildAgreementSelection, chooseShiftRate, initialAgreementDraft, parseMoneyCents, shiftDurationMinutes } from '../src/lib/shiftPricing.ts';
+import { buildAgreementSelection, buildRequiredPjAgreement, chooseShiftRate, initialAgreementDraft, parseMoneyCents, sectorFinanceDefaults, shiftDurationMinutes } from '../src/lib/shiftPricing.ts';
 
 const shift = { organizationId: 'a', unitId: 'u', sectorId: 's', doctorId: 'd', specialty: 'Cirurgia', startTime: '19:00', endTime: '07:00', type: 'onsite' };
 const general = { id: 'general', organization_id: 'a', amount_cents: 95000, active: true };
@@ -44,4 +44,33 @@ test('a change of modality sends the recorded financial baseline and requires a 
   assert.equal(selection.mode, 'keep');
   assert.equal(selection.expected_amount_cents, 120000);
   assert.equal(selection.expected_changed_at, previous.paymentAgreement.changed_at);
+});
+
+test('an open shift can keep a quote, omit the amount, or explicitly record zero', () => {
+  const vacancy = { ...shift, id: 'vacancy', doctorId: undefined, paymentAmount: 1200, paymentFrequency: 'monthly' };
+  assert.equal(buildAgreementSelection(initialAgreementDraft(vacancy), post, vacancy), undefined);
+  assert.equal(buildAgreementSelection(initialAgreementDraft()), undefined);
+  assert.equal(buildAgreementSelection({ ...initialAgreementDraft(), frequency: 'monthly' }).mode, 'keep');
+  assert.equal(buildAgreementSelection({ ...initialAgreementDraft(), mode: 'manual', amount: '0' }).amount_cents, 0);
+  assert.throws(() => buildAgreementSelection({ ...initialAgreementDraft(), mode: 'override', amount: '1', overrideReason: 'Exceção' }), /Sem referência/);
+  const edit = { ...initialAgreementDraft(vacancy), frequency: 'on_delivery', reason: 'Prazo combinado' };
+  assert.equal(buildAgreementSelection(edit, post, vacancy).expected_amount_cents, 120000);
+});
+
+test('post settings supply modality even without a default price and detailed pricing wins a tie', () => {
+  const info = { ...general, id: 'info', unit_id: 'u', sector_id: 's', turn: null, post_default: true, amount_cents: null, payment_frequency: 'monthly', financial_notes: 'Interno' };
+  const turn = { ...info, id: 'turn', turn: 'night', amount_cents: 120000 };
+  const pricing = { ...turn, id: 'pricing', post_default: false, amount_cents: 125000 };
+  const rates = [info, turn, pricing];
+  assert.equal(sectorFinanceDefaults(rates, 's').frequency, 'monthly');
+  assert.equal(sectorFinanceDefaults(rates, 's').night_cents, 120000);
+  assert.equal(chooseShiftRate([info], shift), undefined);
+  assert.equal(chooseShiftRate(rates, shift).id, 'pricing');
+});
+
+test('a fresh PJ agreement requires its own price even if the payment frequency was chosen', () => {
+  const draft = { ...initialAgreementDraft(), frequency: 'monthly', frequencyEdited: true };
+  assert.throws(() => buildRequiredPjAgreement(draft), /valor combinado/);
+  assert.equal(buildRequiredPjAgreement(draft, post).rate_cents, 120000);
+  assert.equal(buildRequiredPjAgreement({ ...draft, mode: 'manual', amount: '1400,00' }).amount_cents, 140000);
 });

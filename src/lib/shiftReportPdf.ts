@@ -1,5 +1,6 @@
 import { PDFDocument, PageSizes, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { financeStateLabels } from './financeState.ts';
+import { employmentLabel } from './scheduling.ts';
 import { formatReportMoney, summarizeReport } from './reportSummary.ts';
 import { presenceReportStates, reportFrequencyLabels, reportPeriodLabels, shiftReportStates, type ReportRow, type ShiftReport } from './shiftReport.ts';
 
@@ -50,7 +51,7 @@ function columns(report: ShiftReport): Column[] {
   const core: Column[] = [
     { title: 'Data / horário', width: 85, field: row => [date(row.date), row.start_time + '–' + row.end_time, row.period && reportPeriodLabels[row.period]].filter(Boolean).join('\n') },
     { title: 'Unidade / setor', width: 142, field: row => [row.unit, row.sector, row.specialty].filter(Boolean).join('\n') },
-    { title: 'Médico', width: 123, field: row => [row.doctor || 'Vaga aberta', report.finance && row.crm].filter(Boolean).join('\n') },
+    { title: 'Médico / contratação', width: 123, field: row => [row.doctor || 'Vaga aberta', employmentLabel(row.employment), report.finance && row.crm].filter(Boolean).join('\n') },
     { title: 'Situação', width: 103, field: row => [shiftReportStates[row.status], report.finance && row.payment && financeStateLabels[row.payment],
       report.finance && row.frequency && reportFrequencyLabels[row.frequency]].filter(Boolean).join('\n') },
   ];

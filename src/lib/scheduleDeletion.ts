@@ -46,12 +46,14 @@ export function vacateShift(shift: Shift): Shift {
   return {
     ...shift,
     doctorId: undefined,
-    employmentType: undefined,
     employerName: undefined,
-    paymentAmount: 0,
+    paymentAmount: undefined,
     paymentStatus: 'pending',
     paymentFrequency: 'on_delivery',
     paidAt: undefined,
+    paidAmount: undefined,
+    paymentDueDate: undefined,
+    paymentAgreement: undefined,
     status: 'open',
   };
 }

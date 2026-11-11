@@ -1,26 +1,29 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, ArrowRightLeft, ChevronLeft, ChevronRight, Clock3, Copy, List, LoaderCircle, Moon, Plus, Repeat2, Sun, Trash2, UserRoundPlus, Users } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
+import EmploymentBadge from '@/components/schedule/EmploymentBadge';
 import ScheduleCalendarView from '@/components/schedule/ScheduleCalendarView';
+import MobileScheduleMonth, { type MobileDay } from '@/components/schedule/MobileScheduleMonth';
 import ScheduleDoctorView from '@/components/schedule/ScheduleDoctorView';
 import ScheduleSpecialtyView from '@/components/schedule/ScheduleSpecialtyView';
 import SectorEditorDialog from '@/components/schedule/SectorEditorDialog';
 import { scopedSpecialties } from '@/lib/sectorSpecialties';
+import { moveScheduleMonth } from '@/lib/scheduleMonth';
 import ScheduleDeleteDialog from '@/components/schedule/ScheduleDeleteDialog';
 import ShiftSelectionPanel from '@/components/schedule/ShiftSelectionPanel';
 import PresencePanel from '@/components/schedule/PresencePanel';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
 import ShiftRecordSummary, { shiftRecordStatusLabels as statusLabels } from '@/components/schedule/ShiftRecordSummary';
 import { createClient } from '@/lib/supabase/client';
-import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
+import { fetchInitialDataFromSupabase, fetchShiftRates } from '@/services/supabaseService';
 import type { ScheduleDeletionScope, ScheduleDeletionSelection } from '@/lib/scheduleDeletion';
-import { buildRecurringDates, copyableRegularShifts, coverageKindForShift, coveragePeriodLabel, employmentLabels, hasConflict, localDate, sectorCoveragePeriods, statusAfterDoctorSelection, summarizeSectorCoverage, type ShiftRecurrence } from '@/lib/scheduling';
-import { buildAgreementSelection, chooseShiftRate, initialAgreementDraft, shiftTypeLabels as typeLabels } from '@/lib/shiftPricing';
+import { buildRecurringDates, copyableRegularShifts, coverageKindForShift, coveragePeriodLabel, employmentLabels, hasConflict, localDate, paymentFrequencyLabels, sectorCoveragePeriods, statusAfterDoctorSelection, summarizeSectorCoverage, type ShiftRecurrence } from '@/lib/scheduling';
+import { buildAgreementSelection, buildRequiredPjAgreement, chooseShiftRate, formatShiftMoney, formatShiftMoneyInput, initialAgreementDraft, sectorFinanceDefaults, shiftTypeLabels as typeLabels } from '@/lib/shiftPricing';
 import { canEditPermission, canPerformAction, canViewPermission } from '@/lib/permissions';
 import { doctorScheduleCompliance } from '@/lib/documentGovernance';
 import { useStore } from '@/store/useStore';
@@ -28,6 +31,15 @@ import type { CoveragePeriodKind, Doctor, EmploymentType, Sector, Shift, ShiftWr
 
 type ViewMode = 'week' | 'month' | 'doctor' | 'specialty' | 'list';
 type CoverageFilter = 'all' | 'deficit' | 'open' | 'conflict' | 'pending' | 'complete';
+const mobileViewKey = 'nvmed:mobile-schedule-view';
+function subscribeMobile(callback: () => void) {
+  const query = window.matchMedia('(max-width: 767px)');
+  query.addEventListener('change', callback);
+  return () => query.removeEventListener('change', callback);
+}
+function readMobileView() {
+  try { return window.localStorage.getItem(mobileViewKey) === 'list' ? 'list' : 'month'; } catch { return 'month'; }
+}
 
 function addDays(value: string, amount: number) { const date = new Date(value + 'T12:00:00'); date.setDate(date.getDate() + amount); return localDate(date); }
 function endOfMonth(value: string) { const day = new Date(value + 'T12:00:00'); return localDate(new Date(day.getFullYear(), day.getMonth() + 1, 0, 12)); }
@@ -49,7 +61,24 @@ function toNewShift(shift: ShiftWrite): Omit<ShiftWrite, 'id' | 'organizationId'
   return { coverageMode: shift.coverageMode || 'regular', coverageReason: shift.coverageReason, sectorId: shift.sectorId, sector: shift.sector, specialty: shift.specialty, employmentType: shift.employmentType, employerName: shift.employerName, paymentAmount: shift.paymentAmount, paymentStatus: shift.paymentStatus, paymentFrequency: shift.paymentFrequency, paidAt: shift.paidAt, agreement: shift.agreement, doctorId: shift.doctorId, unitId: shift.unitId, date: shift.date, startTime: shift.startTime, endTime: shift.endTime, type: shift.type, status: shift.status, notes: shift.notes };
 }
 
-function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit, onDelete }: { days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void; onDelete?: (shift: Shift) => void }) {
+function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit, onDelete, compact = false }: { days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void; onDelete?: (shift: Shift) => void; compact?: boolean }) {
+  if (compact) return shifts.length ? <div className="divide-y divide-border rounded-xl border border-border bg-card-bg">
+    {shifts.map(item => {
+      const doctor = doctors.find(value => value.id === item.doctorId);
+      const sector = sectors.find(value => value.id === item.sectorId);
+      const unit = units.find(value => value.id === item.unitId);
+      const status = item.exchangeRequested ? 'Troca solicitada' : statusLabels[item.status];
+      return <button key={item.id} type="button" onClick={() => onEdit(item)} className="flex min-h-16 w-full min-w-0 items-center gap-2.5 px-3 py-2.5 text-left hover:bg-state-hover">
+        <span className="shrink-0 text-xs font-semibold tabular-nums">{item.startTime}–{item.endTime}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block break-words text-sm font-semibold">{doctor?.name || (item.doctorId ? 'Médico escalado' : 'Vaga aberta')}</span>
+          <span className="block break-words text-xs text-text-muted">{[unit?.name, sector?.name || item.sector, item.specialty].filter(Boolean).join(' · ')}</span>
+          <span className="mt-0.5 inline-block"><EmploymentBadge employment={item.employmentType} provisional={!item.doctorId}/></span>
+          {item.status !== 'open' && <span className="block text-xs font-medium text-primary">{status}</span>}
+        </span><ChevronRight size={15} className="shrink-0 text-text-muted" aria-hidden="true"/>
+      </button>;
+    })}
+  </div> : <p className="rounded-xl border border-dashed border-border p-4 text-sm text-text-muted">Nenhum plantão neste dia com os filtros selecionados.</p>;
   if (!days.length) return <div className="rounded-xl border border-dashed border-border py-16 text-center"><List className="mx-auto h-6 w-6 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum plantão individual neste período</p><p className="mt-1 text-xs text-text-muted">Crie um posto ou plantão avulso para as datas solicitadas.</p></div>;
   return <section className="space-y-3">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-base font-semibold">Plantões individuais</h2><p className="mt-1 text-xs text-text-muted">Cada linha representa um posto salvo. Use a ação para preencher uma vaga ou substituir o médico.</p></div><span className="text-xs font-medium text-text-muted">{shifts.length} {shifts.length === 1 ? 'plantão criado' : 'plantões criados'}</span></div>
@@ -71,7 +100,7 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
             <span className="flex items-center gap-1.5 text-xs font-medium tabular-nums text-text-secondary"><Clock3 size={13}/>{item.startTime}–{item.endTime}</span>
             <span className="min-w-0"><span className="block truncate text-sm font-semibold text-text-primary">{unit?.name || 'Unidade'}</span><span className="mt-0.5 block truncate text-xs text-text-muted">{sector?.name || item.sector || 'Setor'}{item.specialty ? ` · ${item.specialty}` : ''}</span>{item.coverageMode === 'adhoc' && <span className="mt-1 block text-xs text-primary">{item.coverageReason}</span>}</span>
             <span className={`flex min-w-0 items-center gap-1.5 truncate text-sm font-medium ${doctor ? 'text-text-primary' : 'text-warning'}`}>{doctor?.name || 'Vaga aberta'}{warning?.warning && <AlertTriangle size={13} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'} aria-label="Pendência documental"/>}</span>
-            <span className="text-xs text-text-secondary">{item.employmentType ? employmentLabels[item.employmentType] : '—'}</span>
+            <span><EmploymentBadge employment={item.employmentType} provisional={!item.doctorId}/></span>
             <span className={`inline-flex items-center gap-1 text-xs font-medium ${item.exchangeRequested || item.status === 'pending' ? 'text-warning' : item.status === 'open' ? 'text-danger' : item.status === 'confirmed' ? 'text-success' : 'text-text-secondary'}`}>{item.exchangeRequested && <Repeat2 size={13}/>}
               {item.exchangeRequested ? 'Troca solicitada' : statusLabels[item.status]}</span>
             <span className="flex items-center gap-1"><button type="button" onClick={() => onEdit(item)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-2 text-xs font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/5">{doctor ? <ArrowRightLeft size={13}/> : <UserRoundPlus size={13}/>} {item.status === 'cancelled' ? 'Ver detalhes' : doctor ? 'Ver ficha' : 'Preencher'}</button>{onDelete && <button type="button" aria-label={`Excluir plantão ${sequence} de ${formatDay(day)}`} title="Excluir plantão" onClick={() => onDelete(item)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted transition hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/></button>}</span>
@@ -89,10 +118,19 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const requestedCoverage = params.get('coverage');
   const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '') ? params.get('date')! : today;
   const [date, setDate] = useState(initialDate);
-  const [view, setView] = useState<ViewMode>(requestedShiftId ? 'list' : params.get('view') === 'month' ? 'month' : 'week');
+  const [desktopView, setView] = useState<ViewMode>(requestedShiftId ? 'list' : params.get('view') === 'month' ? 'month' : 'week');
+  const mobile = useSyncExternalStore(subscribeMobile, () => window.matchMedia('(max-width: 767px)').matches, () => false);
+  const savedMobileView = useSyncExternalStore(() => () => {}, readMobileView, () => 'month' as const);
+  const [mobileChoice, setMobileChoice] = useState<'month' | 'list'>();
+  const mobileView = mobileChoice ?? (requestedShiftId ? 'list' : savedMobileView);
+  function changeMobileView(next: 'month' | 'list') {
+    setMobileChoice(next);
+    try { window.localStorage.setItem(mobileViewKey, next); } catch { /* Preference remains active on this page. */ }
+  }
   const [unitId, setUnitId] = useState(params.get('unitId') || '');
   const [sectorId, setSectorId] = useState(params.get('sectorId') || '');
-  const [employment, setEmployment] = useState<EmploymentType | ''>('');
+  const requestedEmployment = params.get('contratacao');
+  const [employment, setEmployment] = useState<EmploymentType | ''>(requestedEmployment && Object.hasOwn(employmentLabels, requestedEmployment) ? requestedEmployment as EmploymentType : '');
   const [specialty, setSpecialty] = useState(params.get('specialty') || '');
   const [doctorId, setDoctorId] = useState('');
   const [periodKind, setPeriodKind] = useState<CoveragePeriodKind | ''>('');
@@ -100,6 +138,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [coverageModeFilter, setCoverageModeFilter] = useState<'all' | 'regular' | 'adhoc'>('all');
   const [coverageFilter, setCoverageFilter] = useState<CoverageFilter>(requestedCoverage === 'deficit' ? 'deficit' : 'all');
   const [statusFilter, setStatusFilter] = useState<Shift['status'] | 'all' | 'exchange'>('all');
+  const view = mobile ? (mobileView === 'month' ? 'month' : requestedShiftId || statusFilter === 'cancelled' ? 'list' : 'week') : desktopView;
   const [form, setForm] = useState<Shift | null>(null);
   const [sectorEditorOpen, setSectorEditorOpen] = useState(false);
   const [sectorNotice, setSectorNotice] = useState('');
@@ -119,6 +158,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [focusedTurn, setFocusedTurn] = useState<{ day: string; sectorId: string; kind: CoveragePeriodKind; nonce: number } | null>(null);
   const [referenceTime] = useState(Date.now);
   const [weekPreview, setWeekPreview] = useState<{ clones: Shift[]; sectors: number; turns: number; range: string; blocked: number; duplicates: number; conflicts: number } | null>(null);
+  const [recurringPreview, setRecurringPreview] = useState<{ inputs: Omit<ShiftWrite, 'id' | 'organizationId'>[]; dates: string[]; countPerDate: number; cents?: number } | null>(null);
+  const [recurringError, setRecurringError] = useState('');
   const [deleteRequest, setDeleteRequest] = useState<ScheduleDeletionSelection | null>(null);
   const orgId = store.activeOrganizationId;
   useEffect(() => {
@@ -144,8 +185,10 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const canApproveSchedule = canPerformAction(store.currentUser, 'escala', 'approve');
   const canCreateSector = canPerformAction(store.currentUser, 'unidades', 'create');
   const canSaveShift = form?.id ? canEditSchedule : canCreateSchedule;
-  const showAgreementFields = canEditFinancial && canSaveShift && Boolean(form?.doctorId) && openedShift?.paymentStatus !== 'paid';
-  const rateQuery = useShiftRates(orgId, canSeeFinancial && Boolean(form?.doctorId || (form && openedShift?.doctorId)));
+  const newPjAgreement = form?.employmentType === 'pj' && (!openedShift || openedShift.employmentType !== 'pj'
+    || Boolean(form.doctorId && form.doctorId !== openedShift.doctorId));
+  const showAgreementFields = canEditFinancial && canSaveShift && form?.employmentType === 'pj' && openedShift?.paymentStatus !== 'paid';
+  const rateQuery = useShiftRates(orgId, canSeeFinancial && Boolean(form));
   const units = store.units.filter(item => item.organizationId === orgId && item.status === 'active');
   const sectors = store.sectors.filter(item => item.organizationId === orgId && item.status === 'active');
   const doctors = store.doctors.filter(item => item.organizationId === orgId && item.status === 'active');
@@ -157,7 +200,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const organizationDocuments = store.documents.filter(item => item.organizationId === orgId);
   const doctorDocumentState = new Map(doctors.map(doctor => [doctor.id, doctorScheduleCompliance(doctor, organizationDocuments, activeOrganization)]));
   const selectedSector = sectors.find(item => item.id === sectorId);
-  const visibleSectors = sectors.filter(item => (!unitId || item.unitId === unitId) && (!sectorId || item.id === sectorId) && (!specialty || item.specialties.includes(specialty)));
+  const visibleSectors = sectors.filter(item => (!unitId || item.unitId === unitId) && (!sectorId || item.id === sectorId)
+    && (!specialty || (mobile ? specialtyChoices(item.unitId, item).includes(specialty) : item.specialties.includes(specialty))));
   const visibleDoctors = doctors.filter(item => (!unitId || item.linkedUnits.includes(unitId) || shifts.some(shift => shift.doctorId === item.id && shift.unitId === unitId)) && (!specialty || item.specialty === specialty));
   const weekStart = mondayOf(date);
   const week = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -172,7 +216,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const periodDays = view === 'week' ? week : Array.from({ length: daysInMonth }, (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`);
   const matchesAdvanced = (period: ReturnType<typeof coverageFor>['periods'][number]) => (!periodKind || period.period.kind === periodKind)
     && (!doctorId || period.assigned.some(item => item.doctorId === doctorId))
-    && (!employment || period.assigned.some(item => item.employmentType === employment))
+    && (!employment || period.items.some(item => item.employmentType === employment))
     && (documentFilter === 'all' || period.assigned.some(item => { const warning = doctorDocumentState.get(item.doctorId || '')?.warning || false; return documentFilter === 'pending' ? warning : !warning; }));
   const periodCoverage = visibleSectors.flatMap(sector => periodDays.flatMap(day => coverageFor(sector, day).periods.filter(matchesAdvanced).map(period => ({ sector, day, period }))));
   const required = periodCoverage.reduce((sum, item) => sum + item.period.required, 0);
@@ -208,6 +252,19 @@ function Schedule({ params }: { params: URLSearchParams }) {
     })
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || (a.sector || '').localeCompare(b.sector || ''));
   const listDays = [...new Set(listShifts.map(item => item.date))];
+  const mobileDays: MobileDay[] = mobile && view === 'month' ? periodDays.map(day => {
+    const items = listShifts.filter(item => item.date === day && item.status !== 'cancelled');
+    const matchingPeriods = periodCoverage.filter(item => item.day === day && (coverageFilter === 'all' || coverageFilter === 'deficit'
+      || (coverageFilter === 'open' && item.period.open > 0)
+      || items.some(shift => item.period.items.some(candidate => candidate.id === shift.id))));
+    return {
+      day, open: items.filter(item => !item.doctorId && item.status === 'open').length,
+      deficit: ['all', 'open'].includes(statusFilter) && coverageFilter !== 'complete' ? matchingPeriods.filter(item => item.period.deficit > 0).length : 0,
+      confirmed: items.filter(item => item.status === 'confirmed').length,
+      critical: items.filter(item => item.exchangeRequested || hasConflict(item, shifts) || (item.doctorId && doctorDocumentState.get(item.doctorId)?.blocked)
+        || (item.status === 'pending' && new Date(item.date + 'T' + item.startTime).getTime() <= referenceTime + 86_400_000)).length,
+    };
+  }) : [];
 
   function openDelete(scope: ScheduleDeletionScope, options: Partial<ScheduleDeletionSelection> = {}) {
     if (scope === 'doctor' ? !canEditSchedule : !canDeleteSchedule) return;
@@ -220,7 +277,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     return ok ? null : useStore.getState().error || 'Não foi possível concluir a ação.';
   }
 
-  function navigate(amount: number) { setDate(view === 'week' ? addDays(date, amount * 7) : (() => { const next = new Date(date + 'T12:00:00'); next.setMonth(next.getMonth() + amount); return localDate(next); })()); }
+  function navigate(amount: number) { setDate(view === 'week' ? addDays(date, amount * 7) : moveScheduleMonth(date, amount)); }
   function openShift(shift?: Shift, sector = selectedSector, day = date, requestedKind?: CoveragePeriodKind, suggestedCount = 1, adhoc = false) {
     if (!shift && !canCreateSchedule) return;
     store.clearFeedback(); setSectorNotice(''); setFormError(''); setPageError(''); setVacancyCount(Math.max(1, suggestedCount)); setRecurrence('once'); setCustomWeekdays([new Date(`${day}T12:00:00`).getDay()]); setRepeatUntil(adhoc ? endOfMonth(day) : addDays(day, 90));
@@ -231,7 +288,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setCoverageKind(period?.kind || 'day');
     setOpenedShift(shift);
     setAgreementDraft(initialAgreementDraft(shift));
-    setForm(shift || { coverageMode: adhoc ? 'adhoc' : 'regular', coverageReason: '', id: '', organizationId: orgId, unitId: resolvedUnit, sectorId: resolvedSector?.id || '', sector: resolvedSector?.name || '', specialty: resolvedSector ? (specialtyChoices(resolvedUnit, resolvedSector)[0] || '') : '', doctorId: undefined, date: day, startTime: period?.startTime || resolvedSector?.defaultStartTime || '07:00', endTime: period?.endTime || resolvedSector?.defaultEndTime || '19:00', type: 'onsite', status: 'open', paymentAmount: 0, paymentStatus: 'pending', paymentFrequency: 'on_delivery', notes: '' });
+    setForm(shift || { coverageMode: adhoc ? 'adhoc' : 'regular', coverageReason: '', id: '', organizationId: orgId, unitId: resolvedUnit, sectorId: resolvedSector?.id || '', sector: resolvedSector?.name || '', specialty: resolvedSector ? (specialtyChoices(resolvedUnit, resolvedSector)[0] || '') : '', doctorId: undefined, date: day, startTime: period?.startTime || resolvedSector?.defaultStartTime || '07:00', endTime: period?.endTime || resolvedSector?.defaultEndTime || '19:00', type: 'onsite', status: 'open', paymentStatus: 'pending', paymentFrequency: 'on_delivery', notes: '' });
   }
   function specialtyChoices(id: string, sector?: Sector) {
     const unit = units.find(item => item.id === id);
@@ -246,7 +303,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (!form) return;
     setSectorNotice('');
     const choices = specialtyChoices(nextUnit);
-    setForm({ ...form, doctorId: undefined, employmentType: undefined, status: 'open', unitId: nextUnit,
+    setForm({ ...form, doctorId: undefined, status: 'open', unitId: nextUnit,
       sectorId: '', sector: '', specialty: choices.includes(form.specialty || '') ? form.specialty : choices.length === 1 ? choices[0] : '' });
   }
   function updateFormSector(nextSectorId: string) {
@@ -257,7 +314,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     const period = periods.find(item => item.kind === coverageKind) || periods[0];
     if (period) setCoverageKind(period.kind);
     const choices = specialtyChoices(form.unitId, sector);
-    setForm({ ...form, doctorId: undefined, employmentType: undefined, status: 'open', sectorId: sector.id, sector: sector.name,
+    setForm({ ...form, doctorId: undefined, status: 'open', sectorId: sector.id, sector: sector.name,
       specialty: choices.includes(form.specialty || '') ? form.specialty : choices.length === 1 ? choices[0] : '',
       startTime: period?.startTime || form.startTime, endTime: period?.endTime || form.endTime });
   }
@@ -276,6 +333,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
       return { ...current, sectorId: sector.id, sector: sector.name, specialty: selected };
     });
     setSectorEditorOpen(false);
+    if (canSeeFinancial) rateQuery.reload();
     setSectorNotice('Setor criado e selecionado. Revise a cobertura antes de salvar o plantão.');
   }
   function chooseCoverage(kind: CoveragePeriodKind) {
@@ -286,9 +344,20 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
   function updateDoctor(nextDoctorId: string) {
     if (!form) return;
-    if (!nextDoctorId) { setRecurrence('once'); return setForm({ ...form, doctorId: undefined, employmentType: undefined, employerName: '', paymentAmount: 0, paymentStatus: 'pending', paymentFrequency: 'on_delivery', paidAt: undefined, status: 'open' }); }
-    const previous = [...shifts].reverse().find(item => item.doctorId === nextDoctorId && item.unitId === form.unitId && item.employmentType);
-    setForm({ ...form, doctorId: nextDoctorId, employmentType: previous?.employmentType, employerName: previous?.employerName || '', status: statusAfterDoctorSelection(form.status, form.doctorId, nextDoctorId) });
+    if ((form.doctorId || '') === nextDoctorId) return;
+    if (!nextDoctorId) {
+      setForm({ ...form, doctorId: undefined, employerName: '', status: 'open' });
+      return;
+    }
+    setAgreementDraft(initialAgreementDraft());
+    setForm({ ...form, doctorId: nextDoctorId, employmentType: undefined, employerName: '',
+      status: statusAfterDoctorSelection(form.status, form.doctorId, nextDoctorId) });
+  }
+  function changeEmployment(employmentType: EmploymentType | undefined) {
+    if (!form) return;
+    const sameAgreement = employmentType === 'pj' && openedShift?.employmentType === 'pj' && openedShift.doctorId === form.doctorId;
+    setAgreementDraft(initialAgreementDraft(sameAgreement ? openedShift : undefined));
+    setForm({ ...form, employmentType, employerName: '' });
   }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!form || !canSaveShift || store.saving) return;
@@ -304,16 +373,24 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (form.coverageMode === 'adhoc' && (form.coverageReason?.trim().length || 0) < 3) return setFormError('Informe o motivo da cobertura avulsa com pelo menos 3 caracteres.');
     if (form.doctorId && !eligibleDoctors.some(doctor => doctor.id === form.doctorId)) return setFormError('Selecione um médico que atenda à especialidade escolhida.');
     if (form.startTime === form.endTime) return setFormError('Início e fim precisam ser diferentes.');
-    if (form.doctorId && (!form.employmentType || (form.employmentType === 'pj' && !form.employerName?.trim()))) return setFormError('Informe o vínculo e a empresa para profissionais PJ.');
+    if (!form.employmentType && (!openedShift || openedShift.employmentType || (form.doctorId && form.doctorId !== openedShift.doctorId))) {
+      return setFormError('Confirme a modalidade de contratação do plantão.');
+    }
+    if (form.doctorId && form.employmentType === 'pj' && !form.employerName?.trim()) return setFormError('Informe a empresa PJ.');
+    if (newPjAgreement && !canEditFinancial) return setFormError('A confirmação de um acordo PJ exige permissão financeira.');
     const selectedDoctorState = form.doctorId ? doctorDocumentState.get(form.doctorId) : undefined;
     const originalShift = form.id ? shifts.find(item => item.id === form.id) : undefined;
     if (selectedDoctorState?.blocked && (!originalShift || originalShift.doctorId !== form.doctorId)) return setFormError('Este médico está bloqueado para novos plantões por pendências documentais críticas. Regularize a pasta antes de escalar.');
     if (!form.id && recurrence !== 'once' && (!repeatUntil || repeatUntil < form.date)) return setFormError('Defina uma data final igual ou posterior ao primeiro plantão.');
-    const normalized: ShiftWrite = { ...form, coverageMode: form.coverageMode || 'regular', coverageReason: form.coverageMode === 'adhoc' ? form.coverageReason?.trim() : undefined, sector: sector.name, status: form.doctorId ? (form.status === 'open' ? 'pending' : form.status) : 'open', employmentType: form.doctorId ? form.employmentType : undefined, employerName: form.doctorId ? form.employerName?.trim() : undefined };
+    const normalized: ShiftWrite = { ...form, coverageMode: form.coverageMode || 'regular', coverageReason: form.coverageMode === 'adhoc' ? form.coverageReason?.trim() : undefined, sector: sector.name, status: form.doctorId ? (form.status === 'open' ? 'pending' : form.status) : 'open', employmentType: form.employmentType, employerName: form.employerName?.trim() || undefined };
     if (showAgreementFields) {
-      const changing = agreementDraft.mode !== 'keep' || agreementDraft.frequency !== (openedShift?.paymentFrequency || 'on_delivery');
+      const changing = effectiveDraft.mode !== 'keep' || effectiveDraft.frequency !== (openedShift?.paymentFrequency || 'on_delivery');
       if (changing && !rateQuery.ready) return setFormError('Aguarde a consulta dos valores padrão ou tente novamente.');
-      try { normalized.agreement = buildAgreementSelection(agreementDraft, formRate, openedShift); }
+      try {
+        normalized.agreement = newPjAgreement
+          ? buildRequiredPjAgreement(effectiveDraft, formRate)
+          : buildAgreementSelection(effectiveDraft, formRate, openedShift);
+      }
       catch (error) { return setFormError(error instanceof Error ? error.message : 'Confira o acordo financeiro.'); }
     }
     const dates = !form.id ? buildRecurringDates(form.date, repeatUntil, recurrence, customWeekdays) : [form.date];
@@ -327,10 +404,24 @@ function Schedule({ params }: { params: URLSearchParams }) {
     let ok: boolean;
     if (form.id) ok = await store.updateShift(normalized);
     else {
-      const inputs = candidates.flatMap(candidate => Array.from({ length: form.doctorId ? 1 : vacancyCount }, () => toNewShift(candidate)));
+      const countPerDate = form.doctorId ? 1 : vacancyCount;
+      const inputs = candidates.flatMap(candidate => Array.from({ length: countPerDate }, () => toNewShift(candidate)));
+      if (dates.length > 1) {
+        setRecurringError('');
+        setRecurringPreview({ inputs, dates, countPerDate, cents: normalized.agreement?.mode === 'default' ? formRate?.amount_cents : normalized.agreement?.amount_cents });
+        return;
+      }
       ok = inputs.length > 1 ? await store.addShifts(inputs) : await store.addShift(inputs[0]);
     }
     if (ok) setForm(null); else setFormError(useStore.getState().error || 'Não foi possível salvar o posto.');
+  }
+  async function confirmRecurrence() {
+    if (!recurringPreview || !canCreateSchedule || store.saving) return;
+    setRecurringError('');
+    if (await store.addShifts(recurringPreview.inputs)) {
+      setRecurringPreview(null);
+      setForm(null);
+    } else setRecurringError(useStore.getState().error || 'Não foi possível salvar a recorrência.');
   }
   function previewWeek(sourceWeek: 'current' | 'previous') {
     setPageError('');
@@ -347,8 +438,37 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
   async function confirmWeekPreview() {
     if (!weekPreview || weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts) return;
-    const ok = await store.addShifts(weekPreview.clones.map(toNewShift));
-    if (ok) setWeekPreview(null); else setPageError(useStore.getState().error || 'Não foi possível copiar a semana.');
+    const ok = await saveCopiedShifts(weekPreview.clones);
+    if (ok) setWeekPreview(null); else if (useStore.getState().error) setPageError(useStore.getState().error || 'Não foi possível copiar a semana.');
+  }
+  async function saveCopiedShifts(clones: Shift[]) {
+    if (clones.some(item => !item.employmentType)) {
+      setPageError('Classifique a modalidade dos plantões de origem antes de copiar.');
+      return false;
+    }
+    const pj = clones.filter(item => item.employmentType === 'pj');
+    if (pj.some(item => item.paymentAmount == null) || (pj.length && !canEditFinancial)) {
+      setPageError('Copiar plantões PJ exige valores registrados e permissão financeira.');
+      return false;
+    }
+    try {
+      const rates = pj.length ? await fetchShiftRates(orgId) : [];
+      return await store.addShifts(clones.map(item => {
+        if (item.employmentType !== 'pj') return toNewShift(item);
+        const rate = chooseShiftRate(rates, item, sectors.find(sector => sector.id === item.sectorId), doctors.find(doctor => doctor.id === item.doctorId)?.specialty);
+        const cents = Math.round(item.paymentAmount! * 100);
+        const draft = {
+          ...initialAgreementDraft(), frequency: item.paymentFrequency || 'on_delivery' as const,
+          amount: formatShiftMoneyInput(cents),
+          mode: rate ? (rate.amount_cents === cents ? 'default' : 'override') : 'manual',
+          overrideReason: item.paymentAgreement?.override_reason || 'Valor do plantão de origem confirmado na cópia.',
+        } as const;
+        return toNewShift({ ...item, agreement: buildRequiredPjAgreement(draft, rate) });
+      }));
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Não foi possível consultar os valores da cópia.');
+      return false;
+    }
   }
   async function copyPeriod(sector: Sector, sourceDay: string, targetDay: string, kind: CoveragePeriodKind): Promise<string> {
     const source = coverageFor(sector, sourceDay).periods.find(item => item.period.kind === kind);
@@ -359,7 +479,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     const clones = regularSource.map((item, index): Shift => ({ ...item, id: `preview-period-${index}`, date: targetDay, status: item.doctorId ? 'pending' : 'open', paymentStatus: 'pending', paidAt: undefined }));
     if (clones.some(item => item.doctorId && doctorDocumentState.get(item.doctorId)?.blocked)) return 'Há médico bloqueado por pendência documental nesse turno.';
     if (clones.some(item => item.doctorId && hasConflict(item, [...shifts, ...clones]))) return 'A cópia criaria conflito de horário para um médico.';
-    const ok = await store.addShifts(clones.map(toNewShift));
+    const ok = await saveCopiedShifts(clones);
     return ok ? `${clones.length} ${clones.length === 1 ? 'posto copiado' : 'postos copiados'} para ${formatDay(targetDay)}.` : useStore.getState().error || 'Não foi possível copiar o turno.';
   }
 
@@ -372,25 +492,50 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }) : [];
   const formSector = form ? sectors.find(item => item.id === form.sectorId) : undefined;
   const formRate = form && showAgreementFields ? chooseShiftRate(rateQuery.rates, form, formSector, doctors.find(doctor => doctor.id === form.doctorId)?.specialty) : undefined;
+  const postDefaults = sectorFinanceDefaults(rateQuery.rates, form?.sectorId);
+  const effectiveDraft = newPjAgreement && !agreementDraft.frequencyEdited && postDefaults.frequency
+    ? { ...agreementDraft, frequency: postDefaults.frequency } : agreementDraft;
   const formUnit = units.find(item => item.id === form?.unitId);
   const formSpecialties = form ? specialtyChoices(form.unitId) : [];
   const formSectors = form ? sectors.filter(item => item.unitId === form.unitId
     && (!form.specialty || item.id === form.sectorId || specialtyChoices(form.unitId, item).includes(form.specialty))) : [];
   const formPeriods = formSector ? sectorCoveragePeriods(formSector) : [];
   const recurrenceDates = form && !form.id ? buildRecurringDates(form.date, repeatUntil, recurrence, customWeekdays) : [];
-  const storedFormRate = openedShift?.doctorId && canSeeFinancial ? chooseShiftRate(rateQuery.rates, openedShift,
+  const storedFormRate = openedShift && canSeeFinancial ? chooseShiftRate(rateQuery.rates, openedShift,
     sectors.find(item => item.id === openedShift.sectorId), doctors.find(item => item.id === openedShift.doctorId)?.specialty) : undefined;
   const originalFormShift = form?.id ? shifts.find(item => item.id === form.id) : undefined;
   const formDoctorChanged = Boolean(originalFormShift?.doctorId && originalFormShift.doctorId !== form?.doctorId);
-  const formTitle = form?.id && openedShift?.doctorId ? 'Ficha do plantão' : form?.coverageMode === 'adhoc' ? 'Novo plantão avulso' : form?.id ? 'Preencher vaga' : form?.doctorId ? 'Novo plantão' : 'Nova vaga';
+  const formTitle = form?.id && openedShift?.doctorId ? 'Ficha do plantão' : form?.coverageMode === 'adhoc' ? 'Novo plantão avulso' : form?.id ? 'Ficha da vaga' : form?.doctorId ? 'Novo plantão' : 'Nova vaga';
 
   return <div className="space-y-5">
     <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Operação e cobertura</p><h1 className="nv-page-title mt-1">Escala médica</h1><p className="mt-1 text-sm capitalize text-text-secondary">{view === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])} de ${new Date(`${week[6]}T12:00:00`).getFullYear()}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p></div><div className="flex flex-wrap gap-2">{canApproveSchedule && <Link className="nv-button-secondary" href="/escala/candidaturas"><ArrowRightLeft size={16}/>Candidaturas e trocas</Link>}{canCreateSchedule && <><button className="nv-button-secondary" onClick={() => openShift(undefined, undefined, date, undefined, 1, true)} disabled={!units.length}><Plus size={16}/>Plantão avulso</button><button className="nv-button" onClick={() => openShift()} disabled={!units.length}><Plus size={16}/>Novo posto</button></>}</div></header>
-    <nav className="flex gap-1 rounded-lg border border-border bg-card-bg p-1 md:hidden" aria-label="Navegação da escala no celular"><button type="button" onClick={() => { setView('week'); setCoverageFilter('all'); }} className="min-h-10 flex-1 rounded-md px-2 text-xs font-semibold text-text-secondary hover:bg-state-hover">Agenda</button><button type="button" onClick={() => { setView('week'); setCoverageFilter('deficit'); document.getElementById('schedule-attention')?.scrollIntoView({ behavior: 'smooth' }); }} className="min-h-10 flex-1 rounded-md px-2 text-xs font-semibold text-danger hover:bg-danger/5">Pendências</button><button type="button" onClick={() => { if (myDoctor) { setUnitId(''); setSectorId(''); setSpecialty(''); setDoctorId(myDoctor.id); setView('doctor'); } }} disabled={!myDoctor} className="min-h-10 flex-1 rounded-md px-2 text-xs font-semibold text-text-secondary hover:bg-state-hover disabled:opacity-50">Minhas escalas</button></nav>
+    {mobile && <div className="space-y-3">
+      <nav className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-card-bg p-1" aria-label="Visualização da escala no celular">
+        {([['month', 'Calendário'], ['list', 'Lista']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mobileView === value}
+          onClick={() => changeMobileView(value)} className={`min-h-10 rounded-lg text-sm font-semibold ${mobileView === value ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:bg-state-hover'}`}>{label}</button>)}
+      </nav>
+      <details className="rounded-xl border border-border bg-card-bg px-3 py-2.5">
+        <summary className="cursor-pointer text-sm font-semibold">Filtros da escala{unitId || sectorId || specialty || doctorId || statusFilter !== 'all' ? ' · ativos' : ''}</summary>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="nv-label min-w-0">Unidade<select aria-label="Unidade" className="nv-input min-w-0" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas</option>{units.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="nv-label min-w-0">Posto<select aria-label="Posto" className="nv-input min-w-0" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos</option>{sectors.filter(item => !unitId || item.unitId === unitId).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="nv-label min-w-0">Especialidade<select aria-label="Especialidade" className="nv-input min-w-0" value={specialty} onChange={event => { setSpecialty(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas</option>{[...new Set([...units.flatMap(item => specialtyChoices(item.id)), ...shifts.map(item => item.specialty || '')])].filter(Boolean).sort().map(item => <option key={item}>{item}</option>)}</select></label>
+          <label className="nv-label min-w-0">Situação<select aria-label="Situação" className="nv-input min-w-0" value={statusFilter} onChange={event => { setStatusFilter(event.target.value as typeof statusFilter); setCoverageFilter('all'); }}><option value="all">Ativos</option><option value="exchange">Troca solicitada</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          {myDoctor && <label className="col-span-2 flex min-h-9 items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={doctorId === myDoctor.id} onChange={event => setDoctorId(event.target.checked ? myDoctor.id : '')}/> Minhas escalas</label>}
+        </div>
+      </details>
+      {view === 'month' ? <MobileScheduleMonth date={date} today={today} offset={firstOfMonth.getDay()} days={mobileDays} onSelect={setDate} onNavigate={navigate}>
+        <ScheduleList compact days={[date]} shifts={listShifts.filter(item => item.date === date)} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift}/>
+      </MobileScheduleMonth> : <div className="flex items-center justify-between rounded-xl border border-border bg-card-bg px-2">
+        <button type="button" aria-label={view === 'week' ? 'Semana anterior' : 'Mês anterior'} className="p-2.5" onClick={() => navigate(-1)}><ChevronLeft size={19}/></button>
+        <button type="button" className="text-sm font-semibold capitalize" onClick={() => setDate(today)} title="Voltar para hoje">{view === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</button>
+        <button type="button" aria-label={view === 'week' ? 'Próxima semana' : 'Próximo mês'} className="p-2.5" onClick={() => navigate(1)}><ChevronRight size={19}/></button>
+      </div>}
+    </div>}
 
     {(!units.length || !sectors.length) && <section className="rounded-xl border border-border bg-card-bg p-6"><h2 className="font-semibold">Configure a estrutura da escala</h2><p className="mt-2 text-sm text-text-secondary">Cadastre uma unidade e seus setores antes de criar postos.</p><Link className="nv-button-secondary mt-4" href="/unidades">Gerenciar unidades e setores</Link></section>}
 
-    <section className="nv-panel p-4 sm:p-5" aria-label="Resumo da cobertura">
+    <section className="nv-panel hidden p-4 sm:p-5 md:block" aria-label="Resumo da cobertura">
       <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
         <div className="min-w-[210px] flex-1"><p className="text-xs font-medium text-text-muted">Cobertura do período</p><p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{coveragePercent}% <span className="text-sm font-normal text-text-muted">· {filled} de {required} postos</span></p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Cobertura do período" aria-valuenow={coveragePercent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-accent transition-[width] motion-reduce:transition-none" style={{ width: `${coveragePercent}%` }}/></div></div>
         <button type="button" onClick={() => setCoverageFilter('deficit')} className="text-left"><span className="block text-2xl font-semibold tabular-nums text-danger">{deficit}</span><span className="text-xs text-text-muted">turnos com déficit</span></button>
@@ -400,27 +545,27 @@ function Schedule({ params }: { params: URLSearchParams }) {
       </div>
     </section>
 
-    <section className="nv-panel flex flex-col gap-3 p-4 xl:flex-row xl:items-end" aria-label="Controles da escala">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row"><label className="nv-label min-w-0 flex-1">Unidade<select className="nv-input" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas as unidades</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label><label className="nv-label min-w-0 flex-1">Setor<select className="nv-input" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos os setores</option>{sectors.filter(item => !unitId || item.unitId === unitId).map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label></div>
+    <section className={`nv-panel flex-col gap-3 p-4 xl:flex-row xl:items-end ${mobile && view === 'week' ? 'flex' : 'hidden md:flex'}`} aria-label="Controles da escala">
+      <div className="hidden min-w-0 flex-1 flex-col gap-3 sm:flex-row md:flex"><label className="nv-label min-w-0 flex-1">Unidade<select className="nv-input" value={unitId} onChange={event => { setUnitId(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas as unidades</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label><label className="nv-label min-w-0 flex-1">Setor<select className="nv-input" value={sectorId} onChange={event => setSectorId(event.target.value)}><option value="">Todos os setores</option>{sectors.filter(item => !unitId || item.unitId === unitId).map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label></div>
       <div className="flex flex-wrap items-center gap-2"><button className="nv-button-secondary" onClick={() => previewWeek('previous')} disabled={!canCreateSchedule || view !== 'week' || store.saving}><Copy size={15}/>Copiar semana anterior</button><button className="nv-button-secondary" onClick={() => previewWeek('current')} disabled={!canCreateSchedule || view !== 'week' || store.saving}><Copy size={15}/>Replicar para a próxima</button>{canDeleteSchedule && <button type="button" onClick={() => openDelete('period')} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-secondary transition hover:border-danger/40 hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/>Excluir da escala</button>}</div>
     </section>
 
-    <details className="rounded-lg border border-border bg-card-bg px-4 py-3 text-sm"><summary className="cursor-pointer font-medium text-text-secondary">Filtros avançados{employment || specialty || doctorId || periodKind || documentFilter !== 'all' ? ' · ativos' : ''}</summary><div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5"><label className="nv-label">Vínculo<select className="nv-input" value={employment} onChange={event => setEmployment(event.target.value as EmploymentType | '')}><option value="">Todos</option>{Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="nv-label">Especialidade<select className="nv-input" value={specialty} onChange={event => { setSpecialty(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas</option>{[...new Set([...sectors.flatMap(item => item.specialties), ...doctors.map(item => item.specialty)])].filter(Boolean).sort().map(item => <option key={item} value={item}>{item}</option>)}</select></label><label className="nv-label">Médico<select className="nv-input" value={doctorId} onChange={event => setDoctorId(event.target.value)}><option value="">Todos</option>{visibleDoctors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="nv-label">Turno<select className="nv-input" value={periodKind} onChange={event => setPeriodKind(event.target.value as CoveragePeriodKind | '')}><option value="">Todos</option><option value="day">Diurno</option><option value="night">Noturno</option></select></label><label className="nv-label">Documentação<select className="nv-input" value={documentFilter} onChange={event => setDocumentFilter(event.target.value as 'all' | 'regular' | 'pending')}><option value="all">Todas</option><option value="regular">Regular</option><option value="pending">Pendente</option></select></label></div></details>
+    <details className="rounded-lg border border-border bg-card-bg px-4 py-3 text-sm"><summary className="cursor-pointer font-medium text-text-secondary">Filtros avançados{employment || specialty || doctorId || periodKind || documentFilter !== 'all' ? ' · ativos' : ''}</summary><div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5"><label className="nv-label">Modalidade de contratação<select className="nv-input" value={employment} onChange={event => setEmployment(event.target.value as EmploymentType | '')}><option value="">Todos</option>{Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="nv-label">Especialidade<select className="nv-input" value={specialty} onChange={event => { setSpecialty(event.target.value); setSectorId(''); setDoctorId(''); }}><option value="">Todas</option>{[...new Set([...sectors.flatMap(item => item.specialties), ...doctors.map(item => item.specialty)])].filter(Boolean).sort().map(item => <option key={item} value={item}>{item}</option>)}</select></label><label className="nv-label">Médico<select className="nv-input" value={doctorId} onChange={event => setDoctorId(event.target.value)}><option value="">Todos</option>{visibleDoctors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="nv-label">Turno<select className="nv-input" value={periodKind} onChange={event => setPeriodKind(event.target.value as CoveragePeriodKind | '')}><option value="">Todos</option><option value="day">Diurno</option><option value="night">Noturno</option></select></label><label className="nv-label">Documentação<select className="nv-input" value={documentFilter} onChange={event => setDocumentFilter(event.target.value as 'all' | 'regular' | 'pending')}><option value="all">Todas</option><option value="regular">Regular</option><option value="pending">Pendente</option></select></label></div></details>
 
     <div className="flex flex-wrap gap-2" aria-label="Filtros rápidos de cobertura">{([
       ['all', 'Todos', 0], ['deficit', 'Com déficit', deficit], ['open', 'Vagas abertas', open], ['conflict', 'Conflitos', conflicts], ['pending', 'Confirmação pendente', pending], ['complete', 'Completos', 0],
     ] as const).map(([filter, label, count]) => <button key={filter} type="button" aria-pressed={coverageFilter === filter} onClick={() => setCoverageFilter(filter)} className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition ${coverageFilter === filter ? 'border-primary bg-primary/10 text-primary' : filter === 'deficit' && deficit ? 'border-danger/30 text-danger hover:bg-danger/5' : 'border-border bg-card-bg text-text-secondary hover:bg-state-hover'}`}>{label}{count > 0 ? ` ${count}` : ''}</button>)}</div>
 
-    {(attention.length > 0 || doctorsWithDocumentsPending > 0 || pending > 0) && <section id="schedule-attention" aria-label="Atenção necessária" className="border-l-2 border-danger pl-4">
+    {(attention.length > 0 || doctorsWithDocumentsPending > 0 || pending > 0) && <section id="schedule-attention" aria-label="Atenção necessária" className="hidden border-l-2 border-danger pl-4 md:block">
       <h2 className="text-sm font-semibold text-text-primary">Atenção necessária</h2>
       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs"><button type="button" onClick={() => { setCoverageFilter('deficit'); setView('week'); }} className="font-medium text-danger hover:underline">{deficit} turnos com déficit</button><button type="button" onClick={() => { setCoverageFilter('pending'); setView('week'); }} className="font-medium text-warning hover:underline">{pending} confirmações pendentes</button><button type="button" onClick={() => { setDocumentFilter('pending'); setCoverageFilter('all'); setView('week'); }} className="font-medium text-text-secondary hover:underline">{doctorsWithDocumentsPending} médicos com documentação pendente</button>{soon > 0 && <span className="font-medium text-danger">{soon} turnos incompletos começam em até 24h</span>}</div>
       <div className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">{attention.map(({ sector, day, period }) => <button key={`${sector.id}-${day}-${period.period.kind}`} type="button" onClick={() => { setDate(day); setUnitId(sector.unitId); setSectorId(sector.id); setDoctorId(''); setEmployment(''); setDocumentFilter('all'); setPeriodKind(''); setCoverageFilter(period.deficit ? 'deficit' : 'conflict'); setView('week'); setFocusedTurn(previous => ({ day, sectorId: sector.id, kind: period.period.kind, nonce: (previous?.nonce || 0) + 1 })); }} className="flex min-h-10 items-center justify-between gap-3 border-b border-border py-2 text-left text-xs hover:text-primary"><span className="min-w-0 truncate"><strong className="font-semibold">{sector.name}</strong><span className="text-text-muted"> · {formatDay(day)} · {coveragePeriodLabel(period.period.kind)}</span></span><span className="shrink-0 font-semibold text-danger">{period.deficit ? `${period.deficit} em falta` : 'Conflito'}</span></button>)}</div>
     </section>}
 
-    <div className="flex flex-wrap items-center justify-between gap-3"><div className="inline-flex flex-wrap rounded-lg border border-border bg-card-bg p-1"><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'week' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('week'); }}>Semana</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'month' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('month'); }}>Mês</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'doctor' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('doctor')}>Por médico</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === "specialty" ? "bg-primary text-text-inverse" : "text-text-secondary"}`} onClick={() => setView("specialty")}>Por especialidade</button><button className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${view === 'list' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('list')}><List size={15}/>Plantões</button></div><div className="flex flex-wrap items-center gap-1"><button aria-label="Período anterior" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(-1)}><ChevronLeft/></button><button className="min-w-16 px-3 text-sm font-semibold" onClick={() => setDate(today)}>Hoje</button><button aria-label="Próximo período" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(1)}><ChevronRight/></button><input aria-label="Ir para data" title="Ir para data" type="date" value={date} onChange={event => setDate(event.target.value)} className="nv-input ml-2 w-36 text-xs"/></div></div>
+    <div className="hidden flex-wrap items-center justify-between gap-3 md:flex"><div className="inline-flex flex-wrap rounded-lg border border-border bg-card-bg p-1"><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'week' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('week'); }}>Semana</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'month' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('month'); }}>Mês</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'doctor' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('doctor')}>Por médico</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === "specialty" ? "bg-primary text-text-inverse" : "text-text-secondary"}`} onClick={() => setView("specialty")}>Por especialidade</button><button className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${view === 'list' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('list')}><List size={15}/>Plantões</button></div><div className="flex flex-wrap items-center gap-1"><button aria-label="Período anterior" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(-1)}><ChevronLeft/></button><button className="min-w-16 px-3 text-sm font-semibold" onClick={() => setDate(today)}>Hoje</button><button aria-label="Próximo período" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(1)}><ChevronRight/></button><input aria-label="Ir para data" title="Ir para data" type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }} className="nv-input ml-2 w-36 text-xs"/></div></div>
     {pageError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{pageError}</p>}
 
-    <label className="nv-label mb-3 max-w-64">Situação do plantão<select className="nv-input" value={statusFilter} onChange={event => {
+    <label className="nv-label mb-3 hidden max-w-64 md:flex">Situação do plantão<select className="nv-input" value={statusFilter} onChange={event => {
       const value = event.target.value as typeof statusFilter;
       setStatusFilter(value);
       setCoverageFilter('all');
@@ -430,7 +575,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
       {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </select></label>
     <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3"><span className="mr-1 text-xs text-text-muted">Plantões:</span>{([['all', 'Todos'], ['regular', 'Regulares'], ['adhoc', 'Avulsos']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={coverageModeFilter === value && view === 'list'} onClick={() => { setCoverageModeFilter(value); setView('list'); }} className={`min-h-9 rounded-lg px-3 text-xs font-medium transition ${coverageModeFilter === value && view === 'list' ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-state-hover'}`}>{label}</button>)}</div>
-    {view === 'list' ? <div id="plantao" tabIndex={-1} className="space-y-3">
+    {mobile && view === 'month' ? null : view === 'list' ? <div id="plantao" tabIndex={-1} className="space-y-3">
       {requestedShiftId && <Link className="nv-button-secondary" href={'/escala?' + new URLSearchParams({ date })}>Voltar para a escala do dia</Link>}
       <ScheduleList days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift} onDelete={canDeleteSchedule ? item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date }) : undefined}/>
     </div> : view === 'doctor' ? <ScheduleDoctorView doctors={visibleDoctors} sectors={sectors} units={units} shifts={listShifts} allShifts={shifts} month={month} canSeeFinancial={canSeeFinancial} onEdit={openShift}/> : view === 'specialty' ? <ScheduleSpecialtyView doctors={doctors} shifts={listShifts} allShifts={shifts} month={month} onEdit={openShift}/> : <ScheduleCalendarView
@@ -476,14 +621,14 @@ function Schedule({ params }: { params: URLSearchParams }) {
     </Dialog>}
     {deleteRequest && <ScheduleDeleteDialog key={`${deleteRequest.scope}-${deleteRequest.shiftId}-${deleteRequest.from}-${deleteRequest.sectorId}`} initial={deleteRequest} organizationId={orgId} shifts={shifts} sectors={sectors} units={units} doctors={doctors} canSeeFinancial={canSeeFinancial} canEditFinancial={canEditFinancial} onClose={() => setDeleteRequest(null)} onConfirm={confirmDelete}/>}
     {weekPreview && <Dialog title="Prévia da semana" onClose={() => !store.saving && setWeekPreview(null)}><div className="space-y-4">
-      <p className="text-xs text-text-muted">Somente postos regulares serão copiados. Cadastre coberturas avulsas nas datas solicitadas.</p><p className="text-sm text-text-secondary">Destino: <strong className="text-text-primary">{weekPreview.range}</strong></p>
+      <p className="text-xs text-text-muted">Somente postos regulares serão copiados. Novos plantões PJ manterão os valores do plantão de origem.</p><p className="text-sm text-text-secondary">Destino: <strong className="text-text-primary">{weekPreview.range}</strong></p>
       <div className="grid grid-cols-3 gap-3 border-y border-border py-4 text-center"><div><strong className="block text-xl tabular-nums">{weekPreview.sectors}</strong><span className="text-xs text-text-muted">setores</span></div><div><strong className="block text-xl tabular-nums">{weekPreview.turns}</strong><span className="text-xs text-text-muted">turnos</span></div><div><strong className="block text-xl tabular-nums">{weekPreview.clones.length}</strong><span className="text-xs text-text-muted">postos</span></div></div>
       <div className="space-y-1 text-xs"><p className={weekPreview.blocked ? 'text-danger' : 'text-success'}>{weekPreview.blocked} médicos bloqueados por documentos</p><p className={weekPreview.duplicates ? 'text-danger' : 'text-success'}>{weekPreview.duplicates} postos duplicados</p><p className={weekPreview.conflicts ? 'text-danger' : 'text-success'}>{weekPreview.conflicts} conflitos de horário</p></div>
       {weekPreview.blocked + weekPreview.duplicates + weekPreview.conflicts > 0 && <p role="alert" className="rounded-lg bg-danger/5 p-3 text-xs text-danger">Revise os impedimentos na semana de destino antes de copiar.</p>}
       {pageError && <p role="alert" className="text-xs text-danger">{pageError}</p>}
       <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setWeekPreview(null)} disabled={store.saving}>Cancelar</button><button type="button" className="nv-button" onClick={() => void confirmWeekPreview()} disabled={Boolean(weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts || store.saving)}>{store.saving ? 'Copiando…' : 'Copiar postos'}</button></div>
     </div></Dialog>}
-    {form && <Dialog title={formTitle} onClose={() => !store.saving && setForm(null)} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setForm(null)} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? `Criar ${recurrenceDates.length * (form.doctorId ? 1 : vacancyCount)} postos` : form.doctorId ? 'Salvar plantão' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => { setSelectionShift(form); setForm(null); }}>Candidaturas e histórico</button>}
+    {form && <Dialog title={formTitle} onClose={() => !store.saving && setForm(null)} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setForm(null)} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && (canApproveSchedule || canEditSchedule) && <button type="button" className="nv-button-secondary" onClick={() => { setSelectionShift(form); setForm(null); }}>{canApproveSchedule ? 'Candidaturas e histórico' : 'Histórico da contratação'}</button>}
       {openedShift && <ShiftRecordSummary shift={openedShift} organization={activeOrganization?.name}
         unit={units.find(item => item.id === openedShift.unitId)?.name}
         sector={sectors.find(item => item.id === openedShift.sectorId)?.name}
@@ -501,15 +646,39 @@ function Schedule({ params }: { params: URLSearchParams }) {
         {formUnit && !formSectors.length && <p className="mt-2 text-xs text-text-muted">Nenhum setor ativo atende ao contexto selecionado.</p>}
         {sectorNotice && <p role="status" className="mt-2 text-xs text-success">{sectorNotice}</p>}
         </div>
-      </div>{formPeriods.length > 0 && <fieldset><legend className="nv-label">Período de cobertura</legend><div className="grid gap-2 sm:grid-cols-2">{formPeriods.map(period => { const Icon = period.kind === 'day' ? Sun : Moon; const selected = coverageKind === period.kind; return <button key={period.kind} type="button" onClick={() => chooseCoverage(period.kind)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${selected ? 'border-primary bg-primary/10 ring-1 ring-primary/20' : 'border-border hover:bg-state-hover'}`}><Icon size={18} className={period.kind === 'day' ? 'text-warning' : 'text-primary'}/><span className="min-w-0"><strong className="block text-sm text-text-primary">{coveragePeriodLabel(period.kind)}</strong><span className="text-xs tabular-nums text-text-muted">{period.startTime}–{period.endTime} · {period.requiredDoctors} médico{period.requiredDoctors === 1 ? '' : 's'}</span></span></button>; })}</div></fieldset>}<div><p className="nv-label">Data e horário</p><div className="grid gap-4 sm:grid-cols-3"><label className="nv-label font-normal">Data<input className="nv-input" type="date" required value={form.date} onChange={event => { setForm({ ...form, date: event.target.value }); if (repeatUntil < event.target.value) setRepeatUntil(form.coverageMode === 'adhoc' ? endOfMonth(event.target.value) : addDays(event.target.value, 90)); }}/></label><label className="nv-label font-normal">Início<input className="nv-input" type="time" required value={form.startTime} onChange={event => setForm({ ...form, startTime: event.target.value })}/></label><label className="nv-label font-normal">Fim<input className="nv-input" type="time" required value={form.endTime} onChange={event => setForm({ ...form, endTime: event.target.value })}/></label></div><p className="mt-1.5 text-xs text-text-muted">O período preenche o horário padrão. Você pode ajustar este médico sem alterar o setor.</p></div><label className="nv-label">{form.id ? 'Médico deste plantão' : 'Médico'}<select className="nv-input" value={form.doctorId || ''} onChange={event => updateDoctor(event.target.value)}><option value="">Deixar como vaga aberta</option>{eligibleDoctors.map(doctor => { const compliance = doctorDocumentState.get(doctor.id); const selectedExisting = Boolean(form.id && form.doctorId === doctor.id); return <option key={doctor.id} value={doctor.id} disabled={Boolean(compliance?.blocked && !selectedExisting)}>{doctor.name} · {doctor.specialty}{compliance?.blocked ? ' · bloqueado por documentos' : compliance?.warning ? ' · atenção documental' : ''}</option>; })}</select>{formDoctorChanged && <span className="mt-1.5 block text-xs font-normal text-warning">O novo médico ficará aguardando confirmação após salvar.</span>}</label>{form.doctorId && doctorDocumentState.get(form.doctorId)?.warning && <div className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-xs ${doctorDocumentState.get(form.doctorId)?.blocked ? 'border-danger/30 bg-danger/5 text-danger' : 'border-warning/30 bg-warning/5 text-warning'}`}><span className="flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0"/>{doctorDocumentState.get(form.doctorId)?.blocked ? 'Médico bloqueado para novos plantões por pendência crítica.' : 'Médico com documento pendente ou próximo do vencimento.'}</span><Link href={`/documentos/${form.doctorId}`} className="shrink-0 font-semibold underline">Abrir pasta</Link></div>}{!form.id && <section className="rounded-xl border border-border bg-surface-muted/35 p-4"><div className="flex items-start gap-3"><Repeat2 size={18} className="mt-0.5 shrink-0 text-primary"/><div><h3 className="text-sm font-semibold">{form.coverageMode === 'adhoc' ? 'Datas da cobertura' : 'Repetição automática'}</h3><p className="mt-1 text-xs text-text-muted">Crie plantões ou vagas em vários dias. Revise a prévia antes de salvar.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="nv-label">Frequência<select className="nv-input" value={recurrence} onChange={event => setRecurrence(event.target.value as ShiftRecurrence)}><option value="once">Somente esta data</option><option value="daily">Todos os dias</option><option value="weekdays">Segunda a sexta</option><option value="every_other_day">12x36</option><option value="custom">Personalizado</option><option value="weekly">Semanal</option><option value="fortnightly">Quinzenal</option><option value="monthly">Mensal</option></select></label>{recurrence !== 'once' && <label className="nv-label">Repetir até<input className="nv-input" type="date" min={form.date} required value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>{recurrence === "custom" && <fieldset className="mt-3"><legend className="text-xs font-medium text-text-secondary">Dias da semana</legend><div className="mt-2 flex flex-wrap gap-1">{[["Dom", 0], ["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6]].map(([label, value]) => <button key={value} type="button" aria-pressed={customWeekdays.includes(Number(value))} onClick={() => setCustomWeekdays(days => days.includes(Number(value)) ? days.filter(day => day !== Number(value)) : [...days, Number(value)])} className={`min-h-9 rounded-lg border px-2.5 text-xs font-medium ${customWeekdays.includes(Number(value)) ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary"}`}>{label}</button>)}</div></fieldset>}{recurrence !== "once" && recurrenceDates.length > 0 && <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-text-secondary"><strong className="text-text-primary">{recurrenceDates.length * (form.doctorId ? 1 : vacancyCount)} postos em {recurrenceDates.length} datas:</strong> {recurrenceDescription(form.date, recurrence)}, das {form.startTime} às {form.endTime}, até {new Date(repeatUntil + 'T12:00:00').toLocaleDateString('pt-BR')}.</p>}</section>}{!form.doctorId && !form.id && <label className="nv-label">Quantidade de vagas<input className="nv-input" type="number" min={1} max={20} value={vacancyCount} onChange={event => setVacancyCount(Math.max(1, Number(event.target.value)))}/></label>}{form.doctorId && <><div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Vínculo<select className="nv-input" required value={form.employmentType || ''} onChange={event => setForm({ ...form, employmentType: event.target.value as EmploymentType })}><option value="">Selecione</option>{Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="nv-label">Situação<select className="nv-input" value={form.status} onChange={event => setForm({ ...form, status: event.target.value as Shift['status'] })}><option value="pending">Aguardando confirmação</option><option value="confirmed">Confirmado</option><option value="completed">Concluído</option><option value="cancelled">Cancelado</option></select></label></div><label className="nv-label">{form.employmentType === 'pj' ? 'Empresa PJ' : form.employmentType === 'concursado' ? 'Prefeitura / órgão público' : 'Empregador'}<input className="nv-input" list="employer-options" required={form.employmentType === 'pj'} maxLength={150} value={form.employerName || ''} onChange={event => setForm({ ...form, employerName: event.target.value })}/><datalist id="employer-options">{employers.map(item => <option key={item} value={item}/>)}</datalist></label></>}<div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Modalidade<select className="nv-input" value={form.type} onChange={event => setForm({ ...form, type: event.target.value as Shift['type'] })}>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{form.endTime < form.startTime && <p className="self-end pb-3 text-xs text-primary">Termina no dia seguinte.</p>}</div><label className="nv-label">Observações<textarea className="nv-input" rows={2} maxLength={1000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
+      </div>{formPeriods.length > 0 && <fieldset><legend className="nv-label">Período de cobertura</legend><div className="grid gap-2 sm:grid-cols-2">{formPeriods.map(period => { const Icon = period.kind === 'day' ? Sun : Moon; const selected = coverageKind === period.kind; return <button key={period.kind} type="button" onClick={() => chooseCoverage(period.kind)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${selected ? 'border-primary bg-primary/10 ring-1 ring-primary/20' : 'border-border hover:bg-state-hover'}`}><Icon size={18} className={period.kind === 'day' ? 'text-warning' : 'text-primary'}/><span className="min-w-0"><strong className="block text-sm text-text-primary">{coveragePeriodLabel(period.kind)}</strong><span className="text-xs tabular-nums text-text-muted">{period.startTime}–{period.endTime} · {period.requiredDoctors} médico{period.requiredDoctors === 1 ? '' : 's'}</span></span></button>; })}</div></fieldset>}<div><p className="nv-label">Data e horário</p><div className="grid gap-4 sm:grid-cols-3"><label className="nv-label font-normal">Data<input className="nv-input" type="date" required value={form.date} onChange={event => { setForm({ ...form, date: event.target.value }); if (repeatUntil < event.target.value) setRepeatUntil(form.coverageMode === 'adhoc' ? endOfMonth(event.target.value) : addDays(event.target.value, 90)); }}/></label><label className="nv-label font-normal">Início<input className="nv-input" type="time" required value={form.startTime} onChange={event => setForm({ ...form, startTime: event.target.value })}/></label><label className="nv-label font-normal">Fim<input className="nv-input" type="time" required value={form.endTime} onChange={event => setForm({ ...form, endTime: event.target.value })}/></label></div><p className="mt-1.5 text-xs text-text-muted">O período preenche o horário padrão. Você pode ajustar este médico sem alterar o setor.</p></div><label className="nv-label">{form.id ? 'Médico deste plantão' : 'Médico'}<select className="nv-input" value={form.doctorId || ''} onChange={event => updateDoctor(event.target.value)}><option value="">Deixar como vaga aberta</option>{eligibleDoctors.map(doctor => { const compliance = doctorDocumentState.get(doctor.id); const selectedExisting = Boolean(form.id && form.doctorId === doctor.id); return <option key={doctor.id} value={doctor.id} disabled={Boolean(compliance?.blocked && !selectedExisting)}>{doctor.name} · {doctor.specialty}{compliance?.blocked ? ' · bloqueado por documentos' : compliance?.warning ? ' · atenção documental' : ''}</option>; })}</select>{formDoctorChanged && <span className="mt-1.5 block text-xs font-normal text-warning">O novo médico ficará aguardando confirmação após salvar.</span>}</label>{form.doctorId && doctorDocumentState.get(form.doctorId)?.warning && <div className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-xs ${doctorDocumentState.get(form.doctorId)?.blocked ? 'border-danger/30 bg-danger/5 text-danger' : 'border-warning/30 bg-warning/5 text-warning'}`}><span className="flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0"/>{doctorDocumentState.get(form.doctorId)?.blocked ? 'Médico bloqueado para novos plantões por pendência crítica.' : 'Médico com documento pendente ou próximo do vencimento.'}</span><Link href={`/documentos/${form.doctorId}`} className="shrink-0 font-semibold underline">Abrir pasta</Link></div>}{!form.id && <section className="rounded-xl border border-border bg-surface-muted/35 p-4"><div className="flex items-start gap-3"><Repeat2 size={18} className="mt-0.5 shrink-0 text-primary"/><div><h3 className="text-sm font-semibold">{form.coverageMode === 'adhoc' ? 'Datas da cobertura' : 'Repetição automática'}</h3><p className="mt-1 text-xs text-text-muted">Crie plantões ou vagas em vários dias. Revise a prévia antes de salvar.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="nv-label">Frequência<select aria-label="Frequência" className="nv-input" value={recurrence} onChange={event => setRecurrence(event.target.value as ShiftRecurrence)}><option value="once">Somente esta data</option><option value="daily">Todos os dias</option><option value="weekdays">Segunda a sexta</option><option value="every_other_day">12x36</option><option value="custom">Personalizado</option><option value="weekly">Semanal</option><option value="fortnightly">Quinzenal</option><option value="monthly">Mensal</option></select></label>{recurrence !== 'once' && <label className="nv-label">Repetir até<input className="nv-input" type="date" min={form.date} required value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>{recurrence === "custom" && <fieldset className="mt-3"><legend className="text-xs font-medium text-text-secondary">Dias da semana</legend><div className="mt-2 flex flex-wrap gap-1">{[["Dom", 0], ["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6]].map(([label, value]) => <button key={value} type="button" aria-pressed={customWeekdays.includes(Number(value))} onClick={() => setCustomWeekdays(days => days.includes(Number(value)) ? days.filter(day => day !== Number(value)) : [...days, Number(value)])} className={`min-h-9 rounded-lg border px-2.5 text-xs font-medium ${customWeekdays.includes(Number(value)) ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary"}`}>{label}</button>)}</div></fieldset>}{recurrence !== "once" && recurrenceDates.length > 0 && <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-text-secondary"><strong className="text-text-primary">{recurrenceDates.length * (form.doctorId ? 1 : vacancyCount)} postos em {recurrenceDates.length} datas:</strong> {recurrenceDescription(form.date, recurrence)}, das {form.startTime} às {form.endTime}, até {new Date(repeatUntil + 'T12:00:00').toLocaleDateString('pt-BR')}.</p>}</section>}{!form.doctorId && !form.id && <label className="nv-label">Quantidade de vagas<input className="nv-input" type="number" min={1} max={20} value={vacancyCount} onChange={event => setVacancyCount(Math.max(1, Number(event.target.value)))}/></label>}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="nv-label">{form.doctorId ? 'Modalidade de contratação' : 'Modalidade de contratação prevista'}
+          <select aria-label={form.doctorId ? 'Modalidade de contratação' : 'Modalidade de contratação prevista'} className="nv-input" value={form.employmentType || ''} disabled={openedShift?.paymentStatus === 'paid'}
+            required={!openedShift || Boolean(openedShift.employmentType || (form.doctorId && form.doctorId !== openedShift.doctorId))}
+            onChange={event => changeEmployment(event.target.value as EmploymentType || undefined)}>
+            <option value="">{openedShift ? 'Não definida' : 'Selecione'}</option>
+            {Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        {form.doctorId && <label className="nv-label">Situação
+          <select className="nv-input" value={form.status} onChange={event => setForm({ ...form, status: event.target.value as Shift['status'] })}>
+            <option value="pending">Aguardando confirmação</option><option value="confirmed">Confirmado</option>
+            <option value="completed">Concluído</option><option value="cancelled">Cancelado</option>
+          </select>
+        </label>}
+      </div>
+      {form.employmentType && <label className="nv-label">{form.employmentType === 'pj' ? 'Empresa PJ' : form.employmentType === 'concursado' ? 'Prefeitura / órgão público' : 'Empregador'}
+        <input className="nv-input" list="employer-options" required={Boolean(form.doctorId && form.employmentType === 'pj')} maxLength={150}
+          value={form.employerName || ''} onChange={event => setForm({ ...form, employerName: event.target.value })}/>
+        <datalist id="employer-options">{employers.map(item => <option key={item} value={item}/>)}</datalist>
+      </label>}
+      {form.employmentType && form.employmentType !== 'pj' && <p className="text-sm text-text-muted">Pagamento administrado pelo vínculo empregatício, fora dos repasses PJ.</p>}
+      {newPjAgreement && !canEditFinancial && <p className="text-sm text-warning">A confirmação do valor PJ exige permissão financeira.</p>}
+      <div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Modalidade<select className="nv-input" value={form.type} onChange={event => setForm({ ...form, type: event.target.value as Shift['type'] })}>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{form.endTime < form.startTime && <p className="self-end pb-3 text-xs text-primary">Termina no dia seguinte.</p>}</div><label className="nv-label">Observações<textarea className="nv-input" rows={2} maxLength={1000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
       </fieldset>
-      {canSeeFinancial && openedShift?.doctorId && <>
+      {canSeeFinancial && openedShift && (openedShift.employmentType === 'pj' || openedShift.paymentAgreement || openedShift.paymentAmount != null || openedShift.paidAt) && <>
         <ShiftFinancialDetails shift={openedShift} applicableRate={storedFormRate} />
         <ShiftPaymentHistory key={openedShift.id} shiftId={openedShift.id} />
-        <Link className="nv-button-secondary" href={'/financeiro?' + new URLSearchParams({ period: 'all', shiftId: openedShift.id })}>Abrir ficha no financeiro</Link>
+        {openedShift.employmentType === 'pj' && (openedShift.doctorId || openedShift.paymentAgreement) && <Link className="nv-button-secondary" href={'/financeiro?' + new URLSearchParams({ period: 'all', shiftId: openedShift.id })}>Abrir ficha no financeiro</Link>}
       </>}
       {showAgreementFields && (rateQuery.ready
-        ? <ShiftAgreementFields draft={agreementDraft} onChange={setAgreementDraft} rate={formRate} previous={openedShift} />
+        ? <ShiftAgreementFields draft={effectiveDraft} onChange={setAgreementDraft} rate={formRate} previous={newPjAgreement ? undefined : openedShift} requireAmount={Boolean(newPjAgreement)} dueFor={form} />
         : <div className="space-y-1 text-sm text-text-muted" role="status">
           <p>{rateQuery.error || 'Consultando valores padrão…'}</p>
           {rateQuery.error && <button type="button" className="text-primary underline" onClick={rateQuery.reload}>Tentar novamente</button>}
@@ -519,6 +688,15 @@ function Schedule({ params }: { params: URLSearchParams }) {
       initialSpecialty={formSpecialties.includes(form.specialty || '') ? form.specialty : undefined}
       initialPeriod={{ kind: coverageKind, startTime: form.startTime, endTime: form.endTime, requiredDoctors: 1 }}
       onClose={() => setSectorEditorOpen(false)} onSaved={selectCreatedSector}/>}
+    {recurringPreview && <Dialog title="Revisar plantões recorrentes" onClose={() => !store.saving && setRecurringPreview(null)}
+      footer={<div className="flex flex-wrap justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setRecurringPreview(null)}>Voltar à edição</button><button type="button" className="nv-button" disabled={store.saving} onClick={() => void confirmRecurrence()}>{store.saving ? 'Salvando…' : 'Confirmar criação'}</button></div>}>
+      <div className="space-y-3">
+        <p className="text-sm font-semibold">{recurringPreview.inputs.length} postos em {recurringPreview.dates.length} datas</p>
+        {canSeeFinancial && <p className="text-sm text-text-secondary">{recurringPreview.cents == null ? 'Sem valor combinado' : `${formatShiftMoney(recurringPreview.cents)} por plantão`}{recurringPreview.inputs[0]?.agreement && ` · ${paymentFrequencyLabels[recurringPreview.inputs[0].agreement.frequency]}`}. Cada plantão terá seu próprio registro.</p>}
+        <ul className="grid gap-2 sm:grid-cols-2">{recurringPreview.dates.map(day => <li key={day} className="rounded-lg border border-border px-3 py-2 text-sm"><strong>{formatDay(day)}</strong> <span className="text-text-muted">· {recurringPreview.countPerDate} {recurringPreview.countPerDate === 1 ? 'posto' : 'postos'}</span></li>)}</ul>
+        {recurringError && <p role="alert" className="text-sm text-danger">{recurringError}</p>}
+      </div>
+    </Dialog>}
 
   </div>;
 }

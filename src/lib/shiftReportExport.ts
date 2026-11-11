@@ -2,6 +2,7 @@ import writeExcelFile, { type Cell, type SheetData } from 'write-excel-file/node
 import { getCellAddress } from 'write-excel-file/utility';
 import { toCsv, type CsvValue } from './csv.ts';
 import { shiftReportStates, presenceReportStates, reportFrequencyLabels, reportPeriodLabels, type ReportRow, type ShiftReport } from './shiftReport.ts';
+import { employmentLabel } from './scheduling.ts';
 import { financeStateLabels } from './financeState.ts';
 import { formatReportMoney, summarizeReport } from './reportSummary.ts';
 
@@ -24,6 +25,7 @@ const core: Column[] = [
   { label: 'Posto', width: 24, field: row => row.sector },
   { label: 'Especialidade', width: 24, field: row => row.specialty },
   { label: 'Médico', width: 32, field: row => row.doctor },
+  { label: 'Modalidade de contratação', width: 24, field: row => employmentLabel(row.employment) },
   { label: 'Data', width: 13, field: row => row.date, kind: 'date' },
   { label: 'Início', width: 12, field: row => row.start_time },
   { label: 'Fim', width: 12, field: row => row.end_time },
@@ -37,7 +39,6 @@ const attendance: Column[] = [
 ];
 const payments: Column[] = [
   { label: 'CRM', width: 15, field: row => row.crm },
-  { label: 'Vínculo', width: 15, field: row => row.employment && ({ clt: 'CLT', concursado: 'Concursado', pj: 'PJ' }[row.employment] || row.employment) },
   { label: 'Empregador', width: 25, field: row => row.employer },
   { label: 'Modalidade de pagamento', width: 22, field: row => row.frequency && reportFrequencyLabels[row.frequency] },
   { label: 'Situação financeira', width: 21, field: row => row.payment && financeStateLabels[row.payment], highlight: true },

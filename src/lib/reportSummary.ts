@@ -37,7 +37,7 @@ export function summarizeReport(report: ShiftReport) {
     group.set(id, entry);
   }
   for (const row of report.rows) {
-    if (!row.payment) continue;
+    if (row.employment !== 'pj' || !row.payment || row.payment === 'unassigned' || (!row.doctor_id && !row.doctor)) continue;
     add(totals, row);
     addGroup(groups.doctors, row.doctor_id || row.doctor || '', row.doctor || 'Médico', row);
     addGroup(groups.units, row.unit_id || row.unit, row.unit, row);

@@ -127,7 +127,7 @@ export function doctorsWithDocumentIssues(
 }
 
 export function dashboardPayments(shifts: Shift[], today: string) {
-  const assigned = shifts.filter(shift => shift.doctorId && shift.status !== 'cancelled');
+  const assigned = shifts.filter(shift => shift.employmentType === 'pj' && shift.doctorId && shift.paymentAmount != null && shift.status !== 'cancelled');
   const unpaid = assigned.filter(shift => shift.paymentStatus !== 'paid');
   const amount = (items: Shift[]) => items.reduce((total, shift) => total + (shift.paymentAmount || 0), 0);
   const onDelivery = unpaid.filter(shift => (shift.paymentFrequency || 'on_delivery') === 'on_delivery');

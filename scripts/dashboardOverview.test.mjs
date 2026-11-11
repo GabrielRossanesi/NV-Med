@@ -24,14 +24,18 @@ test('document issues count a doctor once, include missing required files and ho
   assert.deepEqual(issues.map(({ doctor, expired, pending }) => [doctor.id, expired, pending]), [['a', 1, 2]]);
 });
 
-test('on-delivery balances include older unpaid shifts and exclude vacancies, cancellations and paid items', () => {
+test('balances include older PJ shifts and exclude other employment, vacancies, cancellations and paid items', () => {
   const today = '2026-11-10';
-  const shift = { doctorId: 'a', status: 'completed', date: '2026-10-28', paymentStatus: 'pending', paymentAmount: 100, paymentDueDate: '2026-10-30' };
+  const shift = { doctorId: 'a', employmentType: 'pj', status: 'completed', date: '2026-10-28', paymentStatus: 'pending', paymentAmount: 100, paymentDueDate: '2026-10-30' };
   const shifts = [shift,
     { ...shift, date: today, paymentFrequency: 'monthly', paymentAmount: 200, paymentDueDate: today },
     { ...shift, date: today, paymentStatus: 'paid' },
     { ...shift, status: 'cancelled' },
     { ...shift, doctorId: undefined },
+    { ...shift, employmentType: 'clt', paymentAmount: 1300 },
+    { ...shift, employmentType: 'concursado', paymentAmount: 1400 },
+    { ...shift, employmentType: undefined, paymentAmount: 1500 },
+    { ...shift, paymentAmount: undefined },
   ];
   assert.deepEqual(dashboardPayments(shifts, today), {
     pending: 300, overdue: 100, onDelivery: { count: 1, amount: 100 }, paidThisMonth: 1, nextDue: [[today, 200]],

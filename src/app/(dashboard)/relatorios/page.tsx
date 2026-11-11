@@ -82,7 +82,7 @@ export default function ReportsPage() {
     .filter(item => item.organizationId === orgId && item.date >= bounds.start && item.date <= bounds.end && item.status !== 'cancelled')
     .filter(item => !unitId || item.unitId === unitId)
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-  const financialShifts = periodShifts.filter(item => item.doctorId);
+  const financialShifts = periodShifts.filter(item => item.doctorId && item.employmentType === 'pj');
   const totalAmount = financialShifts.reduce((total, item) => total + (item.paymentAmount || 0), 0);
   const paidAmount = financialShifts.filter(item => item.paymentStatus === 'paid').reduce((total, item) => total + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
   const pendingAmount = financialShifts.filter(item => item.paymentStatus !== 'paid').reduce((total, item) => total + (item.paymentAmount || 0), 0);
@@ -106,9 +106,9 @@ export default function ReportsPage() {
   function exported(label: string) { setLastExport(`${label} exportado em ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`); }
 
   function exportShifts() {
-    downloadCsv(`plantoes-${filenameBase}`, ['Data', 'Início', 'Fim', 'Unidade', 'Setor', 'Especialidade', 'Médico', 'CRM', 'Vínculo', 'Empregador', 'Modalidade', 'Situação'], periodShifts.map(item => {
+    downloadCsv(`plantoes-${filenameBase}`, ['Data', 'Início', 'Fim', 'Unidade', 'Setor', 'Especialidade', 'Médico', 'CRM', 'Modalidade de contratação', 'Empregador', 'Modalidade', 'Situação'], periodShifts.map(item => {
       const unit = units.find(value => value.id === item.unitId); const sector = sectors.find(value => value.id === item.sectorId); const doctor = store.doctors.find(value => value.id === item.doctorId);
-      return [displayDate(item.date), item.startTime, item.endTime, unit?.name, sector?.name || item.sector, item.specialty, doctor?.name || 'Vaga aberta', doctor ? `${doctor.crm}-${doctor.crmUf}` : '', item.employmentType ? employmentLabels[item.employmentType] : '', item.employerName, shiftTypeLabels[item.type], shiftStatusLabels[item.status]];
+      return [displayDate(item.date), item.startTime, item.endTime, unit?.name, sector?.name || item.sector, item.specialty, doctor?.name || 'Vaga aberta', doctor ? `${doctor.crm}-${doctor.crmUf}` : '', item.employmentType ? employmentLabels[item.employmentType] : 'Não definida', item.employerName, shiftTypeLabels[item.type], shiftStatusLabels[item.status]];
     })); exported('Plantões');
   }
 
@@ -122,11 +122,11 @@ export default function ReportsPage() {
 
   function financialRow(item: Shift) {
     const doctor = store.doctors.find(value => value.id === item.doctorId); const unit = units.find(value => value.id === item.unitId); const sector = sectors.find(value => value.id === item.sectorId);
-    return [displayDate(item.date), item.startTime, item.endTime, doctor?.name, doctor ? `${doctor.crm}-${doctor.crmUf}` : '', unit?.name, sector?.name || item.sector, item.specialty, item.employmentType ? employmentLabels[item.employmentType] : '', item.employerName, paymentFrequencyLabels[item.paymentFrequency || 'on_delivery'], (item.paymentAmount || 0).toFixed(2).replace('.', ','), item.paymentStatus === 'paid' ? 'Pago' : 'Pendente'];
+    return [displayDate(item.date), item.startTime, item.endTime, doctor?.name, doctor ? `${doctor.crm}-${doctor.crmUf}` : '', unit?.name, sector?.name || item.sector, item.specialty, item.employmentType ? employmentLabels[item.employmentType] : 'Não definida', item.employerName, paymentFrequencyLabels[item.paymentFrequency || 'on_delivery'], item.paymentAmount == null ? '' : item.paymentAmount.toFixed(2).replace('.', ','), item.paymentStatus === 'paid' ? 'Pago' : 'Pendente'];
   }
 
   function exportFinancial() {
-    downloadCsv(`financeiro-detalhado-${filenameBase}`, ['Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Vínculo', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Pagamento'], financialShifts.map(financialRow)); exported('Financeiro detalhado');
+    downloadCsv(`financeiro-detalhado-${filenameBase}`, ['Data', 'Início', 'Fim', 'Médico', 'CRM', 'Unidade', 'Setor', 'Especialidade', 'Modalidade de contratação', 'Empregador', 'Regime de pagamento', 'Valor (R$)', 'Pagamento'], financialShifts.map(financialRow)); exported('Financeiro detalhado');
   }
 
   function exportDoctorSummary() {

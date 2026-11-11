@@ -172,6 +172,21 @@ export interface ShiftRate extends ShiftRateScope {
   active: boolean;
 }
 
+export type ShiftRateRow = Omit<ShiftRate, 'amount_cents'> & {
+  amount_cents: number | null;
+  post_default?: boolean;
+  payment_frequency?: PaymentFrequency | null;
+  financial_notes?: string | null;
+};
+
+export type SectorFinanceDefaults = {
+  amount_cents: number | null;
+  day_cents: number | null;
+  night_cents: number | null;
+  frequency: PaymentFrequency | null;
+  notes: string;
+};
+
 export interface ShiftPaymentAgreement {
   mode: 'default' | 'manual' | 'override';
   rate: (ShiftRateScope & Pick<ShiftRate, 'id' | 'amount_cents'>) | null;

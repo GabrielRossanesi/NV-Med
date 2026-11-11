@@ -25,3 +25,16 @@ Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verific
 - Valide `27_effective_permissions.sql` depois da 26 e `28_scoped_sectors_and_reports.sql` depois da 27. Aplique as duas migrations antes de disponibilizar o código correspondente. O laboratório `scripts/test-database.ps1` executa `effective-permissions-and-reports.verify.sql` com dados sintéticos e rollback.
 - A migration 27 mantém os cargos e as concessões anteriores. Ela acrescenta exceções por ação, limites de delegação, auditoria de acessos e a proteção do último diretor ou gerente ativo. O administrador SaaS configura as ações delegáveis no formulário de usuários. O cargo Coordenador Médico é uma identificação do credenciamento no portal.
 - A migration 28 cruza o catálogo da empresa com os vínculos de unidade e setor. Os relatórios aplicam os filtros no banco antes da prévia ou da exportação. Os dados e filtros financeiros exigem acesso ao Financeiro.
+
+## Referências financeiras por posto
+
+- A migration 29 adiciona referências e modalidade padrão por posto à tabela privada existente. O formulário grava posto e referência em uma operação. Valores de plantões existentes não são recalculados.
+- Vagas abertas podem ter acordo registrado sem médico. O vencimento e o saldo de pagamento só se aplicam após vincular um responsável. Novos plantões sem valor ficam sem valor definido; o ajuste administrativo de pagamentos baixados continua exigindo autorização e justificativa.
+- Aplique `29_sector_finance_and_open_agreements.sql` depois da 28, antes de publicar a interface correspondente. O laboratório `scripts/test-database.ps1` valida a migration e os fluxos em `sector-finance-and-open-agreements.verify.sql` com rollback.
+
+## Modalidade de contratação por plantão
+
+- Aplique `30_shift_employment.sql` depois da 29, em conjunto com a versão correspondente da interface. O vínculo existente `concursado` é exibido como PREFEITURA.
+- Os novos acordos e os relatórios de repasses usam apenas plantões PJ. As linhas legadas, inclusive contratações não definidas e valores já registrados, são preservadas.
+- Na aprovação de candidaturas e trocas, médico e modalidade são confirmados na mesma transação. Um substituto PJ precisa de um novo acordo. Mudanças incompatíveis em plantões com baixa registrada ficam bloqueadas para regularização financeira.
+- A suíte `shift-employment.verify.sql` usa dados sintéticos com rollback para testar as três trocas de modalidade, vagas, permissões e histórico.

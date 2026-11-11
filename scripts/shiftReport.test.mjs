@@ -9,11 +9,19 @@ import { PDFDocument } from 'pdf-lib';
 
 const row = {
   id: 'test', organization: 'Clínica A', unit: 'Hospital A', sector: 'Pediatria', specialty: 'Clínica geral',
-  doctor: '  =1+1', date: '2026-11-09', start_time: '19:00', end_time: '07:00', status: 'confirmed',
+  doctor: '  =1+1', employment: 'pj', date: '2026-11-09', start_time: '19:00', end_time: '07:00', status: 'confirmed',
   presence: 'checked_in', check_in: '2026-11-09T22:00:00.000Z', check_out: null,
   payment: 'overdue', agreed: 1400, due: '2026-11-10', paid_on: null, paid_amount: null,
 };
 const report = { finance: true, attendance: true, rows: [row] };
+
+test('a priced open shift is exported without adding its quote to amounts payable', () => {
+  const quote = { ...row, id: 'vacancy', doctor: null, doctor_id: null, status: 'open', payment: 'unassigned', agreed: 750, due: null, balance: null };
+  const combined = { ...report, rows: [row, quote] };
+  assert.match(buildReportCsv(combined), /"750,00"/);
+  assert.match(buildReportCsv(combined), /Sem médico/);
+  assert.deepEqual(summarizeReport(combined).totals, { agreed: '1400.00', paid: '0.00', balance: '1400.00' });
+});
 
 test('generates UTF-8 CSV, escapes formula-like cells and omits unauthorized columns', () => {
   const csv = buildReportCsv(report);
@@ -29,7 +37,7 @@ test('generates a filterable XLSX with typed values, separate financial totals a
   const operational = strFromU8(files['xl/worksheets/sheet1.xml']);
   const financial = strFromU8(files['xl/worksheets/sheet2.xml']);
   const styles = strFromU8(files['xl/styles.xml']);
-  assert.match(operational, /<autoFilter ref="A1:M2"\/>/);
+  assert.match(operational, /<autoFilter ref="A1:N2"\/>/);
   assert.match(financial, /<autoFilter ref="A1:S2"\/>/);
   assert.match(strFromU8(files['xl/worksheets/sheet5.xml']), /<autoFilter ref="A1:E2"\/>/);
   assert.match(operational, /state="frozen"/);
@@ -44,6 +52,8 @@ test('preserves the agreed, settled and outstanding values in financial breakdow
   const summary = summarizeReport({ ...report, rows: [
     { ...row, doctor_id: 'one', agreed: 120.10, paid_amount: 115.01, payment: 'paid', balance: 0 },
     { ...row, doctor_id: 'two', agreed: 0.22, paid_amount: null, balance: 0.22, date: '2026-12-02' },
+    { ...row, employment: 'concursado', agreed: 400, paid_amount: null, balance: 400 },
+    { ...row, employment: null, agreed: 500, paid_amount: null, balance: 500 },
   ] });
   assert.deepEqual(summary.totals, { agreed: '120.32', paid: '115.01', balance: '0.22' });
   assert.equal(summary.doctors.length, 2);

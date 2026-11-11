@@ -157,5 +157,6 @@ export function summarizeSectorCoverage(
 export function copyableRegularShifts(shifts: Shift[]) {
   return shifts.filter(shift => shift.status !== 'cancelled' && shift.coverageMode !== 'adhoc');
 }
-export const employmentLabels = { clt: 'CLT', concursado: 'Concursado (prefeitura)', pj: 'PJ' };
+export const employmentLabels = { pj: 'PJ', clt: 'CLT', concursado: 'PREFEITURA' } as const;
+export const employmentLabel = (value?: keyof typeof employmentLabels | null) => value ? employmentLabels[value] : 'Não definida';
 export const paymentFrequencyLabels = { on_delivery: 'À vista', monthly: 'Mensal' };

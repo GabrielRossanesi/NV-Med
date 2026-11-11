@@ -18,13 +18,14 @@ test('turn deletion selects the chosen sector, date and coverage period', () => 
   assert.deepEqual(getScheduleDeletionTargets(shifts, [sector], 'org', { ...target, kind: '' }), []);
 });
 
-test('doctor removal keeps the post and clears employment and financial assignment', () => {
+test('doctor removal keeps the planned employment and clears the financial assignment', () => {
   const targets = getScheduleDeletionTargets(shifts, [sector], 'org', { ...selection, scope: 'doctor', doctorId: 'doctor' });
   assert.deepEqual(targets.map(shift => shift.id), ['day-1', 'night-1']);
-  const vacancy = vacateShift(base);
+  const vacancy = vacateShift({ ...base, employmentType: 'pj' });
   assert.equal(vacancy.id, base.id);
   assert.equal(vacancy.doctorId, undefined);
   assert.equal(vacancy.status, 'open');
-  assert.equal(vacancy.paymentAmount, 0);
+  assert.equal(vacancy.employmentType, 'pj');
+  assert.equal(vacancy.paymentAmount, undefined);
   assert.equal(vacancy.paymentStatus, 'pending');
 });

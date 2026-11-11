@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { Clock3, WalletCards } from 'lucide-react';
 import { financeState, financeStateLabels, saoPauloDate } from '@/lib/financeState';
 import { paymentFrequencyLabels } from '@/lib/scheduling';
-import { formatShiftMoney, rateScopeLabel, type AgreementDraft } from '@/lib/shiftPricing';
+import { formatShiftMoney, formatShiftMoneyInput, rateScopeLabel, type AgreementDraft } from '@/lib/shiftPricing';
 import { createClient } from '@/lib/supabase/client';
 import { fetchShiftRates } from '@/services/supabaseService';
-import type { PaymentFrequency, Shift, ShiftPaymentAgreement, ShiftRate } from '@/types';
+import type { PaymentFrequency, Shift, ShiftPaymentAgreement, ShiftRate, ShiftRateRow } from '@/types';
 
 export function useShiftRates(organization: string, enabled: boolean) {
   const [revision, setRevision] = useState(0);
-  const [result, setResult] = useState<{ key: string; rates: ShiftRate[]; error: string }>();
+  const [result, setResult] = useState<{ key: string; rates: ShiftRateRow[]; error: string }>();
   const key = `${organization}/${revision}`;
   useEffect(() => {
     if (!organization || !enabled) return;
@@ -27,36 +27,53 @@ export function useShiftRates(organization: string, enabled: boolean) {
   return { rates: active?.rates || [], error: active?.error, ready: Boolean(active && !active.error), reload: () => setRevision(value => value + 1) };
 }
 
-export function ShiftAgreementFields({ draft, onChange, rate, previous, adjustment = false }: {
+export function ShiftAgreementFields({ draft, onChange, rate, previous, adjustment = false, requireAmount = false, dueFor }: {
   draft: AgreementDraft; onChange: (draft: AgreementDraft) => void; rate?: ShiftRate; previous?: Shift; adjustment?: boolean;
+  requireAmount?: boolean;
+  dueFor?: Pick<Shift, 'organizationId' | 'date' | 'startTime' | 'endTime'>;
 }) {
-  const editing = Boolean(previous?.doctorId);
+  const { organizationId, date, startTime, endTime } = dueFor ?? {};
+  const dueKey = [organizationId, date, startTime, endTime, draft.frequency].join('/');
+  const [due, setDue] = useState<{ key: string; value: string | null; error: boolean }>();
+  useEffect(() => {
+    if (!organizationId || !date || !startTime || !endTime) return;
+    let live = true;
+    void createClient()?.rpc('nv_preview_pj_due', {
+      org: organizationId, shift_date: date, start_time: startTime, end_time: endTime, frequency: draft.frequency,
+    }).then(({ data, error }) => {
+      if (live) setDue({ key: dueKey, value: data as string | null, error: Boolean(error) });
+    });
+    return () => { live = false; };
+  }, [organizationId, date, startTime, endTime, draft.frequency, dueKey]);
+  const editing = Boolean(previous);
   const differentiated = draft.mode === 'override' || (draft.mode === 'keep' && previous?.paymentAgreement?.mode === 'override');
   const usingDefault = draft.mode === 'default' && Boolean(rate);
   const frozen = draft.mode === 'keep' || usingDefault;
   const requiresReason = editing && (draft.mode !== 'keep' || draft.frequency !== (previous?.paymentFrequency || 'on_delivery'));
   return <fieldset className="min-w-0 space-y-3 rounded-xl border border-border p-4">
-    <legend className="px-1 text-sm font-semibold">Acordo financeiro</legend>
+    <legend className="px-1 text-sm font-semibold">Pagamento do plantão</legend>
     {rate ? <div className="rounded-lg bg-surface-muted/60 p-3 text-xs leading-relaxed text-text-secondary">
       <strong className="block text-sm text-text-primary">Padrão aplicável · {formatShiftMoney(rate.amount_cents)}</strong>
       {rateScopeLabel(rate)}
       {draft.mode !== 'default' && <button type="button" className="ml-2 min-h-9 font-semibold text-primary hover:underline" onClick={() => onChange({ ...draft, mode: 'default' })}>Aplicar padrão</button>}
-    </div> : <p className="text-xs text-text-muted">Sem referência para este recorte. Informe o valor acordado.</p>}
-    {draft.mode === 'keep' && <p className="text-xs text-text-muted">O valor registrado será mantido. Para alterá-lo, aplique a referência ou escolha um valor diferenciado.</p>}
+    </div> : <p className="text-xs text-text-muted">Sem valor padrão para este plantão. Você pode informar um valor manualmente.</p>}
+    {draft.mode === 'keep' && <p className="text-xs text-text-muted">{previous?.paymentAmount == null ? 'Nenhum valor registrado.' : 'O valor registrado será mantido até você editar o acordo.'}</p>}
     {draft.mode === 'manual' && rate && <p className="text-xs font-medium text-warning">O valor digitado foi mantido. Aplique o padrão ou marque valor diferenciado para salvá-lo.</p>}
     <div className="grid gap-3 sm:grid-cols-2">
-      <label className="nv-label">Modalidade de pagamento<select className="nv-input" disabled={adjustment} value={draft.frequency} onChange={event => onChange({ ...draft, frequency: event.target.value as PaymentFrequency })}>
+      <label className="nv-label">Modalidade de pagamento<select aria-label="Modalidade de pagamento" className="nv-input" disabled={adjustment} value={draft.frequency} onChange={event => onChange({ ...draft, frequencyEdited: true, frequency: event.target.value as PaymentFrequency })}>
         {Object.entries(paymentFrequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
-      <label className="nv-label">Valor combinado (R$)<input className="nv-input" inputMode="decimal" placeholder="0,00" required={!frozen} readOnly={frozen}
-        value={usingDefault ? (rate!.amount_cents / 100).toFixed(2) : draft.amount}
+      <label className="nv-label">Valor combinado (R$)<input className="nv-input" inputMode="decimal" placeholder="Não definido" required={!frozen && (requireAmount || editing || draft.mode === 'override')} readOnly={frozen}
+        value={usingDefault ? formatShiftMoneyInput(rate!.amount_cents) : draft.amount}
         onChange={event => onChange({ ...draft, mode: draft.mode === 'override' ? 'override' : 'manual', amount: event.target.value })} /></label>
     </div>
+    {dueFor && <p className="text-xs text-text-secondary">Vencimento previsto: {due?.key !== dueKey ? 'Consultando…'
+      : due.error ? 'Indisponível' : due.value ? displayDate(due.value) : 'Sem vencimento definido pela política da empresa'}</p>}
     {!rate && draft.mode === 'keep' && <button type="button" className="min-h-9 text-sm font-semibold text-primary hover:underline" onClick={() => onChange({ ...draft, mode: 'manual' })}>Editar valor combinado</button>}
-    <label className="flex min-h-9 items-center gap-2 text-sm font-medium">
+    {(rate || differentiated) && <label className="flex min-h-9 items-center gap-2 text-sm font-medium">
       <input type="checkbox" checked={differentiated} onChange={event => onChange({ ...draft, mode: event.target.checked ? 'override' : rate ? 'default' : 'manual',
-        amount: event.target.checked && usingDefault ? (rate!.amount_cents / 100).toFixed(2) : draft.amount })} /> Valor diferenciado
-    </label>
+        amount: event.target.checked && usingDefault ? formatShiftMoneyInput(rate!.amount_cents) : draft.amount })} /> Valor diferenciado
+    </label>}
     {draft.mode === 'override' && <label className="nv-label">Justificativa do valor diferenciado<textarea className="nv-input" rows={2} required minLength={3} maxLength={1000}
       value={draft.overrideReason} onChange={event => onChange({ ...draft, overrideReason: event.target.value })} /></label>}
     {requiresReason && <label className="nv-label">{adjustment ? 'Motivo do ajuste administrativo' : 'Motivo da alteração financeira'}<textarea className="nv-input" rows={2} required minLength={3} maxLength={1000}
@@ -73,12 +90,12 @@ export function ShiftFinancialDetails({ shift, applicableRate }: { shift: Shift;
   const paid = shift.paymentStatus === 'paid';
   const details = [
     ['Modalidade', paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']],
-    ['Valor combinado', displayMoney(shift.paymentAmount)],
+    ['Valor combinado', shift.paymentAmount == null ? 'Não definido' : displayMoney(shift.paymentAmount)],
     ['Referência registrada', agreement?.rate ? `${formatShiftMoney(agreement.rate.amount_cents)} · ${rateScopeLabel(agreement.rate)}` : 'Sem referência registrada'],
     ...(applicableRate && (applicableRate.id !== agreement?.rate?.id || applicableRate.amount_cents !== agreement?.rate?.amount_cents)
       ? [['Padrão atual aplicável', `${formatShiftMoney(applicableRate.amount_cents)} · ${rateScopeLabel(applicableRate)}`]] : []),
-    ['Vencimento', displayDate(shift.paymentDueDate)],
-    ['Situação do pagamento', financeStateLabels[financeState(shift, saoPauloDate())]],
+    ['Vencimento', displayDate(shift.doctorId ? shift.paymentDueDate : undefined)],
+    ['Situação do pagamento', !shift.doctorId && shift.status !== 'cancelled' ? financeStateLabels.unassigned : financeStateLabels[financeState(shift, saoPauloDate())]],
     ['Valor efetivamente pago', paid ? displayMoney(shift.paidAmount ?? shift.paymentAmount) : '—'],
     ['Data do pagamento', shift.paidAt ? displayDate(saoPauloDate(new Date(shift.paidAt))) : '—'],
     ['Acordo definido em', agreement ? dateTime.format(new Date(agreement.changed_at)) : '—'],

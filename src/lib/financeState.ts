@@ -1,6 +1,6 @@
 import type { Shift } from '@/types';
 
-export const financeStateLabels = { pending: 'Pendente', scheduled: 'Programado', paid: 'Pago', overdue: 'Em atraso', cancelled: 'Cancelado' };
+export const financeStateLabels = { pending: 'Pendente', scheduled: 'Programado', paid: 'Pago', overdue: 'Em atraso', cancelled: 'Cancelado', unassigned: 'Sem médico' };
 export type FinanceState = keyof typeof financeStateLabels;
 
 export function financeState(shift: Pick<Shift, 'status' | 'paymentStatus' | 'paymentDueDate'>, today: string): FinanceState {

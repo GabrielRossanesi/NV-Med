@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Download, FileSpreadsheet } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import { createClient } from '@/lib/supabase/client';
+import { employmentLabel, employmentLabels } from '@/lib/scheduling';
 import { financeStateLabels, saoPauloDate } from '@/lib/financeState';
 import { formatReportMoney, type summarizeReport } from '@/lib/reportSummary';
 import { presenceReportStates, reportFilterKeys, reportFrequencyLabels, reportPeriodLabels, shiftReportStates, type ReportCatalog, type ShiftReport } from '@/lib/shiftReport';
@@ -143,6 +144,7 @@ function Report({ initial, activeOrganization, financial }: { initial: Record<st
         {select('posto', 'Setor', entries(sectors))}
         {select('especialidade', 'Especialidade', Object.fromEntries((catalog?.specialties || []).map(item => [item, item])))}
         {select('medico', 'Médico', entries(catalog?.doctors || []))}
+        {!financial && select('contratacao', 'Modalidade de contratação', { ...employmentLabels, undefined: 'Não definida' })}
       </div>
       <details className="rounded-lg border border-border px-3 py-3">
         <summary className="cursor-pointer text-sm font-semibold">Horários e situações</summary>
@@ -186,12 +188,12 @@ function Report({ initial, activeOrganization, financial }: { initial: Record<st
       </div>}
       {report.rows.length > 0 ? <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full min-w-[660px] text-left text-sm">
-          <thead className="bg-surface-muted"><tr>{['Data', 'Unidade e setor', 'Médico', 'Situação', ...(report.attendance ? ['Presença'] : []), ...(report.finance ? ['Pagamento', 'Combinado', 'Pago', 'Saldo'] : [])].map(label =>
+          <thead className="bg-surface-muted"><tr>{['Data', 'Unidade e setor', 'Médico', 'Contratação', 'Situação', ...(report.attendance ? ['Presença'] : []), ...(report.finance ? ['Pagamento', 'Combinado', 'Pago', 'Saldo'] : [])].map(label =>
             <th key={label} scope="col" className="p-3">{label}</th>)}</tr></thead>
           <tbody className="divide-y divide-border">{report.rows.map(row => <tr key={row.id}>
             <td className="p-3">{isoDate(row.date)}<span className="block text-xs text-text-muted">{row.start_time}–{row.end_time}</span></td>
             <td className="p-3">{row.unit}<span className="block text-xs text-text-muted">{row.sector}{row.specialty && ' · ' + row.specialty}</span></td>
-            <td className="p-3">{row.doctor || '—'}</td><td className="p-3">{shiftReportStates[row.status]}</td>
+            <td className="p-3">{row.doctor || '—'}</td><td className="p-3">{employmentLabel(row.employment)}</td><td className="p-3">{shiftReportStates[row.status]}</td>
             {report.attendance && <td className="p-3">{row.presence ? presenceReportStates[row.presence] : '—'}</td>}
             {report.finance && <><td className="p-3">{row.payment ? financeStateLabels[row.payment] : '—'}{row.due && <span className="block text-xs text-text-muted">Venc. {isoDate(row.due)}</span>}</td>
               {[row.agreed, row.paid_amount, row.balance].map((amount, index) => <td key={index} className="whitespace-nowrap p-3 tabular-nums">{amount == null ? '—' : brl.format(amount)}</td>)}</>}

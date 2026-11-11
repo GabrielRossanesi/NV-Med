@@ -6,7 +6,7 @@ import { Plus, WalletCards } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import { useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
 import { canEditPermission, canViewPermission } from '@/lib/permissions';
-import { formatShiftMoney, parseMoneyCents, rateScopeLabel, shiftTypeLabels } from '@/lib/shiftPricing';
+import { formatShiftMoney, hasRateAmount, parseMoneyCents, rateScopeLabel, shiftTypeLabels } from '@/lib/shiftPricing';
 import { saveShiftRate } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import type { ShiftRate } from '@/types';
@@ -16,7 +16,8 @@ function RateSettings({ organization, canEdit }: { organization: string; canEdit
   const company = organizations.find(item => item.id === organization);
   const companyUnits = units.filter(item => item.organizationId === organization);
   const companySectors = sectors.filter(item => item.organizationId === organization);
-  const { rates, error, ready, reload } = useShiftRates(organization, true);
+  const { rates: rateRows, error, ready, reload } = useShiftRates(organization, true);
+  const rates = rateRows.filter(hasRateAmount);
   const [editing, setEditing] = useState<ShiftRate | 'new' | null>(null);
   const [unit, setUnit] = useState('');
   const [sector, setSector] = useState('');
@@ -75,7 +76,8 @@ function RateSettings({ organization, canEdit }: { organization: string; canEdit
         {rates.map(rule => <li key={rule.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
           <div className="min-w-0"><p className="wrap-anywhere font-medium">{rateScopeLabel(rule, companyUnits.find(item => item.id === rule.unit_id)?.name, companySectors.find(item => item.id === rule.sector_id)?.name)}</p>
             <p className="mt-1 text-sm text-text-secondary">{formatShiftMoney(rule.amount_cents)} <span className="nv-badge ml-1">{rule.active ? 'Ativa' : 'Inativa'}</span></p></div>
-          {canEdit && <button type="button" className="nv-button-secondary" onClick={() => edit(rule)}>Editar regra</button>}
+          {rule.post_default && rule.unit_id ? <Link className="nv-button-secondary" href={`/unidades/${rule.unit_id}`}>Ver configuração do posto</Link>
+            : canEdit && <button type="button" className="nv-button-secondary" onClick={() => edit(rule)}>Editar regra</button>}
         </li>)}
       </ul>}
     </section>

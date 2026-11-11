@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Repeat2, XCircle } from 'lucide-react';
 import Dialog from '@/components/Dialog';
+import EmploymentBadge from '@/components/schedule/EmploymentBadge';
+import type { EmploymentType } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
 import PresencePanel from '@/components/schedule/PresencePanel';
@@ -10,6 +12,7 @@ import PresencePanel from '@/components/schedule/PresencePanel';
 type Status = 'open' | 'exchange' | 'confirmed' | 'cancelled' | 'completed' | 'pending';
 type ApplicationStatus = 'pending' | 'selected' | 'not_selected' | 'cancelled';
 type Shift = {
+  employment?: EmploymentType;
   id: string; date: string; start_time: string; end_time: string; organization: string; unit: string;
   sector: string; specialty?: string; status: Status; notes?: string; assigned_to_me: boolean;
   upcoming: boolean; application?: ApplicationStatus;
@@ -67,6 +70,7 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
       <div><p className="text-sm text-text-muted">{displayDate(shift.date)}</p>
         <p className="mt-1 text-2xl font-bold tabular-nums">{shift.start_time}–{shift.end_time}</p></div>
       <StatusLabel status={shift.status}/>
+      {(shift.assigned_to_me || shift.status === 'open') && <EmploymentBadge employment={shift.employment} provisional={shift.status === 'open'}/>}
       <dl className="grid grid-cols-2 gap-3 border-y border-border py-4 text-sm">
         {Object.entries({ Empresa: shift.organization, Unidade: shift.unit, Posto: shift.sector, Especialidade: shift.specialty || 'Geral' }).map(([label, value]) =>
           <div key={label}><dt className="text-text-muted">{label}</dt><dd className="font-semibold">{value}</dd></div>)}
@@ -173,7 +177,7 @@ export default function PortalSchedule() {
           <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card-bg p-3 text-left transition-colors hover:border-primary/45 hover:bg-table-row-hover" onClick={() => setSelected(item)}>
             <span><strong className="block text-sm tabular-nums">{item.start_time}–{item.end_time} · {item.unit}</strong>
               <span className="mt-1 block text-xs text-text-muted">{item.organization} · {item.sector}{item.specialty && ' · ' + item.specialty}</span></span>
-            <StatusLabel status={item.status}/>
+            <div className="flex flex-wrap justify-end gap-1"><StatusLabel status={item.status}/>{(item.assigned_to_me || item.status === 'open') && <EmploymentBadge employment={item.employment} provisional={item.status === 'open'}/>}</div>
           </button>
         </li>)}</ul>
       </div>

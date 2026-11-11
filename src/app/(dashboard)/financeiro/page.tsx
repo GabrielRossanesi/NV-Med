@@ -59,6 +59,10 @@ function money(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function recordFinanceState(shift: Shift, today: string): FinanceState {
+  return !shift.doctorId && shift.status !== 'cancelled' ? 'unassigned' : financeState(shift, today);
+}
+
 function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClose }: {
   shift: Shift; organization?: Organization; unit?: Pick<Unit, 'name'>; sector?: Pick<Sector, 'name' | 'coveragePeriods' | 'defaultStartTime' | 'defaultEndTime' | 'requiredDoctors'>; doctor?: Pick<Doctor, 'name' | 'specialty'>; onClose: () => void;
 }) {
@@ -98,12 +102,12 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
 
   async function saveSettlement(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEdit || paid || saving) return;
+    if (!canEdit || paid || saving || !shift.doctorId || baseline.paymentAmount == null) return;
     setError('');
     const fields = new FormData(event.currentTarget);
     const cents = status === 'paid' ? parseMoneyCents(String(fields.get('paidAmount') || '')) : null;
     if (status === 'paid' && cents === null) return setError('Informe o valor pago em reais, com até duas casas decimais.');
-    const ok = await updateShiftFinancials(shift.id, baseline.paymentAmount ?? 0, baseline.paymentFrequency || 'on_delivery', status, {
+    const ok = await updateShiftFinancials(shift.id, baseline.paymentAmount, baseline.paymentFrequency || 'on_delivery', status, {
       amount: cents === null ? null : cents / 100,
       date: status === 'paid' ? String(fields.get('paidOn') || '') : null,
       note: String(fields.get('note') || ''),
@@ -119,7 +123,7 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
       {view === 'details' && <div className="flex flex-wrap gap-2">
         {canEdit && !paid && <>
           <button type="button" className="nv-button-secondary" onClick={() => openView('agreement')}>Editar acordo</button>
-          <button type="button" className="nv-button" onClick={() => openView('settlement')}>Registrar pagamento</button>
+          {shift.doctorId && shift.paymentAmount != null && <button type="button" className="nv-button" onClick={() => openView('settlement')}>Registrar pagamento</button>}
         </>}
         {paid && canAdjust && <button type="button" className="nv-button-secondary" onClick={() => openView('adjustment')}>Ajuste administrativo</button>}
       </div>}
@@ -176,7 +180,7 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
   const sectors = useMemo(() => catalog?.sectors || store.sectors.filter(item => item.organizationId === orgId), [catalog, store.sectors, orgId]);
   const doctors = useMemo(() => catalog?.doctors || store.doctors.filter(item => item.organizationId === orgId), [catalog, store.doctors, orgId]);
   const organizationShifts = useMemo(() => store.shifts.filter(item => item.organizationId === orgId), [store.shifts, orgId]);
-  const editing = organizationShifts.find(shift => shift.id === editingId && shift.doctorId);
+  const editing = organizationShifts.find(shift => shift.id === editingId && shift.employmentType === 'pj' && (shift.doctorId || shift.paymentAgreement));
   const specialties = useMemo(() => [...new Set([
     ...organizationShifts.map(item => item.specialty).filter(Boolean),
     ...sectors.flatMap(item => item.specialties),
@@ -184,19 +188,21 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
 
   const filteredShifts = useMemo(() => organizationShifts
     .filter(item => !requestedShift || item.id === requestedShift)
-    .filter(item => item.doctorId && (item.status !== 'cancelled' || paymentStatus === 'cancelled') && (!bounds.start || (item.date >= bounds.start && item.date <= bounds.end)))
+    .filter(item => item.employmentType === 'pj' && (item.doctorId || item.paymentAgreement) && (item.status !== 'cancelled' || paymentStatus === 'cancelled') && (!bounds.start || (item.date >= bounds.start && item.date <= bounds.end)))
     .filter(item => !unitId || item.unitId === unitId)
     .filter(item => !sectorId || item.sectorId === sectorId)
     .filter(item => !specialty || item.specialty === specialty)
     .filter(item => !frequency || (item.paymentFrequency || 'on_delivery') === frequency)
-    .filter(item => !paymentStatus || (paymentStatus === 'unpaid' ? item.paymentStatus !== 'paid' : financeState(item, today) === paymentStatus))
+    .filter(item => !paymentStatus || (item.paymentAmount != null && (paymentStatus === 'unpaid' ? item.doctorId && item.paymentStatus !== 'paid' : recordFinanceState(item, today) === paymentStatus)))
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)), [organizationShifts, requestedShift, bounds.start, bounds.end, unitId, sectorId, specialty, frequency, paymentStatus, today]);
 
-  const total = filteredShifts.reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
-  const paid = filteredShifts.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
-  const pending = filteredShifts.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
-  const onDelivery = filteredShifts.filter(item => (item.paymentFrequency || 'on_delivery') === 'on_delivery');
-  const monthly = filteredShifts.filter(item => item.paymentFrequency === 'monthly');
+  const assigned = filteredShifts.filter(item => Boolean(item.doctorId));
+  const vacancies = filteredShifts.filter(item => !item.doctorId);
+  const total = assigned.reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
+  const paid = assigned.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
+  const pending = assigned.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
+  const onDelivery = assigned.filter(item => (item.paymentFrequency || 'on_delivery') === 'on_delivery');
+  const monthly = assigned.filter(item => item.paymentFrequency === 'monthly');
   const visibleSectors = sectors.filter(item => !unitId || item.unitId === unitId);
 
   function resetFilters() {
@@ -227,7 +233,7 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Gestão financeira</p>
-            <h1 className="nv-page-title mt-2 flex items-center gap-2"><WalletCards className="h-6 w-6 text-primary"/>Pagamentos médicos</h1>
+            <h1 className="nv-page-title mt-2 flex items-center gap-2"><WalletCards className="h-6 w-6 text-primary"/>Repasses PJ</h1>
             <p className="mt-1 text-sm text-text-muted">Concilie valores por unidade, setor e especialidade de {organization?.name || 'sua empresa'}.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -260,12 +266,13 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
         </section>
 
         <section className="grid overflow-hidden nv-panel sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumo financeiro">
-          <div className="p-5"><p className="text-xs text-text-muted">Total previsto</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(total)}</p><p className="mt-1 text-[11px] text-text-muted">{filteredShifts.length} plantões</p></div>
+          <div className="p-5"><p className="text-xs text-text-muted">Total previsto</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(total)}</p><p className="mt-1 text-[11px] text-text-muted">{assigned.length} plantões com médico</p></div>
           <div className="border-t border-border p-5 sm:border-l sm:border-t-0"><p className="text-xs text-text-muted">Pendente</p><p className="mt-2 text-xl font-semibold tabular-nums text-warning">{money(pending)}</p><p className="mt-1 text-[11px] text-text-muted">Aguardando conciliação</p></div>
           <div className="border-t border-border p-5 xl:border-l xl:border-t-0"><p className="text-xs text-text-muted">Pago</p><p className="mt-2 text-xl font-semibold tabular-nums text-success">{money(paid)}</p><p className="mt-1 text-[11px] text-text-muted">Baixado no período</p></div>
           <div className="border-t border-border p-5 sm:border-l xl:border-t-0"><p className="text-xs text-text-muted">À vista</p><p className="mt-2 text-xl font-semibold tabular-nums">{onDelivery.length}</p><p className="mt-1 text-[11px] text-text-muted">{money(onDelivery.reduce((sum, item) => sum + (item.paymentAmount || 0), 0))}</p></div>
           <div className="border-t border-border p-5 xl:border-l xl:border-t-0"><p className="text-xs text-text-muted">Mensal</p><p className="mt-2 text-xl font-semibold tabular-nums">{monthly.length}</p><p className="mt-1 text-[11px] text-text-muted">{money(monthly.reduce((sum, item) => sum + (item.paymentAmount || 0), 0))}</p></div>
         </section>
+        {vacancies.length > 0 && <p className="text-sm text-text-muted">{vacancies.length} {vacancies.length === 1 ? 'vaga com condição financeira registrada' : 'vagas com condições financeiras registradas'}. Entram nos totais quando um médico for vinculado.</p>}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
           <div><h2 className="font-semibold">Conciliação do período</h2><p className="mt-1 text-sm text-text-muted">{bounds.start ? `${displayDate(bounds.start)} – ${displayDate(bounds.end)}` : 'Todos os períodos'} · dados exclusivos da empresa ativa.</p></div>
@@ -280,14 +287,14 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="border-b border-border bg-surface-muted font-semibold uppercase tracking-wide text-text-secondary"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Médico</th><th className="px-4 py-3">Unidade · setor</th><th className="px-4 py-3">Especialidade</th><th className="px-4 py-3">Regime</th><th className="px-4 py-3 text-right">Valor</th><th className="px-4 py-3">Situação</th><th className="px-4 py-3 text-right">Ficha</th></tr></thead>
-                <tbody className="divide-y divide-border">{filteredShifts.map(shift => { const { doctor, unit, sector } = shiftContext(shift); const status = financeState(shift, today); return <tr key={shift.id} className="transition hover:bg-state-hover"><td className="px-4 py-3"><span className="block font-medium tabular-nums">{displayDate(shift.date)}</span><span className="text-xs text-text-muted">{shift.startTime}–{shift.endTime}</span></td><td className="px-4 py-3"><span className="block font-medium">{doctor?.name || 'Médico'}</span><span className="text-xs text-text-muted">{doctor ? `${doctor.crm}-${doctor.crmUf}` : ''}</span></td><td className="px-4 py-3"><span className="block max-w-48 truncate font-medium">{unit?.name || 'Unidade'}</span><span className="text-xs text-text-muted">{sector?.name || shift.sector || 'Setor'}</span></td><td className="px-4 py-3 text-text-secondary">{shift.specialty || '—'}</td><td className="px-4 py-3"><span className="rounded-md bg-surface-muted px-2 py-1 text-xs font-medium">{paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']}</span></td><td className="px-4 py-3 text-right font-semibold tabular-nums">{money(shift.paymentAmount || 0)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status === 'paid' ? 'text-success' : 'text-warning'}`}>{status === 'paid' ? <CheckCircle2 size={14}/> : <ReceiptText size={14}/>} {financeStateLabels[status]}</span>{shift.paymentDueDate && <span className="block text-xs text-text-muted">Vence em {displayDate(shift.paymentDueDate)}</span>}{shift.paidAmount !== undefined && <span className="block text-xs text-text-muted">{money(shift.paidAmount)} pagos</span>}</td><td className="px-4 py-3 text-right"><button type="button" disabled={store.saving} onClick={() => setEditingId(shift.id)} className="text-xs font-semibold text-primary hover:underline">Ver ficha</button></td></tr>; })}</tbody>
+                <tbody className="divide-y divide-border">{filteredShifts.map(shift => { const { doctor, unit, sector } = shiftContext(shift); const status = recordFinanceState(shift, today); return <tr key={shift.id} className="transition hover:bg-state-hover"><td className="px-4 py-3"><span className="block font-medium tabular-nums">{displayDate(shift.date)}</span><span className="text-xs text-text-muted">{shift.startTime}–{shift.endTime}</span></td><td className="px-4 py-3"><span className="block font-medium">{doctor?.name || (shift.doctorId ? 'Médico' : 'Vaga aberta')}</span><span className="text-xs text-text-muted">{doctor ? `${doctor.crm}-${doctor.crmUf}` : ''}</span></td><td className="px-4 py-3"><span className="block max-w-48 truncate font-medium">{unit?.name || 'Unidade'}</span><span className="text-xs text-text-muted">{sector?.name || shift.sector || 'Setor'}</span></td><td className="px-4 py-3 text-text-secondary">{shift.specialty || '—'}</td><td className="px-4 py-3"><span className="rounded-md bg-surface-muted px-2 py-1 text-xs font-medium">{paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']}</span></td><td className="px-4 py-3 text-right font-semibold tabular-nums">{shift.paymentAmount == null ? 'Não definido' : money(shift.paymentAmount)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status === 'paid' ? 'text-success' : 'text-warning'}`}>{status === 'paid' ? <CheckCircle2 size={14}/> : <ReceiptText size={14}/>} {shift.paymentAmount == null && shift.doctorId ? 'Sem valor definido' : financeStateLabels[status]}</span>{shift.doctorId && shift.paymentDueDate && <span className="block text-xs text-text-muted">Vence em {displayDate(shift.paymentDueDate)}</span>}{shift.paidAmount !== undefined && <span className="block text-xs text-text-muted">{money(shift.paidAmount)} pagos</span>}</td><td className="px-4 py-3 text-right"><button type="button" disabled={store.saving} onClick={() => setEditingId(shift.id)} className="text-xs font-semibold text-primary hover:underline">Ver ficha</button></td></tr>; })}</tbody>
               </table>
             </div>
             {!filteredShifts.length && <div className="py-16 text-center"><Banknote className="mx-auto h-6 w-6 text-text-muted"/><p className="mt-3 text-sm font-medium">Nenhum pagamento neste recorte</p><p className="mt-1 text-xs text-text-muted">Ajuste o período ou os filtros para consultar outros plantões.</p></div>}
           </div>
         ) : (
           <div className="grid gap-5 xl:grid-cols-2">
-            {(['pending', 'paid'] as PaymentStatus[]).map(status => { const items = filteredShifts.filter(item => (item.paymentStatus || 'pending') === status); return <section key={status} className="overflow-hidden nv-panel"><header className="flex items-center justify-between border-b border-border px-4 py-3"><div><h3 className="font-semibold">{paymentStatusLabels[status]}</h3><p className="mt-0.5 text-xs text-text-muted">{items.length} registros · {money(items.reduce((sum, item) => sum + (item.paymentAmount || 0), 0))}</p></div><span className={`h-2.5 w-2.5 rounded-full ${status === 'paid' ? 'bg-success' : 'bg-warning'}`}/></header><div className="max-h-[680px] divide-y divide-border overflow-y-auto">{items.map(shift => { const { doctor, unit, sector } = shiftContext(shift); return <article key={shift.id} className="p-4 transition hover:bg-state-hover"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="truncate text-sm font-semibold">{doctor?.name || 'Médico'}</p><p className="mt-1 truncate text-xs text-text-muted">{unit?.name} · {sector?.name || shift.sector}</p></div><p className="shrink-0 font-semibold tabular-nums">{money(shift.paymentAmount || 0)}</p></div><div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="rounded bg-surface-muted px-2 py-1">{displayDate(shift.date)}</span><span className="rounded bg-surface-muted px-2 py-1">{shift.specialty || 'Sem especialidade'}</span><span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">{paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']}</span></div><button type="button" disabled={store.saving} onClick={() => setEditingId(shift.id)} className="mt-4 text-xs font-semibold text-primary hover:underline">Ver ficha financeira</button></article>; })}{!items.length && <p className="px-4 py-12 text-center text-sm text-text-muted">Nenhum item nesta etapa.</p>}</div></section>; })}
+            {(['pending', 'paid', ...(vacancies.length ? ['unassigned'] as const : [])] as const).map(status => { const items = status === 'unassigned' ? vacancies : assigned.filter(item => (item.paymentStatus || 'pending') === status); return <section key={status} className="overflow-hidden nv-panel"><header className="flex items-center justify-between border-b border-border px-4 py-3"><div><h3 className="font-semibold">{status === 'unassigned' ? financeStateLabels.unassigned : paymentStatusLabels[status]}</h3><p className="mt-0.5 text-xs text-text-muted">{items.length} registros · {money(items.reduce((sum, item) => sum + (item.paymentAmount || 0), 0))}</p></div><span className={`h-2.5 w-2.5 rounded-full ${status === 'paid' ? 'bg-success' : 'bg-warning'}`}/></header><div className="max-h-[680px] divide-y divide-border overflow-y-auto">{items.map(shift => { const { doctor, unit, sector } = shiftContext(shift); return <article key={shift.id} className="p-4 transition hover:bg-state-hover"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="truncate text-sm font-semibold">{doctor?.name || (shift.doctorId ? 'Médico' : 'Vaga aberta')}</p><p className="mt-1 truncate text-xs text-text-muted">{unit?.name} · {sector?.name || shift.sector}</p></div><p className="shrink-0 font-semibold tabular-nums">{shift.paymentAmount == null ? 'Não definido' : money(shift.paymentAmount)}</p></div><div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="rounded bg-surface-muted px-2 py-1">{displayDate(shift.date)}</span><span className="rounded bg-surface-muted px-2 py-1">{shift.specialty || 'Sem especialidade'}</span><span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">{paymentFrequencyLabels[shift.paymentFrequency || 'on_delivery']}</span></div><button type="button" disabled={store.saving} onClick={() => setEditingId(shift.id)} className="mt-4 text-xs font-semibold text-primary hover:underline">Ver ficha financeira</button></article>; })}{!items.length && <p className="px-4 py-12 text-center text-sm text-text-muted">Nenhum item nesta etapa.</p>}</div></section>; })}
           </div>
         )}
 
