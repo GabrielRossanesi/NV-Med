@@ -13,6 +13,9 @@ import PortalSchedule from './PortalSchedule';
 import NotificationInbox from '@/components/NotificationInbox';
 import { crmStates } from '@/lib/documentRequirements';
 import { authFlowUrl } from '@/lib/appOrigin';
+import DoctorBankingFields from '@/components/DoctorBankingFields';
+import DoctorBankingPanel from '@/components/DoctorBankingPanel';
+import { bankingFromForm } from '@/lib/doctorBanking';
 
 type Enrollment = {
   doctor_id: string; organization_id: string; organization: string; name: string; status: EnrollmentStatus;
@@ -86,10 +89,11 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
     setBusy(true);
     setError('');
     try {
+      const banking = bankingFromForm(fields);
       const result = await createClient()?.rpc('nv_submit_enrollment', {
         org: organization, full_name: fields.get('name'), registration: fields.get('crm'), uf: fields.get('uf'),
         tax_id: digits(String(fields.get('cpf'))), birth: fields.get('birth'), phone_number: digits(String(fields.get('phone'))),
-        pix: fields.get('pix'), specialties: fields.getAll('specialties'),
+        pix: banking.pix_key, specialties: fields.getAll('specialties'), banking,
       });
       if (!result) throw new Error('Conexão indisponível.');
       if (result.error) throw new Error(portalError(result.error));
@@ -110,8 +114,8 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
       <label className="nv-label">CPF<input className="nv-input" name="cpf" inputMode="numeric" defaultValue={previous?.cpf} required maxLength={14}/></label>
       <label className="nv-label">Nascimento<input className="nv-input" name="birth" type="date" autoComplete="bday" defaultValue={previous?.birth_date} required/></label>
       <label className="nv-label">Telefone<input className="nv-input" name="phone" type="tel" autoComplete="tel" defaultValue={previous?.phone} required maxLength={22}/></label>
-      <label className="nv-label">Chave PIX<input className="nv-input" name="pix" required minLength={5} maxLength={140}/></label>
     </div>
+    <DoctorBankingFields disabled={busy}/>
     <fieldset className="space-y-2"><legend className="nv-label">Especialidades solicitadas</legend>
       <div className="grid gap-2 sm:grid-cols-2">{catalog.specialties.map(specialty => <label key={specialty} className="flex min-h-11 items-center gap-3 rounded-lg border border-border px-3 text-sm">
         <input name="specialties" type="checkbox" value={specialty} defaultChecked={previous?.specialties.includes(specialty)}/>{specialty}
@@ -234,6 +238,7 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
           {item.status === 'correction_requested' && <button className="nv-button-secondary mt-3" disabled={loadingCompany} onClick={() => void findCompany(item.organization_id)}>Corrigir cadastro</button>}
         </div>
         {item.status !== 'rejected' && (!item.legacy_link || item.status === 'approved') && <Documents doctor={item.doctor_id}/>}
+        {item.status !== 'rejected' && (!item.legacy_link || item.status === 'approved') && <DoctorBankingPanel key={item.doctor_id} doctor={item.doctor_id} title="Meu perfil → Dados bancários"/>}
       </section>)}
       {enrollments !== null && <section className="space-y-3">
         <form className="nv-panel flex flex-wrap items-end gap-3 p-4 sm:p-5" onSubmit={event => {

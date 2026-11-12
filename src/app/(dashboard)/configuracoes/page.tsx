@@ -3,6 +3,7 @@
 import { useStore } from '@/store/useStore';
 import { Organization } from '@/types';
 import AccessGuard from '@/components/AccessGuard';
+import SectorSettings from '@/components/schedule/SectorSettings';
 import {
   Building,
   ShieldCheck,
@@ -330,6 +331,7 @@ export default function SettingsPage() {
           </p>
         </div>
 
+        {activeOrg && <SectorSettings key={`sectors-${activeOrganizationId}`} />}
         {activeOrg && <SettingsForm
           key={activeOrganizationId}
           activeOrg={activeOrg}

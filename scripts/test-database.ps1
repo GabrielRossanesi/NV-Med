@@ -71,7 +71,12 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-payment-agreements.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '30_shift_employment.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-employment.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-30, pré/pós-verificação e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '31_sector_primary_specialty.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'sector-primary-specialty.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-banking.fixture.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '32_doctor_banking.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-banking.verify.sql'))
+  Write-Output 'PASS: baseline 01-18, migrations 19-32, pré/pós-verificação e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

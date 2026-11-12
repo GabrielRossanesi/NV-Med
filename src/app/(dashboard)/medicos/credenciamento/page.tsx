@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
 import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
+import DoctorBankingPanel from '@/components/DoctorBankingPanel';
+import { canViewPermission } from '@/lib/permissions';
 
 type Request = {
   id: string; name: string; crm: string; uf: string; cpf: string; email: string; phone: string;
@@ -14,6 +16,7 @@ type Request = {
 };
 
 function Decision({ request, organization, onClose, onSaved }: { request: Request; organization: string; onClose: () => void; onSaved: () => void }) {
+  const actor = useStore(state => state.currentUser);
   const units = useStore(state => state.units).filter(item => item.organizationId === organization && item.status === 'active');
   const [decision, setDecision] = useState('approved');
   const [error, setError] = useState('');
@@ -44,7 +47,8 @@ function Decision({ request, organization, onClose, onSaved }: { request: Reques
     </dl>
     {request.legacy_link && <p className="mt-3 text-sm text-text-muted">Solicitação de vínculo com um cadastro já existente nesta empresa.</p>}
     <a className="my-4 inline-block text-sm font-semibold text-primary underline" href={'/documentos/' + request.id}>Consultar documentos</a>
-    <form onSubmit={review} className="space-y-4">
+    {canViewPermission(actor, 'dados_bancarios') && <DoctorBankingPanel key={request.id} doctor={request.id}/>}
+    <form onSubmit={review} className="mt-4 space-y-4">
       <label className="nv-label">Decisão<select className="nv-input" value={decision} onChange={event => setDecision(event.target.value)}>
         <option value="approved">Aprovar cadastro</option><option value="correction_requested">Solicitar correções</option><option value="rejected">Rejeitar cadastro</option>
       </select></label>

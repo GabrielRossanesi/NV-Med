@@ -19,6 +19,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import Dialog from '@/components/Dialog';
+import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import ShiftRecordSummary from '@/components/schedule/ShiftRecordSummary';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
 import { createClient } from '@/lib/supabase/client';
@@ -122,6 +123,7 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
     <div className="space-y-4">
       <ShiftRecordSummary shift={shift} organization={organization?.name} unit={unit?.name} sector={sector?.name} doctor={doctor?.name} />
       <ShiftFinancialDetails shift={shift} applicableRate={rate} />
+      {shift.employmentType === 'pj' && shift.doctorId && canViewPermission(currentUser, 'dados_bancarios') && <DoctorBankingPanel key={shift.doctorId} doctor={shift.doctorId}/>}
       {view === 'details' && <div className="flex flex-wrap gap-2">
         {canEdit && !paid && <>
           <button type="button" className="nv-button-secondary" onClick={() => openView('agreement')}>Editar acordo</button>

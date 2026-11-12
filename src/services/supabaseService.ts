@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client';
 import { withAbortTimeout } from '@/lib/requestTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
+import type { DoctorBanking } from '@/lib/doctorBanking';
 import {
   Organization,
   Doctor,
@@ -86,6 +87,7 @@ interface DbUnit {
 }
 
 interface DbSector {
+  primary_specialty?: string | null;
   id: string;
   organization_id: string;
   unit_id: string;
@@ -252,6 +254,7 @@ function mapSectorFromDb(row: DbSector): Sector {
     unitId: row.unit_id,
     name: row.name,
     description: row.description || undefined,
+    primarySpecialty: row.primary_specialty || undefined,
     specialties: row.specialties || [],
     status: row.status === 'inactive' ? 'inactive' : 'active',
     defaultStartTime: row.default_start_time || '07:00',
@@ -411,7 +414,7 @@ export async function fetchMedicalDocumentsForOrganization(organizationId: strin
 // OPERAÇÕES DE ESCRITA ASSÍNCRONA (PERSISTÊNCIA EM SEGUNDO PLANO)
 // ==============================================================================
 
-export async function saveDoctorToSupabase(doctor: Doctor, creating = false) {
+export async function saveDoctorToSupabase(doctor: Doctor, creating = false, banking?: DoctorBanking) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
@@ -433,9 +436,13 @@ export async function saveDoctorToSupabase(doctor: Doctor, creating = false) {
     linked_units: doctor.linkedUnits
   };
 
-  const table = supabase.from('doctors');
-  const { error } = await (creating ? table.insert(payload) : table.update(payload).eq('id', doctor.id)).select('id').single();
-  if (error) throw new Error('Não foi possível salvar: ' + error.message);
+  if (creating) {
+    const { error } = await supabase.rpc('nv_create_doctor_with_banking', { profile: payload, banking: banking || null });
+    if (error) throw new Error('Não foi possível cadastrar o médico. Confira os dados e as permissões.');
+  } else {
+    const { error } = await supabase.from('doctors').update(payload).eq('id', doctor.id).select('id').single();
+    if (error) throw new Error('Não foi possível salvar o médico.');
+  }
 }
 
 export async function deleteDoctorFromSupabase(doctorId: string) {
@@ -497,6 +504,7 @@ export async function saveSectorToSupabase(sector: Sector, creating = false, fin
     name: sector.name,
     description: sector.description?.trim() || null,
     specialties: sector.specialties,
+    primary_specialty: sector.primarySpecialty || null,
     status: sector.status,
     default_start_time: sector.defaultStartTime,
     default_end_time: sector.defaultEndTime,

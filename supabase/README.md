@@ -1,5 +1,7 @@
 # Banco de dados do NV Med
 
+Os dados bancários médicos usam a migration incremental `32_doctor_banking.sql`, após a 31. Aplique em conjunto com a versão correspondente da interface e com autorização para o destino. O [guia de dados bancários](../docs/dados-bancarios-medicos.md) descreve migração dos valores legados, permissões, proteção e testes locais.
+
 O piloto interno no Supabase existente segue o [plano de implantação controlada](../docs/implantacao-controlada-nv-med.md). O [roteiro de laboratório isolado](../docs/homologacao-nv-med.md) registra os testes locais e a estratégia anterior.
 
 A instalação a partir de um projeto vazio usa os scripts numerados de estrutura, conforme a ordem do roteiro. O arquivo `init_all.sql` é um instalador histórico com carga de demonstração.
@@ -38,3 +40,10 @@ Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verific
 - Os novos acordos e os relatórios de repasses usam apenas plantões PJ. As linhas legadas, inclusive contratações não definidas e valores já registrados, são preservadas.
 - Na aprovação de candidaturas e trocas, médico e modalidade são confirmados na mesma transação. Um substituto PJ precisa de um novo acordo. Mudanças incompatíveis em plantões com baixa registrada ficam bloqueadas para regularização financeira.
 - A suíte `shift-employment.verify.sql` usa dados sintéticos com rollback para testar as três trocas de modalidade, vagas, permissões e histórico.
+
+## Especialidade principal dos setores
+
+- A migration `31_sector_primary_specialty.sql` acrescenta a especialidade principal sem inferir vínculos nem remover os relacionamentos anteriores. Novos plantões com setor usam essa especialidade; avulsos sem setor mantêm seleção explícita no catálogo autorizado.
+- Atribuições, candidaturas e substituições exigem credenciamento aprovado e as autorizações de empresa/unidade/especialidade, com política documental e conflitos validados no servidor. Profissionais legados precisam de aprovação estruturada antes de novas atribuições.
+- Mudanças ficam bloqueadas quando existem ocorrências futuras ou em andamento com outra especialidade. Históricos são preservados e as alterações do vínculo são auditadas.
+- Aplique após a migration 30, somente com autorização para o ambiente de destino. Execute `scripts/test-database.ps1` para validar os fluxos no laboratório local. O procedimento de vinculação dos setores legados está em [setores-especialidades](../docs/setores-especialidades.md).

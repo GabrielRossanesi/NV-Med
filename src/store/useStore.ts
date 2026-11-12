@@ -4,6 +4,7 @@ import { Organization, Doctor, Unit, Sector, SectorFinanceDefaults, MedicalDocum
 import * as cloud from '@/services/supabaseService';
 import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission, canPerformAction } from '@/lib/permissions';
+import type { DoctorBanking } from '@/lib/doctorBanking';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
@@ -15,7 +16,7 @@ interface NVMedState {
   clearFeedback: () => void; clearSession: () => void;
   syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
-  addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>) => Promise<boolean>;
+  addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<boolean>;
   updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
   updateUnit: (unit: Unit) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
@@ -73,10 +74,10 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null, notice: null }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
-    addDoctor: input => commit(async () => {
-      const doctor = { ...input, id: crypto.randomUUID(), organizationId: orgId() };
+    addDoctor: (input, banking) => commit(async () => {
+      const doctor = { ...input, status: banking ? input.status : 'pending' as const, id: crypto.randomUUID(), organizationId: orgId() };
       // The database trigger creates required document rows in the same transaction.
-      await cloud.saveDoctorToSupabase(doctor, true);
+      await cloud.saveDoctorToSupabase(doctor, true, banking);
       set({ doctors: [...get().doctors, doctor] });
       try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
       catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }

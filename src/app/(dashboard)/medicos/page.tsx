@@ -25,6 +25,8 @@ import { getDoctorCompliance } from '@/lib/documentCompliance';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
 import { doctorContractModelLabels, doctorContractModelShortLabels } from '@/lib/doctorProfile';
 import { doctorHasOperationalUnit, getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
+import DoctorBankingFields from '@/components/DoctorBankingFields';
+import { bankingFromForm } from '@/lib/doctorBanking';
 
 function DoctorsPageContent() {
   const {
@@ -40,6 +42,7 @@ function DoctorsPageContent() {
   } = useStore();
 
   const canCreate = canPerformAction(currentUser, 'medicos', 'create');
+  const canCreateBanking = canPerformAction(currentUser, 'dados_bancarios', 'edit');
   const canDelete = canPerformAction(currentUser, 'medicos', 'delete');
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
   const documentGovernance = getDocumentGovernance(activeOrg);
@@ -99,6 +102,7 @@ function DoctorsPageContent() {
   const [status, setStatus] = useState<DoctorStatus>('active');
   const [contractModel, setContractModel] = useState<DoctorContractModel>('pf');
   const [contractSigned, setContractSigned] = useState(false);
+  const [bankingError, setBankingError] = useState('');
 
   const orgDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
 
@@ -120,9 +124,13 @@ function DoctorsPageContent() {
     return matchesSearch && matchesStatus && matchesSpecialty && matchesUnit && matchesDocuments;
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     if (!canCreate) return;
     e.preventDefault();
+    setBankingError('');
+    let banking;
+    try { banking = canCreateBanking ? bankingFromForm(new FormData(e.currentTarget)) : undefined; }
+    catch (failure) { setBankingError((failure as Error).message); return; }
     
     if (!await addDoctor({
       name,
@@ -138,7 +146,7 @@ function DoctorsPageContent() {
       contractModel,
       contractSigned,
       linkedUnits: []
-    })) return;
+    }, banking)) return;
 
     // Reset Form
     setName('');
@@ -639,6 +647,8 @@ function DoctorsPageContent() {
                 />
               </div>
 
+              {canCreateBanking ? <DoctorBankingFields/> : <p className="text-sm text-text-muted">O cadastro será salvo como pendente. Um usuário autorizado ou o próprio médico deverá preencher a chave PIX e seu tipo para concluir o cadastro.</p>}
+              {bankingError && <p role="alert" className="text-sm text-danger">{bankingError}</p>}
               {/* Modal Footer Actions */}
               <div className="border-t border-border pt-4 flex items-center justify-end gap-3 bg-card-bg">
                 <button

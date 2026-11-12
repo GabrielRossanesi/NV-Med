@@ -25,11 +25,17 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
   const [name, setName] = useState(sector?.name || '');
   const [description, setDescription] = useState(sector?.description || '');
   const [status, setStatus] = useState<Sector['status']>(sector?.status || 'active');
-  const [selected, setSelected] = useState(sector?.specialties || (initialSpecialty ? [initialSpecialty] : []));
+  const [primarySpecialty, setPrimarySpecialty] = useState(sector?.primarySpecialty || initialSpecialty || '');
   const [periods, setPeriods] = useState(sector ? sectorCoveragePeriods(sector) : [initialPeriod || defaultCoverage('day')]);
   const [error, setError] = useState('');
+  const [referenceTime] = useState(Date.now);
   const [financialDraft, setFinancialDraft] = useState<FinanceDraft>();
-  const available = [...new Set([...specialties, ...(sector?.specialties || [])])];
+  const company = store.organizations.find(item => item.id === unit.organizationId);
+  const available = specialties.filter(item => company?.settings.specialties.includes(item));
+  const affected = sector && primarySpecialty !== sector.primarySpecialty ? store.shifts.filter(item => item.sectorId === sector.id
+    && item.organizationId === unit.organizationId && !['cancelled', 'completed'].includes(item.status)
+    && new Date(item.date + 'T' + item.endTime).getTime() + (item.endTime < item.startTime ? 86_400_000 : 0) > referenceTime
+    && item.specialty !== primarySpecialty) : [];
   const canSave = canPerformAction(store.currentUser, 'unidades', sector ? 'edit' : 'create');
   const canSeeFinance = canViewPermission(store.currentUser, 'financeiro');
   const canEditFinance = canSave && canEditPermission(store.currentUser, 'financeiro');
@@ -43,9 +49,12 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
     event.preventDefault();
     if (!canSave || store.saving) return;
     if (!name.trim()) return setError('Informe o nome do setor.');
+    if (!available.includes(primarySpecialty)) return setError('Escolha uma especialidade ativa da empresa para este setor.');
+    if (affected.length) return setError('Regularize os plantões futuros e as trocas antes de alterar a especialidade do setor.');
     if (!periods.length || periods.some(period => period.startTime === period.endTime)) return setError('Selecione um período com horários diferentes.');
     const primary = periods[0];
-    const payload = { name: name.trim(), description: description.trim(), specialties: selected, status, unitId: unit.id,
+    const payload = { name: name.trim(), description: description.trim(), primarySpecialty,
+      specialties: [...new Set([...(sector?.specialties || []), primarySpecialty])], status, unitId: unit.id,
       defaultStartTime: primary.startTime, defaultEndTime: primary.endTime, requiredDoctors: primary.requiredDoctors, coveragePeriods: periods };
     const updated = sector && { ...payload, id: sector.id, organizationId: sector.organizationId };
     let defaults: SectorFinanceDefaults | undefined;
@@ -69,12 +78,15 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
       <p className="text-xs text-text-muted">{organizationName} · {unit.name}</p>
       <label className="nv-label">Nome do setor<input autoFocus className="nv-input" maxLength={100} required value={name} onChange={event => setName(event.target.value)} /></label>
       <label className="nv-label">Descrição <span className="font-normal text-text-muted">(opcional)</span><textarea className="nv-input" rows={2} maxLength={1000} value={description} onChange={event => setDescription(event.target.value)} /></label>
-      <fieldset><legend className="nv-label">Especialidades aceitas</legend>
-        {available.length ? <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-auto">{available.map(item => <label key={item} className="flex items-center gap-2 rounded-lg border border-border px-2 py-1 text-sm">
-          <input type="checkbox" checked={selected.includes(item)} onChange={event => setSelected(event.target.checked ? [...selected, item] : selected.filter(value => value !== item))} />{item}
-        </label>)}</div> : <p className="mt-2 text-xs text-text-muted">Cadastre especialidades nas configurações da empresa.</p>}
-        <p className="mt-2 text-xs text-text-muted">Sem seleção, o setor usa as especialidades disponíveis para a unidade.</p>
-      </fieldset>
+      <label className="nv-label">Especialidade principal<select required className="nv-input" value={primarySpecialty} onChange={event => setPrimarySpecialty(event.target.value)}>
+        <option value="">Selecione</option>{primarySpecialty && !available.includes(primarySpecialty) && <option value={primarySpecialty} disabled>{primarySpecialty} (indisponível)</option>}
+        {available.map(item => <option key={item} value={item}>{item}</option>)}
+      </select><span className="mt-2 block text-xs font-normal text-text-muted">Define a especialidade de novos plantões. Vínculos legados e históricos são preservados.</span></label>
+      {!available.length && <p className="text-xs text-text-muted">Cadastre especialidades nas configurações da empresa e confira as autorizações da unidade.</p>}
+      {Boolean(affected.length) && <div role="alert" className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-text-secondary">
+        Alteração bloqueada: {affected.length} plantão(ões) futuro(s) ou em andamento usam outra especialidade. Regularize as escalas, candidaturas e trocas antes de continuar.
+        <ul className="mt-2 space-y-1">{affected.slice(0, 5).map(item => <li key={item.id}>{item.date} · {item.startTime}–{item.endTime} · {store.doctors.find(doctor => doctor.id === item.doctorId)?.name || 'Vaga aberta'} · {item.specialty || 'Sem especialidade'}</li>)}</ul>
+      </div>}
       <fieldset><legend className="nv-label">Cobertura do setor</legend>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">{(['day', 'night'] as const).map(kind => {
           const period = periods.find(item => item.kind === kind);
@@ -103,7 +115,7 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
             <label className="nv-label">Observações financeiras<textarea className="nv-input" maxLength={1000} rows={2} placeholder="Opcional" readOnly={!canEditFinance} value={finance.notes} onChange={event => changeFinance({ notes: event.target.value })}/></label>
           </>}
       </fieldset>}
-      {sector && <label className="nv-label">Situação<select className="nv-input" value={status} onChange={event => setStatus(event.target.value as Sector['status'])}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>}
+      <label className="nv-label">Situação<select className="nv-input" value={status} onChange={event => setStatus(event.target.value as Sector['status'])}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </form>
   </Dialog>;

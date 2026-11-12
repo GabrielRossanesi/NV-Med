@@ -26,6 +26,7 @@ import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 import { createClient } from '@/lib/supabase/client';
 import { canPerformAction } from '@/lib/permissions';
+import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 
 export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -190,6 +191,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      {canPerformAction(currentUser, 'dados_bancarios', 'view') && <DoctorBankingPanel key={doctor.id} doctor={doctor.id}/>}
       {/* Main layout grids */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         

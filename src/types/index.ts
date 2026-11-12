@@ -91,6 +91,7 @@ export interface SectorCoveragePeriod {
 }
 
 export interface Sector {
+  primarySpecialty?: string;
   id: string;
   organizationId: string;
   unitId: string;

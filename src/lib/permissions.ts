@@ -1,7 +1,7 @@
 import type { AdditionalPermissions, UserAccount } from '@/types';
 
 export type PermissionLevel = 'none' | 'view' | 'edit';
-export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'deactivate';
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'deactivate' | 'history';
 type PermissionUser = Pick<UserAccount, 'type' | 'role' | 'additionalPermissions'>;
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -28,22 +28,25 @@ export const ADDITIONAL_PERMISSION_MODULES = [
   { key: 'documentos', label: 'Documentos', actions: ['view', 'edit', 'approve'] },
   { key: 'escala', label: 'Escalas', actions: ['view', 'create', 'edit', 'delete', 'approve'] },
   { key: 'financeiro', label: 'Financeiro', actions: ['view', 'edit'] },
+  { key: 'dados_bancarios', label: 'Dados bancários médicos', actions: ['view', 'edit', 'history'] },
   { key: 'relatorios', label: 'Relatórios', actions: ['view'] },
   { key: 'configuracoes', label: 'Configurações', actions: ['view', 'edit'] },
   { key: 'usuarios', label: 'Usuários da empresa', actions: ['view', 'create', 'edit', 'deactivate'] },
 ] as const;
 export const permissionActionLabels: Record<PermissionAction, string> = {
   view: 'Visualizar', create: 'Criar', edit: 'Editar', delete: 'Excluir', approve: 'Aprovar', deactivate: 'Desativar',
+  history: 'Consultar histórico',
 };
 
 const allowedActions = new Set<string>(ADDITIONAL_PERMISSION_MODULES.flatMap(module => module.actions.map(action => `${module.key}.${action}`)));
-const legacyModules = new Set<string>(ADDITIONAL_PERMISSION_MODULES.filter(module => module.key !== 'usuarios').map(module => module.key));
+const legacyModules = new Set<string>(ADDITIONAL_PERMISSION_MODULES.filter(module => module.key !== 'usuarios' && module.key !== 'dados_bancarios').map(module => module.key));
 
 export function roleHasPermission(type: UserAccount['type'], role: string, module: string) {
   return (ROLE_PERMISSIONS[`${type}:${role}`] || []).includes(module);
 }
 
 export function roleHasAction(type: UserAccount['type'], role: string, module: string, action: PermissionAction): boolean {
+  if (module === 'dados_bancarios') return ['view', 'edit', 'history'].includes(action) && (type === 'saas_admin' ? ['CEO', 'Gerente', 'Financeiro'] : ['Diretor', 'Gerente', 'Financeiro']).includes(role);
   if (action === 'view') return roleHasPermission(type, role, module);
   if (!allowedActions.has(`${module}.${action}`)) return false;
   if (module === 'usuarios') return (type === 'saas_admin' ? ['CEO', 'Gerente'] : ['Diretor', 'Gerente']).includes(role);
