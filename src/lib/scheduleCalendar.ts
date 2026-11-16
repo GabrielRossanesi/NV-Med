@@ -1,8 +1,36 @@
 import { hasConflict, shiftInterval, type CoveragePeriodSummary } from './scheduling.ts';
-import type { Shift } from '../types/index.ts';
+import type { Doctor, Sector, Shift, Unit } from '../types/index.ts';
 
 export type ScheduleCoverageFilter = 'all' | 'deficit' | 'open' | 'conflict' | 'pending' | 'complete' | 'critical';
 export type DoctorScheduleWarning = { warning: boolean; blocked: boolean };
+
+export function selectedScheduleSector(unitId: string, sectorId: string, units: Unit[], sectors: Sector[]) {
+  const unit = units.find(item => item.id === unitId && item.status === 'active');
+  return unit && sectors.find(item => item.id === sectorId && item.unitId === unit.id
+    && item.organizationId === unit.organizationId && item.status === 'active');
+}
+
+export type ScheduleAllocation = {
+  id: string;
+  name: string;
+  vacant: boolean;
+  kind: CoveragePeriodSummary['period']['kind'];
+  startTime: string;
+  endTime: string;
+};
+
+// Both calendar views use the existing coverage summary; administrative state stays in the inspector.
+export function scheduleAllocations(period: CoveragePeriodSummary, doctors: Map<string, Pick<Doctor, 'name'>>) {
+  const time = { kind: period.period.kind, startTime: period.period.startTime, endTime: period.period.endTime };
+  return [
+    ...period.assigned.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
+      id: shift.id, name: doctors.get(shift.doctorId || '')?.name || 'Médico escalado', vacant: false })),
+    ...period.vacancies.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
+      id: shift.id, name: 'Vaga disponível', vacant: true })),
+    ...Array.from({ length: period.uncreated }, (_, index) => ({ ...time,
+      id: `uncreated-${time.kind}-${index}`, name: 'Vaga disponível', vacant: true })),
+  ];
+}
 
 // Compare only assignments for the same doctor, including shifts in other units/days.
 export function scheduleConflictIds(shifts: Shift[]) {
