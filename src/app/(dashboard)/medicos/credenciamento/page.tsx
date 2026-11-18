@@ -12,7 +12,7 @@ import { canViewPermission } from '@/lib/permissions';
 
 type Request = {
   id: string; name: string; crm: string; uf: string; cpf: string; email: string; phone: string;
-  birth_date: string; specialties: string[]; legacy_link: boolean; units?: string[];
+  birth_date: string | null; specialties: string[]; legacy_link: boolean; units?: string[];
 };
 
 function Decision({ request, organization, onClose, onSaved }: { request: Request; organization: string; onClose: () => void; onSaved: () => void }) {
@@ -42,7 +42,7 @@ function Decision({ request, organization, onClose, onSaved }: { request: Reques
   }
   return <Dialog title={request.name} onClose={onClose}>
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
-      {Object.entries({ CRM: request.crm + ' / ' + request.uf, CPF: request.cpf, 'E-mail': request.email, Telefone: request.phone, Nascimento: request.birth_date.split('-').reverse().join('/') }).map(([label, value]) =>
+      {Object.entries({ CRM: request.crm + ' / ' + request.uf, CPF: request.cpf, 'E-mail': request.email, Telefone: request.phone, Nascimento: request.birth_date?.split('-').reverse().join('/') || 'Não informado' }).map(([label, value]) =>
         <div key={label}><dt className="text-text-muted">{label}</dt><dd className="break-words font-medium">{value}</dd></div>)}
     </dl>
     {request.legacy_link && <p className="mt-3 text-sm text-text-muted">Solicitação de vínculo com um cadastro já existente nesta empresa.</p>}

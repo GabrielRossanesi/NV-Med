@@ -8,6 +8,9 @@ import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
 import EmploymentBadge from '@/components/schedule/EmploymentBadge';
 import ScheduleCalendarView from '@/components/schedule/ScheduleCalendarView';
+import ScheduleMasterView, { type MasterEditRequest } from '@/components/schedule/ScheduleMasterView';
+import MasterShiftOrigin from '@/components/schedule/MasterShiftOrigin';
+import type { MasterShiftContext } from '@/lib/masterSchedule';
 import ScheduleScopePicker from '@/components/schedule/ScheduleScopePicker';
 import ScheduleDoctorView from '@/components/schedule/ScheduleDoctorView';
 import ScheduleSpecialtyView from '@/components/schedule/ScheduleSpecialtyView';
@@ -122,6 +125,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const requestedCoverage = params.get('coverage');
   const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '') ? params.get('date')! : today;
   const [date, setDate] = useState(initialDate);
+  const [scheduleMode, setScheduleMode] = useState<'general' | 'master'>(params.get('mode') === 'master' ? 'master' : 'general');
+  const [masterEditRequest, setMasterEditRequest] = useState<MasterEditRequest | null>(null);
   const [desktopView, setDesktopView] = useState<ViewMode>(requestedShiftId ? 'list' : params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
   const mobile = useSyncExternalStore(subscribeMobile, () => window.matchMedia('(max-width: 767px)').matches, () => false);
   const savedMobileView = useSyncExternalStore(() => () => {}, readMobileView, () => 'week' as const);
@@ -522,6 +527,22 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const formDoctorChanged = Boolean(originalFormShift?.doctorId && originalFormShift.doctorId !== form?.doctorId);
   const formTitle = form?.id && openedShift?.doctorId ? 'Ficha do plantão' : form?.coverageMode === 'adhoc' ? 'Novo plantão avulso' : form?.id ? 'Ficha da vaga' : form?.doctorId ? 'Novo plantão' : 'Nova vaga';
 
+  async function refreshMasterShifts() {
+    store.syncWithCloud(await fetchInitialDataFromSupabase());
+  }
+  function editMasterRule(context: MasterShiftContext, effectiveDate?: string) {
+    if (!context.rule_id || !canEditSchedule || !canCreateSchedule) return;
+    setForm(null); setScheduleMode('master');
+    if (context.unit_id) setUnitId(context.unit_id);
+    if (context.sector_id) setSectorId(context.sector_id);
+    setMasterEditRequest(previous => ({ ruleId: context.rule_id!, date: effectiveDate, nonce: (previous?.nonce || 0) + 1 }));
+  }
+  function openMasterShift(id: string) {
+    const item = shifts.find(shift => shift.id === id);
+    if (!item) { setPageError('Atualize a página para consultar este plantão.'); return; }
+    setScheduleMode('general'); setUnitId(item.unitId); if (item.sectorId) setSectorId(item.sectorId); setDate(item.date); openShift(item);
+  }
+
   const scopePicker = <ScheduleScopePicker units={units} sectors={sectors} unitId={unitId} sectorId={sectorId}
     onSelectUnit={id => { setUnitId(id); setSectorId(''); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); }}
     onSelectSector={id => { setSectorId(id); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); }}/>;
@@ -531,8 +552,12 @@ function Schedule({ params }: { params: URLSearchParams }) {
   </div>;
 
   return <div className="space-y-5">
-    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Operação e cobertura</p><h1 className="nv-page-title mt-1">Escala médica</h1><p className="mt-1 text-sm capitalize text-text-secondary">{view === 'day' ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : view === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])} de ${new Date(`${week[6]}T12:00:00`).getFullYear()}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p></div><div className="flex flex-wrap gap-2">{canApproveSchedule && <Link className="nv-button-secondary" href="/escala/candidaturas"><ArrowRightLeft size={16}/>Candidaturas e trocas</Link>}{canCreateSchedule && <><button className="nv-button-secondary" onClick={() => openShift(undefined, undefined, date, undefined, 1, true)} disabled={!units.length}><Plus size={16}/>Plantão avulso</button><button className="nv-button" onClick={() => openShift()} disabled={!units.length}><Plus size={16}/>Novo posto</button></>}</div></header>
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Operação e cobertura</p><h1 className="nv-page-title mt-1">Escala médica</h1><p className="mt-1 text-sm capitalize text-text-secondary">{view === 'day' ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : view === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])} de ${new Date(`${week[6]}T12:00:00`).getFullYear()}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p></div><div className="flex flex-wrap gap-2">{canApproveSchedule && <Link className="nv-button-secondary" href="/escala/candidaturas"><ArrowRightLeft size={16}/>Candidaturas e trocas</Link>}{canCreateSchedule && scheduleMode === 'general' && <><button className="nv-button-secondary" onClick={() => openShift(undefined, undefined, date, undefined, 1, true)} disabled={!units.length}><Plus size={16}/>Plantão avulso</button><button className="nv-button" onClick={() => openShift()} disabled={!units.length}><Plus size={16}/>Novo posto</button></>}</div></header>
     {scopePicker}
+    <nav className="flex w-fit gap-1 rounded-lg border border-border bg-card-bg p-1" aria-label="Tipo de escala">
+      {([['general', 'Escala Geral'], ['master', 'Escala Master']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={scheduleMode === value} onClick={() => setScheduleMode(value)} className={`min-h-10 rounded-md px-4 text-sm font-semibold ${scheduleMode === value ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:bg-state-hover'}`}>{label}</button>)}
+    </nav>
+    {scheduleMode === 'master' ? <ScheduleMasterView key={`${orgId}:${unitId}:${sectorId}`} organization={orgId} unitId={unitId} sectorId={sectorId} doctors={doctors} units={units} sectors={sectors} canCreate={canCreateSchedule} canEdit={canEditSchedule} canApprove={canApproveSchedule} canFinance={canEditFinancial} editRequest={masterEditRequest} onChanged={refreshMasterShifts} onOpenShift={openMasterShift}/> : <>
     {mobile && <div className="space-y-3">
       <nav className="grid grid-cols-4 gap-1 rounded-xl border border-border bg-card-bg p-1" aria-label="Visualização da escala no celular">
         {([['month', 'Mês'], ['week', 'Semana'], ['day', 'Dia'], ['list', 'Lista']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mobileView === value}
@@ -595,6 +620,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
       onDeleteShift={item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date })}
       onDeleteTurn={(sector, day, kind) => openDelete('turn', { from: day, to: day, unitId: sector.unitId, sectorId: sector.id, kind })}
       onCopyPeriod={copyPeriod}
+      onEditMasterRule={canEditSchedule && canCreateSchedule ? editMasterRule : undefined}
     />}
     {(canCreateSchedule || canDeleteSchedule) && <details className="rounded-lg border border-border bg-card-bg px-4 py-3 text-sm"><summary className="cursor-pointer font-medium text-text-secondary">Gerenciar escala</summary><div className="mt-3 flex flex-wrap items-center gap-2"><button className="nv-button-secondary" onClick={() => previewWeek('previous')} disabled={!canCreateSchedule || view !== 'week' || store.saving}><Copy size={15}/>Copiar semana anterior</button><button className="nv-button-secondary" onClick={() => previewWeek('current')} disabled={!canCreateSchedule || view !== 'week' || store.saving}><Copy size={15}/>Replicar para a próxima</button>{canDeleteSchedule && <button type="button" onClick={() => openDelete('period')} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-secondary transition hover:border-danger/40 hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/>Excluir da escala</button>}</div></details>}
 
@@ -623,6 +649,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
 
       </div>
     </details>
+    </>}
     {selectionShift && <Dialog title="Candidaturas e histórico do plantão" onClose={() => setSelectionShift(null)}>
       <ShiftSelectionPanel organization={orgId} shiftId={selectionShift.id} onChanged={() => {
         setOpportunityRevision(value => value + 1);
@@ -646,6 +673,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
         unit={units.find(item => item.id === openedShift.unitId)?.name}
         sector={sectors.find(item => item.id === openedShift.sectorId)?.name}
         doctor={doctors.find(item => item.id === openedShift.doctorId)?.name} />}
+      {form.id && <MasterShiftOrigin ids={[form.id]} date={form.date} canEdit={canEditSchedule && canCreateSchedule} onEditRule={editMasterRule} editingOccurrence/>}
       <fieldset disabled={!canSaveShift} className="min-w-0 space-y-5">{form.coverageMode === 'adhoc' && <section className="space-y-3 border-l-2 border-primary pl-3"><p className="text-sm font-semibold text-primary">Cobertura temporária</p><p className="text-xs leading-5 text-text-muted">Vale apenas para as datas cadastradas. Não altera os postos fixos do setor e não entra na cópia de semanas.</p><label className="nv-label">Motivo da cobertura<input className="nv-input" required minLength={3} maxLength={200} placeholder="Ex.: Férias de profissional CLT em outubro" value={form.coverageReason || ''} onChange={event => setForm({ ...form, coverageReason: event.target.value })} /></label></section>}<div className="grid gap-4 sm:grid-cols-2">
         <label className="nv-label">Unidade<select aria-label="Unidade" className="nv-input" required value={form.unitId} onChange={event => updateFormUnit(event.target.value)}><option value="">Selecione</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
         <div className="sm:col-span-2"><div className="flex items-end gap-2">

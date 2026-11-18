@@ -76,7 +76,19 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-banking.fixture.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '32_doctor_banking.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-banking.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-32, pré/pós-verificação e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '33_staff_shift_read_performance.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-banking.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'staff-shift-read-performance.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '34_imported_document_originals.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'imported-document-originals.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '35_provisional_import_assignments.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'provisional-import-assignments.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '36_doctor_profile_access.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-profile-access.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.preflight.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '37_master_schedule.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
+  Write-Output 'PASS: baseline 01-18, migrations 19-37, pré/pós-verificação e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

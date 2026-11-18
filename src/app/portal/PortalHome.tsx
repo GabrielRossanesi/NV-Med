@@ -10,12 +10,14 @@ import { isStrongPassword } from '@/lib/passwordPolicy';
 import { documentStatusClasses, documentStatusLabels } from '@/lib/documentCompliance';
 import type { DocumentStatus } from '@/types';
 import PortalSchedule from './PortalSchedule';
+import PortalAbsences from './PortalAbsences';
 import NotificationInbox from '@/components/NotificationInbox';
 import { crmStates } from '@/lib/documentRequirements';
 import { authFlowUrl } from '@/lib/appOrigin';
 import DoctorBankingFields from '@/components/DoctorBankingFields';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import { bankingFromForm } from '@/lib/doctorBanking';
+import DoctorProfileEditor from '@/components/DoctorProfileEditor';
 
 type Enrollment = {
   doctor_id: string; organization_id: string; organization: string; name: string; status: EnrollmentStatus;
@@ -189,6 +191,8 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
   const [organization, setOrganization] = useState(initialOrganization);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [revision, setRevision] = useState(0);
+  const [editingDoctor, setEditingDoctor] = useState<string | null>(null);
+  const [profileNotice, setProfileNotice] = useState('');
   const [loadingCompany, setLoadingCompany] = useState(false);
   useEffect(() => {
     if (!email) return;
@@ -225,15 +229,19 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
       {email && <button className="nv-button-secondary" onClick={() => void logoutCurrentSession().catch(failure => setError(failure.message))}>Sair</button>}
     </header>
     {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
+    {profileNotice && <p role="status" className="nv-feedback text-success">{profileNotice}</p>}
+    {editingDoctor && <DoctorProfileEditor doctorId={editingDoctor} own onClose={() => setEditingDoctor(null)} onSaved={() => { setEditingDoctor(null); setProfileNotice('Seus dados foram atualizados.'); setRevision(v => v + 1); }}/>}
     {!email ? <RegisterAccount organization={initialOrganization}/> : <>
       {enrollments === null && !error && <p role="status" className="nv-feedback items-center text-info"><LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true"/>Carregando credenciamento…</p>}
-      {enrollments?.some(item => item.status === 'approved') && <PortalSchedule/>}
+      {enrollments?.some(item => item.status === 'approved') && <><PortalSchedule/><PortalAbsences key={`${email}:${organization}`}/></>}
       {enrollments?.map((item, index) => <section key={item.doctor_id} id={index === 0 ? 'portal-perfil' : undefined} className="space-y-3">
         <div className="nv-panel p-4 sm:p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">{item.organization}</p>
           <h2 className="mt-1 nv-section-title">{item.name}</h2>
           <p className="mt-2 text-xs font-medium text-text-secondary">{item.portal_role || 'Médico'}</p>
           <p className={`nv-badge mt-2 ${enrollmentTones[item.status]}`}><ClipboardCheck size={15} aria-hidden="true"/>{enrollmentStatusLabels[item.status]}</p>
+          {item.status === 'approved' && <button className="nv-button-secondary mt-3 sm:ml-3" onClick={() => setEditingDoctor(item.doctor_id)}>Editar meus dados</button>}
+          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt className="text-text-muted">CRM</dt><dd>{item.crm} / {item.uf}</dd></div><div><dt className="text-text-muted">Telefone</dt><dd>{item.phone || 'Não informado'}</dd></div><div><dt className="text-text-muted">Especialidades</dt><dd>{item.specialties.join(', ')}</dd></div></dl>
           {item.review_note && <p className="mt-2 text-sm">{item.review_note}</p>}
           {item.status === 'correction_requested' && <button className="nv-button-secondary mt-3" disabled={loadingCompany} onClick={() => void findCompany(item.organization_id)}>Corrigir cadastro</button>}
         </div>

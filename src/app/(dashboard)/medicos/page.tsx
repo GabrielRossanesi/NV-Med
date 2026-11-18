@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useStore } from '@/store/useStore';
 import { useSearchParams } from 'next/navigation';
-import { DoctorContractModel, DoctorStatus } from '@/types';
+import { DoctorStatus } from '@/types';
 import {
   Search,
   Plus,
@@ -23,10 +23,11 @@ import { canPerformAction } from '@/lib/permissions';
 import Link from 'next/link';
 import { getDoctorCompliance } from '@/lib/documentCompliance';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
-import { doctorContractModelLabels, doctorContractModelShortLabels } from '@/lib/doctorProfile';
+import { doctorContractModelShortLabels } from '@/lib/doctorProfile';
 import { doctorHasOperationalUnit, getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 import DoctorBankingFields from '@/components/DoctorBankingFields';
 import { bankingFromForm } from '@/lib/doctorBanking';
+import DoctorProfileFields, { doctorProfileFromForm } from '@/components/DoctorProfileFields';
 
 function DoctorsPageContent() {
   const {
@@ -89,20 +90,8 @@ function DoctorsPageContent() {
   }
 
 
-  // Form state for new doctor
-  const [name, setName] = useState('');
-  const [crm, setCrm] = useState('');
-  const [crmUf, setCrmUf] = useState('SP');
-  const [rqe, setRqe] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [specialty, setSpecialty] = useState(activeOrg?.settings.specialties[0] || '');
-  const [address, setAddress] = useState('');
-  const [status, setStatus] = useState<DoctorStatus>('active');
-  const [contractModel, setContractModel] = useState<DoctorContractModel>('pf');
-  const [contractSigned, setContractSigned] = useState(false);
   const [bankingError, setBankingError] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const orgDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
 
@@ -132,35 +121,11 @@ function DoctorsPageContent() {
     try { banking = canCreateBanking ? bankingFromForm(new FormData(e.currentTarget)) : undefined; }
     catch (failure) { setBankingError((failure as Error).message); return; }
     
-    if (!await addDoctor({
-      name,
-      crm,
-      crmUf,
-      rqe: rqe.trim() || undefined,
-      cpf,
-      phone,
-      email,
-      specialty,
-      address,
-      status,
-      contractModel,
-      contractSigned,
-      linkedUnits: []
-    }, banking)) return;
+    setCreating(true);
+    const saved = await addDoctor(doctorProfileFromForm(new FormData(e.currentTarget)), banking);
+    setCreating(false);
+    if (!saved) return;
 
-    // Reset Form
-    setName('');
-    setCrm('');
-    setCrmUf('SP');
-    setRqe('');
-    setCpf('');
-    setPhone('');
-    setEmail('');
-    setSpecialty(activeOrg?.settings.specialties[0] || '');
-    setAddress('');
-    setStatus('active');
-    setContractModel('pf');
-    setContractSigned(false);
     setIsModalOpen(false);
   };
 
@@ -212,7 +177,6 @@ function DoctorsPageContent() {
         <button
           disabled={!canCreate}
           onClick={() => {
-            setSpecialty(activeOrg?.settings.specialties[0] || '');
             if (canCreate) setIsModalOpen(true);
           }}
           className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
@@ -236,7 +200,6 @@ function DoctorsPageContent() {
           <button
             disabled={!canCreate}
             onClick={() => {
-              setSpecialty(activeOrg?.settings.specialties[0] || '');
               if (canCreate) setIsModalOpen(true);
             }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-text-inverse rounded-xl font-semibold text-xs transition duration-200 cursor-pointer shadow-glow-primary mx-auto"
@@ -472,7 +435,7 @@ function DoctorsPageContent() {
                   <UserCheck className="h-4 w-4 text-primary" />
                   Cadastrar Novo Médico
                 </h3>
-                <p className="text-[10px] text-text-muted mt-0.5">Informe as credenciais do médico para a empresa ativa</p>
+                <p className="text-[10px] text-text-muted mt-0.5">Informe os dados cadastrais do médico para a empresa ativa</p>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -484,168 +447,8 @@ function DoctorsPageContent() {
 
             {/* Modal Form Body */}
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Full name */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Nome Completo</label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Dr(a). Nome Sobrenome"
-                    className="nv-input"
-                  />
-                </div>
-
-                {/* Specialty */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Especialidade Principal</label>
-                  <select
-                    value={specialty}
-                    onChange={(e) => setSpecialty(e.target.value)}
-                    className="nv-input"
-                  >
-                    {activeOrg?.settings.specialties.map((spec) => (
-                      <option key={spec} value={spec}>
-                        {spec}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* CRM */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Número CRM</label>
-                  <input
-                    type="text"
-                    required
-                    value={crm}
-                    onChange={(e) => setCrm(e.target.value)}
-                    placeholder="Ex: 123456"
-                    className="nv-input"
-                  />
-                </div>
-
-                {/* CRM UF */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">UF CRM</label>
-                  <select
-                    value={crmUf}
-                    onChange={(e) => setCrmUf(e.target.value)}
-                    className="nv-input"
-                  >
-                    {['SP', 'RJ', 'MG', 'PR', 'RS', 'SC', 'DF', 'BA', 'PE', 'CE'].map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">RQE <span className="font-medium normal-case tracking-normal">(opcional)</span></label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={20}
-                    value={rqe}
-                    onChange={(e) => setRqe(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="Ex: 123456"
-                    className="nv-input"
-                  />
-                </div>
-
-                {/* CPF */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">CPF</label>
-                  <input
-                    type="text"
-                    required
-                    value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
-                    placeholder="Ex: 000.000.000-00"
-                    className="nv-input"
-                  />
-                </div>
-
-                {/* Phone */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Telefone de Contato</label>
-                  <input
-                    type="text"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Ex: (11) 99999-9999"
-                    className="nv-input"
-                  />
-                </div>
-
-                {/* Email */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">E-mail</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="medico@exemplo.com"
-                    className="nv-input"
-                  />
-                </div>
-
-                {/* Status */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Status Inicial</label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as DoctorStatus)}
-                    className="nv-input"
-                  >
-                    <option value="active">Ativo (Aprovado)</option>
-                    <option value="pending">Pendente (Análise de Docs)</option>
-                    <option value="inactive">Inativo (Bloqueado)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Modelo de contratação</label>
-                  <select
-                    value={contractModel}
-                    onChange={(e) => setContractModel(e.target.value as DoctorContractModel)}
-                    className="nv-input"
-                  >
-                    {Object.entries(doctorContractModelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </div>
-
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-3 transition hover:border-primary/40">
-                  <input
-                    type="checkbox"
-                    checked={contractSigned}
-                    onChange={(e) => setContractSigned(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span>
-                    <span className="block text-xs font-semibold text-text-primary">Contrato já assinado</span>
-                    <span className="mt-0.5 block text-[10px] leading-relaxed text-text-muted">Marque quando o instrumento contratual do médico já estiver formalizado.</span>
-                  </span>
-                </label>
-              </div>
-
-              {/* Residential address */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Endereço Residencial</label>
-                <input
-                  type="text"
-                  required
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Rua, Número, Bairro, Cidade - UF"
-                  className="nv-input"
-                />
-              </div>
+              <DoctorProfileFields specialties={activeOrg?.settings.specialties || []}/>
+              <p className="text-xs text-text-muted">O cadastro não cria acesso ao portal nem envia convites. A liberação será individual na página do médico.</p>
 
               {canCreateBanking ? <DoctorBankingFields/> : <p className="text-sm text-text-muted">O cadastro será salvo como pendente. Um usuário autorizado ou o próprio médico deverá preencher a chave PIX e seu tipo para concluir o cadastro.</p>}
               {bankingError && <p role="alert" className="text-sm text-danger">{bankingError}</p>}
@@ -662,7 +465,7 @@ function DoctorsPageContent() {
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-text-inverse font-semibold text-xs transition duration-200"
                 >
-                  Salvar Cadastro
+                  {creating ? 'Salvando…' : 'Salvar cadastro'}
                 </button>
               </div>
             </form>

@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import { openDocument } from '@/services/supabaseService';
+import { fetchInitialDataFromSupabase, mapDoctorFromDb, openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import { DocumentStatus, DocumentType, DoctorStatus } from '@/types';
 import AccessGuard from '@/components/AccessGuard';
@@ -19,14 +19,19 @@ import {
   Mail,
   Phone,
   FileCheck,
-  FolderOpen
+  FolderOpen,
+  Pencil
 } from 'lucide-react';
 import Link from 'next/link';
 import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 import { createClient } from '@/lib/supabase/client';
-import { canPerformAction } from '@/lib/permissions';
+import { canPerformAction, canViewPermission } from '@/lib/permissions';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
+import DoctorProfileEditor from '@/components/DoctorProfileEditor';
+import DoctorPortalAccess from '@/components/DoctorPortalAccess';
+import DoctorProfileHistory from '@/components/DoctorProfileHistory';
+import DoctorMasterSchedule from '@/components/schedule/DoctorMasterSchedule';
 
 export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -35,11 +40,11 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const {
     activeOrganizationId,
     doctors,
+    organizations,
     units,
     shifts,
     documents,
     currentUser,
-    updateDoctor,
     uploadDocument,
     updateDocumentStatus
   } = useStore();
@@ -50,6 +55,19 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const docDocs = documents.filter((d) => d.doctorId === doctorId && d.organizationId === activeOrganizationId);
 
   const [selectedFileNames, setSelectedFileNames] = useState<Record<string, File>>({});
+  const [editing, setEditing] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const canEdit = canPerformAction(currentUser, 'medicos', 'edit');
+  async function refreshProfile() {
+    setRevision(v => v + 1);
+    try {
+      const result = await createClient()?.rpc('nv_doctor_profile', { target: doctorId });
+      if (!result?.data?.profile) throw new Error('Atualize a página para consultar o perfil salvo.');
+      const updated = mapDoctorFromDb(result.data.profile);
+      useStore.setState(state => ({ doctors: state.doctors.map(d => d.id === updated.id ? updated : d) }));
+    } catch { useStore.setState({ error: 'Não foi possível atualizar a visualização. Recarregue a página para conferir os dados.' }); }
+  }
   const [portalRole, setPortalRole] = useState<string | null>(null);
   const [roleError, setRoleError] = useState('');
   const [roleSaving, setRoleSaving] = useState(false);
@@ -70,6 +88,13 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     } catch (error) { setRoleError(error instanceof Error ? error.message : 'Não foi possível salvar o cargo médico.'); }
     finally { setRoleSaving(false); }
   }
+  async function prepareCredential() {
+    setRoleSaving(true); setRoleError('');
+    const result = await createClient()?.rpc('nv_prepare_doctor_credential', { target: doctorId });
+    if (!result || result.error) setRoleError('Não foi possível preparar o credenciamento.');
+    else { setPortalRole('Médico'); setRevision(v => v + 1); useStore.setState({ notice: 'Cadastro disponível para análise em Credenciamento. Nenhum acesso ao portal foi criado.' }); }
+    setRoleSaving(false);
+  }
 
   if (!doctor) {
     return (
@@ -88,8 +113,20 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   }
 
   // Handle status update of the doctor
-  const handleDoctorStatusChange = (newStatus: DoctorStatus) => {
-    updateDoctor({ ...doctor, status: newStatus });
+  const handleDoctorStatusChange = async (newStatus: DoctorStatus) => {
+    if (!canEdit || statusSaving || newStatus === doctor.status) return;
+    if (!window.confirm(`Confirmar alteração do cadastro para ${newStatus === 'active' ? 'ativo' : newStatus === 'pending' ? 'pendente' : 'inativo'}? Os plantões e documentos serão preservados.`)) return;
+    setStatusSaving(true);
+    try {
+      const client = createClient();
+      const snapshot = await client?.rpc('nv_doctor_profile', { target: doctorId });
+      if (!snapshot?.data?.profile) throw new Error('Não foi possível consultar o cadastro atual.');
+      const result = await client?.rpc('nv_update_doctor_profile', { target: doctorId, profile: { status: newStatus }, revision: snapshot.data.profile.updated_at });
+      if (!result || result.error) throw new Error(result?.error?.message || 'Não foi possível alterar o status.');
+      useStore.setState({ notice: 'Status do cadastro atualizado.' });
+      await refreshProfile();
+    } catch (failure) { useStore.setState({ error: (failure as Error).message }); }
+    finally { setStatusSaving(false); }
   };
 
   // Handle mock file selection
@@ -170,28 +207,36 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
               {roleError && <span role="alert" className="text-danger">{roleError}</span>}
             </div>}
             <p className="text-xs text-text-muted mt-1">CRM: {doctor.crm}-{doctor.crmUf} • Cadastro: {doctor.status.toUpperCase()}</p>
+            {canSetRole && <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+              {!portalRole && <button className="nv-button-secondary" disabled={roleSaving} onClick={() => void prepareCredential()}>Preparar credenciamento</button>}
+              <Link href="/medicos/credenciamento" className="font-semibold text-primary underline">Analisar credenciamento e vínculos</Link>
+              <span className="text-text-muted">A aprovação profissional não exige acesso ao portal.</span>
+              {!portalRole && roleError && <span role="alert" className="text-danger">{roleError}</span>}
+            </div>}
           </div>
           
           {/* Quick status admin toggler */}
+          <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          {canEdit && <button className="nv-button" onClick={() => setEditing(true)}><Pencil size={16}/>Editar perfil</button>}
           <div className="flex flex-wrap gap-2 items-center bg-card-bg p-2.5 rounded-xl border border-card-border">
             <span className="text-[10px] uppercase font-bold text-text-muted mr-1.5 block">Status Geral:</span>
-            <button onClick={() => handleDoctorStatusChange('active')} className={getBtnClass('active')}>
+            <button disabled={!canEdit || statusSaving} onClick={() => void handleDoctorStatusChange('active')} className={getBtnClass('active')}>
               <CheckCircle2 className="h-3.5 w-3.5" />
               Ativo
             </button>
-            <button onClick={() => handleDoctorStatusChange('pending')} className={getBtnClass('pending')}>
+            <button disabled={!canEdit || statusSaving} onClick={() => void handleDoctorStatusChange('pending')} className={getBtnClass('pending')}>
               <Clock className="h-3.5 w-3.5" />
               Pendente
             </button>
-            <button onClick={() => handleDoctorStatusChange('inactive')} className={getBtnClass('inactive')}>
+            <button disabled={!canEdit || statusSaving} onClick={() => void handleDoctorStatusChange('inactive')} className={getBtnClass('inactive')}>
               <AlertCircle className="h-3.5 w-3.5" />
               Inativo
             </button>
           </div>
+          </div>
         </div>
       </div>
 
-      {canPerformAction(currentUser, 'dados_bancarios', 'view') && <DoctorBankingPanel key={doctor.id} doctor={doctor.id}/>}
       {/* Main layout grids */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
@@ -420,6 +465,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
       </div>
+      {canViewPermission(currentUser, 'escala') && <DoctorMasterSchedule key={`${activeOrganizationId}:${doctor.id}`} organization={activeOrganizationId} doctor={doctor} canManage={canPerformAction(currentUser, 'escala', 'edit') && canPerformAction(currentUser, 'escala', 'approve')} onChanged={async () => { useStore.getState().syncWithCloud(await fetchInitialDataFromSupabase()); }}/>}
+      {canPerformAction(currentUser, 'dados_bancarios', 'view') && <DoctorBankingPanel key={doctor.id} doctor={doctor.id}/>}
+      <DoctorPortalAccess key={doctor.id + '-access'} doctorId={doctor.id} organizationId={doctor.organizationId} revision={revision} onChanged={() => void refreshProfile()}/>
+      <DoctorProfileHistory key={doctor.id + '-history'} doctorId={doctor.id} revision={revision}/>
+      {editing && <DoctorProfileEditor doctorId={doctor.id} specialties={organizations.find(o => o.id === doctor.organizationId)?.settings.specialties || []}
+        onClose={() => setEditing(false)} onSaved={() => { setEditing(false); useStore.setState({ notice: 'Perfil médico atualizado com sucesso.' }); void refreshProfile(); }}/>}
     </div>
     </AccessGuard>
   );

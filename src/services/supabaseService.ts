@@ -204,7 +204,7 @@ function mapOrgFromDb(row: DbOrganization): Organization {
   };
 }
 
-function mapDoctorFromDb(row: DbDoctor): Doctor {
+export function mapDoctorFromDb(row: DbDoctor): Doctor {
   return {
     id: row.id,
     organizationId: row.organization_id,

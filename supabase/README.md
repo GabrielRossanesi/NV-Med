@@ -1,5 +1,9 @@
 # Banco de dados do NV Med
 
+Escala Master e afastamentos: aplicar `37_master_schedule.sql` após a 36 e configurar `master-schedule-cron.setup.sql` para geração diária. Não converte escalas importadas. O [guia de recorrências e ausências](../docs/escala-master-e-afastamentos.md) descreve permissões, prévia obrigatória, contratos, laboratório e ativação.
+
+Perfil médico e acesso individual ao portal: aplicar `36_doctor_profile_access.sql` após a 35 e antes da interface correspondente. Não cria contas nem envia convites em lote. O [guia de perfil e acesso](../docs/perfil-medico-acesso-portal.md) descreve inventário somente leitura, separação de credenciamento/Auth, permissões, SMTP e testes.
+
 Os dados bancários médicos usam a migration incremental `32_doctor_banking.sql`, após a 31. Aplique em conjunto com a versão correspondente da interface e com autorização para o destino. O [guia de dados bancários](../docs/dados-bancarios-medicos.md) descreve migração dos valores legados, permissões, proteção e testes locais.
 
 O piloto interno no Supabase existente segue o [plano de implantação controlada](../docs/implantacao-controlada-nv-med.md). O [roteiro de laboratório isolado](../docs/homologacao-nv-med.md) registra os testes locais e a estratégia anterior.

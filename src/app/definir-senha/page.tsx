@@ -87,7 +87,8 @@ export default function SetPasswordPage() {
         window.location.replace('/login?passwordUpdated=1');
         return;
       }
-      window.location.replace('/escala');
+      const { data: staff } = await client.from('user_accounts').select('id').eq('auth_user_id', signedIn.user.id).maybeSingle();
+      window.location.replace(staff ? '/escala' : '/portal');
     } catch (saveError) {
       if (passwordUpdated) {
         window.location.replace('/login?passwordUpdated=1');

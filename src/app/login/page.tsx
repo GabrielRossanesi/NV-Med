@@ -56,14 +56,17 @@ export default function LoginPage() {
     try {
       const client = createClient();
       if (!client) throw new Error('O acesso ainda não foi configurado pelo administrador.');
-      const { error: signInError } = await withPromiseTimeout(
+      const { data: signedIn, error: signInError } = await withPromiseTimeout(
         client.auth.signInWithPassword({ email: email.trim(), password }),
         { timeoutMs: 15_000, message: 'O login demorou mais que o esperado. Verifique sua conexão e tente novamente.' },
       );
       if (signInError) throw new Error('Não foi possível entrar. Confira seu e-mail e senha.');
       const search = new URLSearchParams(window.location.search);
       const organization = search.get('empresa');
-      window.location.assign(organization ? '/portal?empresa=' + encodeURIComponent(organization) : search.has('portal') ? '/portal' : '/escala');
+      if (signedIn.user?.app_metadata?.must_change_password === true) { window.location.assign('/definir-senha?required=1'); return; }
+      const { data: staff, error: profileError } = await client.from('user_accounts').select('id').eq('auth_user_id', signedIn.user!.id).maybeSingle();
+      if (profileError) throw new Error('Não foi possível carregar seu perfil. Tente entrar novamente.');
+      window.location.assign(organization ? '/portal?empresa=' + encodeURIComponent(organization) : search.has('portal') || !staff ? '/portal' : '/escala');
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Falha de conexão. Tente novamente.');
       setBusy(false);

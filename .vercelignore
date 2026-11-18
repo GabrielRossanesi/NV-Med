@@ -1,0 +1,17 @@
+Import
+Import/**
+.git
+.git/**
+.agents
+.agents/**
+.codex
+.codex/**
+.aws
+.aws/**
+.env*
+!.env.example
+node_modules
+node_modules/**
+.next
+.next/**
+*.tsbuildinfo

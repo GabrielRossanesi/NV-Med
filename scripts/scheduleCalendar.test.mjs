@@ -57,7 +57,7 @@ test('full coverage shows every full name without redundant coverage or administ
   for (const doctor of doctors) assert.ok(html.includes(doctor.name));
   assert.ok(!html.includes('Confirmado'));
   assert.ok(html.includes('3/3'));
-  assert.ok(!html.includes('Vaga disponível'));
+  assert.ok(!html.includes('Vaga aberta'));
   assert.ok(!html.includes('em falta'));
   assert.ok(!html.includes('truncate'));
 });
@@ -67,17 +67,17 @@ test('pending confirmations occupy positions and never create vacancies', () => 
   assert.equal(count(html, 'Aguardando confirmação'), 0);
   assert.equal(html, table());
   assert.ok(html.includes('3/3'));
-  assert.ok(!html.includes('Vaga disponível'));
+  assert.ok(!html.includes('Vaga aberta'));
 });
 
 test('partial and empty coverage list each saved and uncreated position', () => {
   const vacancy = { ...base, id: 'vacancy', doctorId: undefined, status: 'open' };
   const partial = table({ shifts: [base, vacancy] });
   assert.ok(partial.includes('1/3'));
-  assert.equal(count(partial, 'Vaga disponível'), 2);
+  assert.equal(count(partial, 'Vaga aberta'), 2);
   assert.equal(count(partial, 'Posto previsto por criar'), 0);
-  assert.equal(count(table({ shifts: [] }), 'Vaga disponível'), 3);
-  assert.equal(count(table({ shifts: [vacancy, { ...vacancy, id: 'v2' }, { ...vacancy, id: 'v3' }] }), 'Vaga disponível'), 3);
+  assert.equal(count(table({ shifts: [] }), 'Vaga aberta'), 3);
+  assert.equal(count(table({ shifts: [vacancy, { ...vacancy, id: 'v2' }, { ...vacancy, id: 'v3' }] }), 'Vaga aberta'), 3);
 });
 
 test('vacancy quick actions respect edit and create permissions independently', () => {
@@ -132,8 +132,8 @@ test('large teams and long names remain present in desktop and mobile markup', (
 });
 
 test('rerendering updated props reflects assignment, removal and confirmation immediately', () => {
-  assert.equal(count(table({ shifts: [] }), 'Vaga disponível'), 3);
-  assert.equal(count(table({ shifts: [{ ...base, status: 'pending' }] }), 'Vaga disponível'), 2);
+  assert.equal(count(table({ shifts: [] }), 'Vaga aberta'), 3);
+  assert.equal(count(table({ shifts: [{ ...base, status: 'pending' }] }), 'Vaga aberta'), 2);
   assert.ok(table({ shifts: [{ ...base, status: 'pending' }] }).includes(doctors[0].name));
   assert.equal(table({ shifts: [base] }), table({ shifts: [{ ...base, status: 'pending' }] }));
   const focus = { day, sectorId: sector.id, kind: 'day', nonce: 1 };
@@ -168,7 +168,7 @@ test('undefined confirmation remains neutral while occupancy uses doctor assignm
   const html = table({ shifts: [{ ...base, status: 'open' }] });
   assert.ok(html.includes('1/3'));
   assert.ok(!html.includes('Confirmação não definida'));
-  assert.equal(count(html, 'Vaga disponível'), 2);
+  assert.equal(count(html, 'Vaga aberta'), 2);
 });
 
 test('weekly and daily views show the intended dates, including weeks across month boundaries', () => {
@@ -203,7 +203,7 @@ test('monthly calendar shows names, times and vacancies throughout the month wit
   const shifts = [base, { ...assigned[1], status: 'pending' }, { ...assigned[2], date: '2026-11-30', startTime: '19:00', endTime: '07:00' }];
   const html = table({ view: 'month', shifts, doctorWarnings: new Map([[base.doctorId, { warning: true, blocked: true }]]) });
   for (const doctor of doctors) assert.ok(html.includes(doctor.name));
-  assert.ok(html.includes('Vaga disponível'));
+  assert.ok(html.includes('Vaga aberta'));
   assert.ok(html.includes('19:00'));
   assert.ok(!html.includes('Aguardando confirmação'));
   assert.ok(!html.includes('Conflito de horário'));

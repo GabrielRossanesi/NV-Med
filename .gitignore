@@ -46,3 +46,6 @@ next-env.d.ts
 
 # iniciar
 .bat
+
+# Private production import sources, backups and execution evidence
+/Import/

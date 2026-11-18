@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { maxMedicalFileBytes, medicalFileExtension } from '@/lib/medicalFile';
-import { isMedicalDocumentPath, readBoundedBody } from '@/lib/documentAccess';
+import { isMedicalDocumentPath, medicalDocumentPreviewKind, readBoundedBody } from '@/lib/documentAccess';
 
 const bucket = 'medical-documents';
 const maxRequestBytes = maxMedicalFileBytes + 10_000;
@@ -38,7 +38,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const admin = createAdminClient();
   if (!admin) return failure('Armazenamento indisponível.', 503);
   const preview = request.nextUrl.searchParams.get('preview') === '1';
-  const { data, error } = await admin.storage.from(bucket).createSignedUrl(file_path, 60, { download: !preview });
+  const { data, error } = await admin.storage.from(bucket).createSignedUrl(file_path, 60, {
+    download: !preview || medicalDocumentPreviewKind(file_path) === 'download',
+  });
   if (error) return failure('Arquivo indisponível.', 404);
   if (preview) return NextResponse.json({ url: data.signedUrl }, { headers: noCache });
   return NextResponse.redirect(data.signedUrl, { headers: noCache });

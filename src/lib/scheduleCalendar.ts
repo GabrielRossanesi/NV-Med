@@ -26,9 +26,9 @@ export function scheduleAllocations(period: CoveragePeriodSummary, doctors: Map<
     ...period.assigned.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
       id: shift.id, name: doctors.get(shift.doctorId || '')?.name || 'Médico escalado', vacant: false })),
     ...period.vacancies.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
-      id: shift.id, name: 'Vaga disponível', vacant: true })),
+      id: shift.id, name: 'Vaga aberta', vacant: true })),
     ...Array.from({ length: period.uncreated }, (_, index) => ({ ...time,
-      id: `uncreated-${time.kind}-${index}`, name: 'Vaga disponível', vacant: true })),
+      id: `uncreated-${time.kind}-${index}`, name: 'Vaga aberta', vacant: true })),
   ];
 }
 
