@@ -1,5 +1,7 @@
 # Banco de dados do NV Med
 
+Filtros e controle administrativo das escalas: aplicar `38_schedule_controls_and_audit.sql` após a 37 e antes da interface correspondente. Reforça a autorização usada por RLS/RPCs e amplia o histórico existente, sem modificar escalas reais nem reagendar o Cron. [Guia de filtros, bloqueio e auditoria](../docs/filtros-bloqueio-e-auditoria-escalas.md)
+
 Escala Master e afastamentos: aplicar `37_master_schedule.sql` após a 36 e configurar `master-schedule-cron.setup.sql` para geração diária. Não converte escalas importadas. O [guia de recorrências e ausências](../docs/escala-master-e-afastamentos.md) descreve permissões, prévia obrigatória, contratos, laboratório e ativação.
 
 Perfil médico e acesso individual ao portal: aplicar `36_doctor_profile_access.sql` após a 35 e antes da interface correspondente. Não cria contas nem envia convites em lote. O [guia de perfil e acesso](../docs/perfil-medico-acesso-portal.md) descreve inventário somente leitura, separação de credenciamento/Auth, permissões, SMTP e testes.

@@ -5,6 +5,7 @@ import { AlertTriangle, LoaderCircle, Trash2, UserMinus } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import { getScheduleDeletionTargets, type ScheduleDeletionSelection, type ScheduleDeletionScope } from '@/lib/scheduleDeletion';
 import type { Doctor, Sector, Shift, Unit } from '@/types';
+import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
 
 interface Props {
   initial: ScheduleDeletionSelection;
@@ -27,10 +28,12 @@ const scopeLabels: Record<ScheduleDeletionScope, string> = {
 };
 
 export default function ScheduleDeleteDialog({ initial, organizationId, shifts, sectors, units, doctors, canSeeFinancial, canEditFinancial, onClose, onConfirm }: Props) {
+  const guard = useScheduleEdit();
   const [selection, setSelection] = useState(initial);
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  useScheduleDraft('schedule-delete', JSON.stringify([selection, confirmation]), saving, onClose);
   const targets = getScheduleDeletionTargets(shifts, sectors, organizationId, selection);
   const assigned = targets.filter(shift => shift.doctorId).length;
   const paid = targets.filter(shift => shift.paymentStatus === 'paid').length;
@@ -42,7 +45,7 @@ export default function ScheduleDeleteDialog({ initial, organizationId, shifts, 
   const canConfirm = Boolean(validRange && validScope && targets.length > 0 && targets.length <= 500 && (canEditFinancial || financialItems === 0) && (selection.scope === 'shift' || confirmation === word));
 
   async function submit() {
-    if (!canConfirm || saving) return;
+    if (!canConfirm || saving || !guard.check()) return;
     setSaving(true); setError('');
     try {
       const result = await onConfirm(targets, selection.scope);
@@ -53,8 +56,8 @@ export default function ScheduleDeleteDialog({ initial, organizationId, shifts, 
     } finally { setSaving(false); }
   }
 
-  return <Dialog title={scopeLabels[selection.scope]} onClose={() => !saving && onClose()}>
-    <div className="space-y-5">
+  return <Dialog title={scopeLabels[selection.scope]} onClose={() => !saving && guard.transition(onClose)}>
+    <fieldset data-schedule-edit disabled={!guard.unlocked || saving} className="space-y-5">
       {initial.scope !== 'shift' && <label className="nv-label">Ação
         <select className="nv-input" value={selection.scope} onChange={event => { const scope = event.target.value as ScheduleDeletionScope; setSelection({ ...selection, scope, to: scope === 'turn' ? selection.from : selection.to }); setConfirmation(''); setError(''); }}>
           <option value="period">Excluir período</option><option value="turn">Excluir turno</option><option value="doctor">Retirar médico da escala</option>
@@ -81,7 +84,7 @@ export default function ScheduleDeleteDialog({ initial, organizationId, shifts, 
       {!canEditFinancial && financialItems > 0 && <p role="alert" className="text-xs text-danger">Esta seleção contém plantões com dados financeiros. Solicite a alguém com permissão de edição financeira para concluir.</p>}
       {selection.scope !== 'shift' && targets.length > 0 && <label className="nv-label">Digite {word} para confirmar<input className="nv-input" autoComplete="off" value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder={word}/></label>}
       {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</p>}
-      <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4"><button type="button" className="nv-button-secondary" disabled={saving} onClick={onClose}>Cancelar</button><button type="button" disabled={!canConfirm || saving} onClick={() => void submit()} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-danger px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45">{saving ? <LoaderCircle size={15} className="animate-spin"/> : isDoctor ? <UserMinus size={15}/> : <Trash2 size={15}/>} {saving ? 'Aguarde…' : scopeLabels[selection.scope]}</button></div>
-    </div>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4"><button type="button" className="nv-button-secondary" disabled={saving} onClick={() => guard.transition(onClose)}>Cancelar</button><button type="button" disabled={!canConfirm || saving} onClick={() => void submit()} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-danger px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45">{saving ? <LoaderCircle size={15} className="animate-spin"/> : isDoctor ? <UserMinus size={15}/> : <Trash2 size={15}/>} {saving ? 'Aguarde…' : scopeLabels[selection.scope]}</button></div>
+    </fieldset>
   </Dialog>;
 }

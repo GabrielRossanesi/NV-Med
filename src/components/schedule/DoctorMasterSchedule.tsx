@@ -3,8 +3,10 @@ import Link from 'next/link';
 import { useMasterSchedule } from './useMasterSchedule';
 import DoctorAbsenceManager from './DoctorAbsenceManager';
 import type { Doctor } from '@/types';
+import type { ComponentProps } from 'react';
+import { ScheduleEditBoundary, ScheduleEditControl } from './ScheduleEditGuard';
 
-export default function DoctorMasterSchedule({ organization, doctor, canManage, onChanged }: {
+function DoctorMasterContent({ organization, doctor, canManage, onChanged }: {
   organization: string; doctor: Doctor; canManage: boolean; onChanged: () => Promise<void>;
 }) {
   const { data, error, reload } = useMasterSchedule(organization, null, null, doctor.id);
@@ -14,4 +16,7 @@ export default function DoctorMasterSchedule({ organization, doctor, canManage, 
       <DoctorAbsenceManager organization={organization} doctorId={doctor.id} doctors={[doctor]} data={data} canManage={canManage} onChanged={async () => { await Promise.all([reload(), onChanged()]); }}/>
     </>}
   </section>;
+}
+export default function DoctorMasterSchedule(props: ComponentProps<typeof DoctorMasterContent>) {
+  return <ScheduleEditBoundary><div className="space-y-3"><ScheduleEditControl/><DoctorMasterContent {...props}/></div></ScheduleEditBoundary>;
 }

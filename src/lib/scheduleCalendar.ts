@@ -14,22 +14,24 @@ export type ScheduleAllocation = {
   id: string;
   name: string;
   vacant: boolean;
+  vacancyState?: 'available' | 'unpublished' | 'planned';
+  sectorName?: string;
   kind: CoveragePeriodSummary['period']['kind'];
   startTime: string;
   endTime: string;
 };
 
 // Both calendar views use the existing coverage summary; administrative state stays in the inspector.
-export function scheduleAllocations(period: CoveragePeriodSummary, doctors: Map<string, Pick<Doctor, 'name'>>) {
+export function scheduleAllocations(period: CoveragePeriodSummary, doctors: Map<string, Pick<Doctor, 'name'>>, availableVacancyIds: ReadonlySet<string> = new Set()): ScheduleAllocation[] {
   const time = { kind: period.period.kind, startTime: period.period.startTime, endTime: period.period.endTime };
   return [
     ...period.assigned.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
       id: shift.id, name: doctors.get(shift.doctorId || '')?.name || 'Médico escalado', vacant: false })),
     ...period.vacancies.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
-      id: shift.id, name: 'Vaga aberta', vacant: true })),
+      id: shift.id, name: availableVacancyIds.has(shift.id) ? 'Vaga aberta' : 'Posto sem médico', vacant: true, vacancyState: availableVacancyIds.has(shift.id) ? 'available' as const : 'unpublished' as const })),
     ...Array.from({ length: period.uncreated }, (_, index) => ({ ...time,
-      id: `uncreated-${time.kind}-${index}`, name: 'Vaga aberta', vacant: true })),
-  ];
+      id: `uncreated-${time.kind}-${index}`, name: 'Posto previsto por criar', vacant: true, vacancyState: 'planned' as const })),
+  ].sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.id.localeCompare(b.id));
 }
 
 // Compare only assignments for the same doctor, including shifts in other units/days.

@@ -8,11 +8,13 @@ import { localDate, employmentLabels } from '@/lib/scheduling';
 import { masterDates, type MasterDefinition, type MasterRule } from '@/lib/masterSchedule';
 import { saveMasterRule } from '@/services/masterScheduleService';
 import type { Doctor, Sector, Shift, Unit } from '@/types';
+import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
 
 export default function MasterRuleEditor({ organization, unitId, sectorId, doctors, units, sectors, rule, effectiveDate, canFinance, onClose, onSaved }: {
   organization: string; unitId: string; sectorId: string; doctors: Doctor[]; units: Unit[]; sectors: Sector[];
   rule?: MasterRule; effectiveDate?: string; canFinance: boolean; onClose: () => void; onSaved: () => Promise<void>;
 }) {
+  const guard = useScheduleEdit();
   const today = localDate();
   const sector = sectors.find(item => item.id === (rule?.definition.sector_id || sectorId));
   const [spec, setSpec] = useState<MasterDefinition>(() => rule?.definition || {
@@ -27,6 +29,7 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useScheduleDraft(`master-rule:${rule?.id || 'new'}`, JSON.stringify([spec, since, horizon, agreement]), busy, onClose);
   const rates = useShiftRates(organization, canFinance && spec.employment_type === 'pj');
   const prototype: Shift = { id: '', organizationId: organization, doctorId: spec.doctor_id, unitId: spec.unit_id,
     sectorId: spec.sector_id, specialty: spec.specialty, date: since, startTime: spec.start_time, endTime: spec.end_time, type: spec.type, status: 'pending' };
@@ -35,17 +38,18 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
   const end = new Date(`${today}T12:00:00`); end.setMonth(end.getMonth() + horizon + 1, 0);
   const dates = masterDates(spec, rule ? since : today, localDate(end));
   async function save(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setError('');
+    event.preventDefault(); if (!guard.check()) return; setBusy(true); setError('');
     try {
       if (!spec.weekdays.length) throw new Error('Selecione pelo menos um dia da semana.');
       const finance = spec.employment_type === 'pj' ? buildRequiredPjAgreement(agreement, rate) : null;
-      await saveMasterRule(organization, rule?.id || null, spec, rule?.revision || 0, rule ? since : spec.start_date, horizon, finance, confirmed);
+      const result = await guard.run(() => saveMasterRule(organization, rule?.id || null, spec, rule?.revision || 0, rule ? since : spec.start_date, horizon, finance, confirmed));
+      if (!result) return;
       await onSaved(); onClose();
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Não foi possível salvar a recorrência.'); }
     finally { setBusy(false); }
   }
-  return <Dialog title={rule ? 'Editar recorrência' : 'Cadastrar médico fixo'} size="lg" onClose={() => !busy && onClose()}>
-    <form onSubmit={save} className="space-y-5" aria-busy={busy}>
+  return <Dialog title={rule ? 'Editar recorrência' : 'Cadastrar médico fixo'} size="lg" onClose={() => !busy && guard.transition(onClose)}>
+    <form data-schedule-edit onSubmit={save} aria-busy={busy}><fieldset disabled={!guard.unlocked || busy} className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="nv-label sm:col-span-2">Médico responsável<select className="nv-input" required disabled={Boolean(rule)} value={spec.doctor_id} onChange={e => setSpec({ ...spec, doctor_id: e.target.value })}>
           <option value="">Selecione o médico</option>{doctors.filter(d => d.organizationId === organization && (d.status === 'active' || d.id === spec.doctor_id)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -82,7 +86,7 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
       <section className="rounded-lg border border-border bg-surface-muted/30 p-4"><h3 className="text-sm font-semibold">Próximas datas · {dates.length} ocorrências</h3><p className="mt-2 text-xs leading-6 text-text-secondary">{dates.slice(0, 8).map(d => new Date(`${d}T12:00:00`).toLocaleDateString('pt-BR')).join(' · ') || 'Confira as datas e os dias selecionados.'}{dates.length > 8 ? ' …' : ''}</p><p className="mt-2 text-xs text-text-muted">Plantões realizados, pagamentos consolidados e alterações manuais serão preservados. Novas atribuições ficam aguardando confirmação.</p></section>
       {rule && <label className="flex items-start gap-2 text-sm"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/><span>Confirmo a revisão das ocorrências futuras a partir da data informada, incluindo as já publicadas.</span></label>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={busy} onClick={onClose}>Cancelar</button><button className="nv-button" disabled={busy || !spec.specialty || spec.employment_type === 'pj' && (!canFinance || !rates.ready)}>{busy ? 'Salvando…' : 'Salvar recorrência e gerar plantões'}</button></div>
-    </form>
+      <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={busy} onClick={() => guard.transition(onClose)}>Cancelar</button><button className="nv-button" disabled={busy || !spec.specialty || spec.employment_type === 'pj' && (!canFinance || !rates.ready)}>{busy ? 'Salvando…' : 'Salvar recorrência e gerar plantões'}</button></div>
+    </fieldset></form>
   </Dialog>;
 }

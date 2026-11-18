@@ -30,11 +30,11 @@ test('SaaS administrators cannot receive tenant permission exceptions', () => {
   assert.deepEqual(sanitizeAdditionalPermissions({ financeiro: 'edit' }, 'saas_admin'), {});
 });
 
-test('individual denials remove inherited actions independently and report their origin', () => {
+test('denying schedule editing also removes operations that require editing', () => {
   const user = { ...coordinator, additionalPermissions: { 'escala.edit': 'deny', 'escala.approve': 'deny' } };
   assert.equal(canViewPermission(user, 'escala'), true);
-  assert.equal(canPerformAction(user, 'escala', 'create'), true);
-  assert.deepEqual(permissionDecision(user, 'escala', 'approve'), { allowed: false, origin: 'Negado individualmente' });
+  assert.equal(canPerformAction(user, 'escala', 'create'), false);
+  assert.deepEqual(permissionDecision(user, 'escala', 'approve'), { allowed: false, origin: 'Exige edição de escalas' });
   assert.equal(canEditPermission(user, 'escala'), false);
 });
 
@@ -44,9 +44,9 @@ test('a module view denial also blocks explicit grants for its other actions', (
   assert.equal(canViewPermission(user, 'escala'), false);
 });
 
-test('a schedule approval grant does not enable editing or financial access', () => {
+test('approval alone cannot change a schedule without explicit effective editing access', () => {
   const user = { ...coordinator, role: 'Financeiro', additionalPermissions: { 'escala.approve': 'allow', 'financeiro.view': 'deny' } };
-  assert.equal(canPerformAction(user, 'escala', 'approve'), true);
+  assert.equal(canPerformAction(user, 'escala', 'approve'), false);
   assert.equal(canEditPermission(user, 'escala'), false);
   assert.equal(canEditPermission(user, 'financeiro'), false);
 });

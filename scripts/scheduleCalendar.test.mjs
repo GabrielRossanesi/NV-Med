@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { assignmentConfirmation, isCriticalCoverage, scheduleAllocations, scheduleConflictIds, selectedScheduleSector } from '../src/lib/scheduleCalendar.ts';
 import { summarizeSectorCoverage } from '../src/lib/scheduling.ts';
+import { filterSchedulePeriod, scheduleShiftMatches, isAvailableScheduleVacancy } from '../src/lib/scheduleFiltering.ts';
 
 // Render the real TSX components without starting Next or connecting to Supabase.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -44,6 +45,7 @@ const assigned = doctors.map((doctor, index) => ({ ...base, id: `shift-${index}`
 const noop = () => {};
 const props = { view: 'day', date: day, week, month: '2026-11', firstDayOffset: 0, daysInMonth: 30,
   units: [{ id: 'unit', name: 'Hospital de teste' }], sectors: [sector], doctors, shifts: assigned,
+  now: new Date('2026-11-01T00:00:00').getTime(), availableVacancyIds: new Set(['vacancy','v2','v3']),
   employment: '', doctorId: '', periodKind: '', documentFilter: 'all', focus: null, coverageFilter: 'all', statusFilter: 'all', doctorWarnings: new Map(),
   canSeeFinancial: false, canEditSchedule: false, canCreateSchedule: false, canDeleteSchedule: false,
   onSelectDate: noop, onSelectSector: noop, onOpenShift: noop, onEditShift: noop, onDeleteShift: noop, onDeleteTurn: noop, onCopyPeriod: async () => '',
@@ -51,6 +53,65 @@ const props = { view: 'day', date: day, week, month: '2026-11', firstDayOffset: 
 function render(overrides = {}) { return renderToStaticMarkup(createElement(Calendar, { ...props, ...overrides })); }
 function table(overrides = {}) { return render(overrides).match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] || ''; }
 function count(text, value) { return text.replace(/ title="[^"]*"/g, '').split(value).length - 1; }
+
+test('open vacancies exclude filled, unpublished and planned posts in all calendar modes and their inspector', () => {
+  const shifts = [base, { ...assigned[1], status: 'pending' },
+    { ...base, id: 'vacancy', doctorId: undefined, status: 'open', startTime: '09:00' },
+    { ...base, id: 'unpublished', doctorId: undefined, status: 'open', startTime: '10:00' }];
+  for (const view of ['month', 'week', 'day']) {
+    const html = render({ view, shifts, statusFilter: 'open', focus: { day, nonce: 1 } });
+    for (const doctor of doctors) assert.ok(!html.includes(doctor.name));
+    assert.ok(html.includes('Vaga aberta'));
+    assert.ok(html.includes('09:00–19:00'));
+    assert.ok(!html.includes('10:00–19:00'));
+    assert.ok(!html.includes('Posto previsto por criar'));
+    assert.ok(!html.includes('Sem plantões'));
+    assert.ok(html.includes('1 vaga'));
+    assert.ok(html.includes('Cobertura total do dia: 2/3'));
+    assert.ok(!html.includes('Excluir este turno'));
+  }
+});
+
+test('the same item predicate intersects specialty, employment, shift, documents and ad hoc filters', () => {
+  const shifts = [{ ...base, id: 'vacancy', doctorId: undefined, status: 'open', employmentType: 'pj', specialty: 'Cirurgia Geral', coverageMode: 'adhoc' },
+    { ...assigned[1], employmentType: 'pj' }, { ...base, id: 'private', doctorId: undefined, status: 'open', employmentType: 'clt' }];
+  const period = summarizeSectorCoverage(sector, shifts).periods[0];
+  const filters = { ...props, statusFilter: 'open', employment: 'pj', specialty: 'Cirurgia Geral', coverageMode: 'adhoc', periodKind: 'day' };
+  const context = { now: props.now, availableVacancyIds: props.availableVacancyIds, conflicts: new Set(), warnings: new Map() };
+  const filtered = filterSchedulePeriod(period, sector, day, filters, context);
+  const list = shifts.filter(shift => scheduleShiftMatches(shift, sector, period, filters, context));
+  assert.deepEqual(filtered.items.map(shift => shift.id), ['vacancy']);
+  assert.deepEqual(filtered.items, list);
+  assert.equal(filtered.uncreated, 0);
+  assert.equal(filtered.required, period.required);
+  for (const incompatible of [{ employment: 'clt' }, { periodKind: 'night' }, { specialty: 'Ortopedia' }, { doctorId: doctors[0].id }, { coverageMode: 'regular' }, { documentFilter: 'regular' }]) {
+    assert.equal(filterSchedulePeriod(period, sector, day, { ...filters, ...incompatible }, context).items.length, 0);
+  }
+});
+
+test('availability is fail-closed and excludes expired, paid, cancelled, completed and occupied posts', () => {
+  const vacancy = { ...base, id: 'vacancy', doctorId: undefined, status: 'open' };
+  const context = { now: props.now, availableVacancyIds: props.availableVacancyIds, conflicts: new Set(), warnings: new Map() };
+  assert.equal(isAvailableScheduleVacancy(vacancy, context), true);
+  assert.equal(isAvailableScheduleVacancy(vacancy, { ...context, availableVacancyIds: new Set() }), false);
+  for (const change of [{ status: 'cancelled' }, { status: 'completed' }, { doctorId: base.doctorId }, { paymentStatus: 'paid' }, { date: '2026-10-31' }]) {
+    assert.equal(isAvailableScheduleVacancy({ ...vacancy, ...change }, context), false);
+  }
+});
+
+test('shared cards retain full name tooltips, two-line monthly names and chronological times', () => {
+  const shifts = [{ ...base, startTime: '15:00', endTime: '18:00' }, { ...assigned[1], startTime: '08:00', endTime: '12:00' }];
+  const month = table({ view: 'month', shifts });
+  assert.ok(month.includes('line-clamp-2'));
+  assert.ok(month.includes(`title="${doctors[0].name}`));
+  assert.ok(!month.includes('truncate'));
+  assert.ok(month.indexOf(doctors[1].name) < month.indexOf(doctors[0].name));
+  assert.ok(month.includes('15:00–18:00'));
+  assert.ok(!table({ view: 'week', shifts }).includes('line-clamp-2'));
+  const filtered = table({ view: 'month', shifts, doctorId: doctors[0].id });
+  assert.ok(filtered.includes('1 item'));
+  assert.ok(filtered.includes('Cobertura total: 2 médicos escalados para 3 postos'));
+});
 
 test('full coverage shows every full name without redundant coverage or administrative text', () => {
   const html = table();
@@ -74,19 +135,27 @@ test('partial and empty coverage list each saved and uncreated position', () => 
   const vacancy = { ...base, id: 'vacancy', doctorId: undefined, status: 'open' };
   const partial = table({ shifts: [base, vacancy] });
   assert.ok(partial.includes('1/3'));
-  assert.equal(count(partial, 'Vaga aberta'), 2);
-  assert.equal(count(partial, 'Posto previsto por criar'), 0);
-  assert.equal(count(table({ shifts: [] }), 'Vaga aberta'), 3);
+  assert.equal(count(partial, 'Vaga aberta'), 1);
+  assert.equal(count(partial, 'Posto previsto por criar'), 1);
+  assert.equal(count(table({ shifts: [] }), 'Posto previsto por criar'), 3);
   assert.equal(count(table({ shifts: [vacancy, { ...vacancy, id: 'v2' }, { ...vacancy, id: 'v3' }] }), 'Vaga aberta'), 3);
 });
 
-test('vacancy quick actions respect edit and create permissions independently', () => {
+test('monthly multi-sector view shows each assignment once with its sector caption', () => {
+  const other = { ...sector, id: 'other-sector', name: 'Ortopedia — PS' };
+  const html = render({ view: 'month', sectors: [sector, other], shifts: [base, { ...base, id: 'other-shift', doctorId: doctors[1].id, sectorId: other.id }] });
+  assert.equal(count(html, doctors[0].name), 1);
+  assert.equal(count(html, doctors[1].name), 1);
+  assert.ok(html.includes(other.name));
+  assert.ok(html.includes(sector.name));
+});
+
+test('shared calendar cards open the inspector while editing actions remain permission-controlled', () => {
   const shifts = [base, { ...base, id: 'vacancy', doctorId: undefined, status: 'open' }];
-  assert.ok(!table({ shifts }).includes('aria-label="Preencher vaga'));
-  assert.ok(!table({ shifts }).includes('aria-label="Criar postos'));
-  assert.ok(table({ shifts, canEditSchedule: true }).includes('aria-label="Preencher vaga'));
-  assert.ok(table({ shifts, canCreateSchedule: true }).includes('aria-label="Criar postos'));
-  assert.ok(!table({ shifts: assigned, canEditSchedule: true, canCreateSchedule: true }).includes('aria-label="Preencher vaga'));
+  const focus = { day, sectorId: sector.id, kind: 'day', nonce: 1 };
+  assert.ok(!render({ shifts, focus }).includes('>Preencher vaga</button>'));
+  assert.ok(render({ shifts, focus, canEditSchedule: true }).includes('>Preencher vaga</button>'));
+  assert.ok(render({ shifts, focus, canCreateSchedule: true }).includes('>Criar</button>'));
 });
 
 test('overnight conflicts and exchange remain in the inspector while allocation stays clean', () => {
@@ -125,15 +194,15 @@ test('large teams and long names remain present in desktop and mobile markup', (
   const doctors = Array.from({ length: 18 }, (_, index) => ({ id: `many-${index}`, name: `Médico ${index} Nome Completo de Albuquerque` }));
   const shifts = doctors.map(doctor => ({ ...base, id: doctor.id, doctorId: doctor.id }));
   const html = render({ doctors, shifts });
-  for (const doctor of doctors) assert.equal(count(html, doctor.name), 2);
+  for (const doctor of doctors) assert.equal(count(html, doctor.name), 1);
   assert.ok(!table({ doctors, shifts }).includes('overflow-y'));
   assert.ok(html.includes('sticky top-0'));
-  assert.ok(html.includes('sticky left-0'));
+  assert.ok(!table({ doctors, shifts }).includes('line-clamp-2'));
 });
 
 test('rerendering updated props reflects assignment, removal and confirmation immediately', () => {
-  assert.equal(count(table({ shifts: [] }), 'Vaga aberta'), 3);
-  assert.equal(count(table({ shifts: [{ ...base, status: 'pending' }] }), 'Vaga aberta'), 2);
+  assert.equal(count(table({ shifts: [] }), 'Posto previsto por criar'), 3);
+  assert.equal(count(table({ shifts: [{ ...base, status: 'pending' }] }), 'Posto previsto por criar'), 2);
   assert.ok(table({ shifts: [{ ...base, status: 'pending' }] }).includes(doctors[0].name));
   assert.equal(table({ shifts: [base] }), table({ shifts: [{ ...base, status: 'pending' }] }));
   const focus = { day, sectorId: sector.id, kind: 'day', nonce: 1 };
@@ -142,10 +211,12 @@ test('rerendering updated props reflects assignment, removal and confirmation im
   assert.ok(!table({ shifts: [{ ...base, status: 'cancelled' }] }).includes(doctors[0].name));
 });
 
-test('filters locate matching teams without hiding teammates or counting pending as open', () => {
+test('filters select only matching shifts without counting pending confirmations as open', () => {
   const shifts = [base, { ...assigned[1], status: 'pending' }, assigned[2]];
-  assert.ok(table({ shifts, coverageFilter: 'pending' }).includes(doctors[0].name));
-  assert.ok(table({ shifts, doctorId: doctors[1].id }).includes(doctors[0].name));
+  assert.ok(!table({ shifts, coverageFilter: 'pending' }).includes(doctors[0].name));
+  assert.ok(table({ shifts, coverageFilter: 'pending' }).includes(doctors[1].name));
+  assert.ok(!table({ shifts, doctorId: doctors[1].id }).includes(doctors[0].name));
+  assert.ok(table({ shifts, doctorId: doctors[1].id }).includes(doctors[1].name));
   assert.ok(!table({ shifts, coverageFilter: 'open' }).includes(doctors[1].name));
   assert.ok(table({ shifts, coverageFilter: 'complete' }).includes(doctors[1].name));
 });
@@ -168,12 +239,12 @@ test('undefined confirmation remains neutral while occupancy uses doctor assignm
   const html = table({ shifts: [{ ...base, status: 'open' }] });
   assert.ok(html.includes('1/3'));
   assert.ok(!html.includes('Confirmação não definida'));
-  assert.equal(count(html, 'Vaga aberta'), 2);
+  assert.equal(count(html, 'Posto previsto por criar'), 2);
 });
 
 test('weekly and daily views show the intended dates, including weeks across month boundaries', () => {
-  assert.equal(count(render({ view: 'week' }), 'scope="col"'), 8);
-  assert.equal(count(render({ view: 'day' }), 'scope="col"'), 2);
+  assert.equal(count(render({ view: 'week' }), 'scope="col"'), 7);
+  assert.equal(count(render({ view: 'day' }), 'scope="col"'), 1);
   const boundaryWeek = ['2026-11-30', '2026-12-01', '2026-12-02', '2026-12-03', '2026-12-04', '2026-12-05', '2026-12-06'];
   assert.ok(render({ view: 'week', week: boundaryWeek, shifts: [{ ...base, date: '2026-12-01' }] }).includes(doctors[0].name));
 });
@@ -203,7 +274,7 @@ test('monthly calendar shows names, times and vacancies throughout the month wit
   const shifts = [base, { ...assigned[1], status: 'pending' }, { ...assigned[2], date: '2026-11-30', startTime: '19:00', endTime: '07:00' }];
   const html = table({ view: 'month', shifts, doctorWarnings: new Map([[base.doctorId, { warning: true, blocked: true }]]) });
   for (const doctor of doctors) assert.ok(html.includes(doctor.name));
-  assert.ok(html.includes('Vaga aberta'));
+  assert.ok(html.includes('Posto previsto por criar'));
   assert.ok(html.includes('19:00'));
   assert.ok(!html.includes('Aguardando confirmação'));
   assert.ok(!html.includes('Conflito de horário'));
@@ -254,9 +325,9 @@ function renderPage(query = '') {
 
 test('schedule page initially renders only scope selection, without a calendar or administrative controls', () => {
   const html = renderPage();
-  assert.ok(html.includes('Selecione a unidade e o setor para visualizar a escala.'));
+  assert.ok(html.includes('Selecione a unidade e pelo menos um setor para visualizar a escala.'));
   assert.ok(html.includes('Selecione a unidade'));
-  assert.ok(html.includes('Selecione o setor'));
+  assert.ok(html.includes('Selecione os setores'));
   assert.ok(!html.includes('<table'));
   assert.ok(!html.includes('Gerenciar escala'));
   assert.ok(!html.includes('Pendências e cobertura'));

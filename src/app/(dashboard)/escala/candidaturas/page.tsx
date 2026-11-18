@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AccessGuard from '@/components/AccessGuard';
 import ShiftSelectionPanel from '@/components/schedule/ShiftSelectionPanel';
+import { ScheduleEditBoundary, ScheduleEditControl } from '@/components/schedule/ScheduleEditGuard';
 import { useStore } from '@/store/useStore';
 import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
 
@@ -12,7 +13,8 @@ function CandidateQueue() {
   const organization = useStore(state => state.activeOrganizationId);
   const filter = useSearchParams().get('filtro');
   const scope = filter === 'exchange' || filter === 'applications' ? filter : undefined;
-  return <AccessGuard requiredPermission="escala" action="approve"><div className="space-y-5">
+  return <AccessGuard requiredPermission="escala" action="approve"><ScheduleEditBoundary><div className="space-y-5">
+    <ScheduleEditControl/>
     <header className="border-b border-border pb-4">
       <Link href="/escala" className="text-sm font-semibold text-primary underline">Voltar à escala</Link>
       <h1 className="mt-2 text-2xl font-bold">Candidaturas e trocas</h1>
@@ -23,7 +25,7 @@ function CandidateQueue() {
     <ShiftSelectionPanel key={organization + scope} organization={organization} scope={scope} onChanged={() => {
       void fetchInitialDataFromSupabase().then(useStore.getState().syncWithCloud).catch(() => {});
     }}/>
-  </div></AccessGuard>;
+  </div></ScheduleEditBoundary></AccessGuard>;
 }
 
 export default function CandidateQueuePage() {

@@ -8,16 +8,21 @@ import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
 import EmploymentBadge from '@/components/schedule/EmploymentBadge';
 import ScheduleCalendarView from '@/components/schedule/ScheduleCalendarView';
+import { useAvailableScheduleVacancies } from '@/components/schedule/useAvailableScheduleVacancies';
+import { scheduleShiftMatches, isAvailableScheduleVacancy, type ScheduleFilters } from '@/lib/scheduleFiltering';
 import ScheduleMasterView, { type MasterEditRequest } from '@/components/schedule/ScheduleMasterView';
 import MasterShiftOrigin from '@/components/schedule/MasterShiftOrigin';
 import type { MasterShiftContext } from '@/lib/masterSchedule';
 import ScheduleScopePicker from '@/components/schedule/ScheduleScopePicker';
+import ScheduleHistory from '@/components/schedule/ScheduleHistory';
+import { ScheduleEditBoundary, ScheduleEditControl, useScheduleEdit, useScheduleDraft } from '@/components/schedule/ScheduleEditGuard';
+import { scheduleSectors, type SectorSelection } from '@/lib/scheduleScope';
 import ScheduleDoctorView from '@/components/schedule/ScheduleDoctorView';
 import ScheduleSpecialtyView from '@/components/schedule/ScheduleSpecialtyView';
 import SectorEditorDialog from '@/components/schedule/SectorEditorDialog';
 import { reconcileShiftDoctor, scopedSpecialties, selectShiftSector } from '@/lib/sectorSpecialties';
 import { moveScheduleMonth } from '@/lib/scheduleMonth';
-import { isCriticalCoverage, scheduleConflictIds, selectedScheduleSector, type ScheduleCoverageFilter as CoverageFilter } from '@/lib/scheduleCalendar';
+import { isCriticalCoverage, scheduleConflictIds, type ScheduleCoverageFilter as CoverageFilter } from '@/lib/scheduleCalendar';
 import ScheduleDeleteDialog from '@/components/schedule/ScheduleDeleteDialog';
 import ShiftSelectionPanel from '@/components/schedule/ShiftSelectionPanel';
 import PresencePanel from '@/components/schedule/PresencePanel';
@@ -68,7 +73,7 @@ function toNewShift(shift: ShiftWrite): Omit<ShiftWrite, 'id' | 'organizationId'
   return { coverageMode: shift.coverageMode || 'regular', coverageReason: shift.coverageReason, sectorId: shift.sectorId, sector: shift.sector, specialty: shift.specialty, employmentType: shift.employmentType, employerName: shift.employerName, paymentAmount: shift.paymentAmount, paymentStatus: shift.paymentStatus, paymentFrequency: shift.paymentFrequency, paidAt: shift.paidAt, agreement: shift.agreement, doctorId: shift.doctorId, unitId: shift.unitId, date: shift.date, startTime: shift.startTime, endTime: shift.endTime, type: shift.type, status: shift.status, notes: shift.notes };
 }
 
-function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit, onDelete, compact = false }: { days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void; onDelete?: (shift: Shift) => void; compact?: boolean }) {
+function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit, onDelete, compact = false, availableVacancyIds }: { availableVacancyIds: ReadonlySet<string>; days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void; onDelete?: (shift: Shift) => void; compact?: boolean }) {
   if (compact) return shifts.length ? <div className="divide-y divide-border rounded-xl border border-border bg-card-bg">
     {shifts.map(item => {
       const doctor = doctors.find(value => value.id === item.doctorId);
@@ -78,7 +83,7 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
       return <button key={item.id} type="button" onClick={() => onEdit(item)} className="flex min-h-16 w-full min-w-0 items-center gap-2.5 px-3 py-2.5 text-left hover:bg-state-hover">
         <span className="shrink-0 text-xs font-semibold tabular-nums">{item.startTime}–{item.endTime}</span>
         <span className="min-w-0 flex-1">
-          <span className="block break-words text-sm font-semibold">{doctor?.name || (item.doctorId ? 'Médico escalado' : 'Vaga aberta')}</span>
+          <span className="block break-words text-sm font-semibold">{doctor?.name || (item.doctorId ? 'Médico escalado' : availableVacancyIds.has(item.id) ? 'Vaga aberta' : 'Posto sem médico')}</span>
           <span className="block break-words text-xs text-text-muted">{[unit?.name, sector?.name || item.sector, item.specialty].filter(Boolean).join(' · ')}</span>
           <span className="mt-0.5 inline-block"><EmploymentBadge employment={item.employmentType} provisional={!item.doctorId}/></span>
           {item.status !== 'open' && <span className="block text-xs font-medium text-primary">{status}</span>}
@@ -106,10 +111,10 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
             <span className="flex items-center gap-2"><PeriodIcon size={14} className={kind === 'day' ? 'text-warning' : 'text-primary'}/><span><strong className="block text-xs text-text-primary">{item.coverageMode === 'adhoc' ? 'Avulso' : 'Plantão'} {String(sequence).padStart(2, '0')}</strong><span className="text-[10px] text-text-muted">{coveragePeriodLabel(kind)}</span></span></span>
             <span className="flex items-center gap-1.5 text-xs font-medium tabular-nums text-text-secondary"><Clock3 size={13}/>{item.startTime}–{item.endTime}</span>
             <span className="min-w-0"><span className="block truncate text-sm font-semibold text-text-primary">{unit?.name || 'Unidade'}</span><span className="mt-0.5 block truncate text-xs text-text-muted">{sector?.name || item.sector || 'Setor'}{item.specialty ? ` · ${item.specialty}` : ''}</span>{item.coverageMode === 'adhoc' && <span className="mt-1 block text-xs text-primary">{item.coverageReason}</span>}</span>
-            <span className={`flex min-w-0 items-center gap-1.5 truncate text-sm font-medium ${doctor ? 'text-text-primary' : 'text-warning'}`}>{doctor?.name || 'Vaga aberta'}{warning?.warning && <AlertTriangle size={13} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'} aria-label="Pendência documental"/>}</span>
+            <span title={doctor?.name || 'Posto sem médico'} className={`flex min-w-0 items-center gap-1.5 break-words text-sm font-medium ${doctor ? 'text-text-primary' : availableVacancyIds.has(item.id) ? 'text-danger' : 'text-text-secondary'}`}>{doctor?.name || (availableVacancyIds.has(item.id) ? 'Vaga aberta' : 'Posto sem médico')}{warning?.warning && <AlertTriangle size={13} className={warning.blocked ? 'shrink-0 text-danger' : 'shrink-0 text-warning'} aria-label="Pendência documental"/>}</span>
             <span><EmploymentBadge employment={item.employmentType} provisional={!item.doctorId}/></span>
             <span className={`inline-flex items-center gap-1 text-xs font-medium ${item.exchangeRequested || item.status === 'pending' ? 'text-warning' : item.status === 'open' ? 'text-danger' : item.status === 'confirmed' ? 'text-success' : 'text-text-secondary'}`}>{item.exchangeRequested && <Repeat2 size={13}/>}
-              {item.exchangeRequested ? 'Troca solicitada' : statusLabels[item.status]}</span>
+              {item.exchangeRequested ? 'Troca solicitada' : !item.doctorId && item.status === 'open' && !availableVacancyIds.has(item.id) ? 'Indisponível para candidatura' : statusLabels[item.status]}</span>
             <span className="flex items-center gap-1"><button type="button" onClick={() => onEdit(item)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-2 text-xs font-semibold text-primary transition hover:border-primary/40 hover:bg-primary/5">{doctor ? <ArrowRightLeft size={13}/> : <UserRoundPlus size={13}/>} {item.status === 'cancelled' ? 'Ver detalhes' : doctor ? 'Ver ficha' : 'Preencher'}</button>{onDelete && <button type="button" aria-label={`Excluir plantão ${sequence} de ${formatDay(day)}`} title="Excluir plantão" onClick={() => onDelete(item)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted transition hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/></button>}</span>
           </div>;
         })}</div>
@@ -120,11 +125,13 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
 
 function Schedule({ params }: { params: URLSearchParams }) {
   const store = useStore();
+  const editGuard = useScheduleEdit();
   const today = localDate();
   const requestedShiftId = params.get('shiftId');
   const requestedCoverage = params.get('coverage');
   const initialDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '') ? params.get('date')! : today;
   const [date, setDate] = useState(initialDate);
+  const [listRange, setListRange] = useState<'week' | 'day' | 'month'>(params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
   const [scheduleMode, setScheduleMode] = useState<'general' | 'master'>(params.get('mode') === 'master' ? 'master' : 'general');
   const [masterEditRequest, setMasterEditRequest] = useState<MasterEditRequest | null>(null);
   const [desktopView, setDesktopView] = useState<ViewMode>(requestedShiftId ? 'list' : params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
@@ -133,16 +140,19 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [mobileChoice, setMobileChoice] = useState<MobileViewMode>();
   const mobileView = mobileChoice ?? (requestedShiftId ? 'list' : savedMobileView);
   function changeMobileView(next: MobileViewMode) {
+    if (next === 'list' && mobileView !== 'list') setListRange(mobileView);
     setMobileChoice(next);
     try { window.localStorage.setItem(mobileViewKey, next); } catch { /* Preference remains active on this page. */ }
   }
   function setView(next: ViewMode) {
+    if (next === 'list' && ['week', 'month', 'day'].includes(view)) setListRange(view as 'week' | 'month' | 'day');
     setDesktopView(next);
     if (mobile && next !== 'doctor' && next !== 'specialty') changeMobileView(next);
   }
   const requestedShift = store.shifts.find(item => item.id === requestedShiftId && item.organizationId === store.activeOrganizationId);
   const [unitId, setUnitId] = useState(params.get('unitId') || requestedShift?.unitId || '');
-  const [sectorId, setSectorId] = useState(params.get('sectorId') || requestedShift?.sectorId || '');
+  const [sectorSelection, setSectorSelection] = useState<SectorSelection>(params.get('sectors') === 'all' ? 'all' : params.getAll('sectorId').length ? params.getAll('sectorId') : requestedShift?.sectorId ? [requestedShift.sectorId] : []);
+  const setSectorId = (id: string) => setSectorSelection(id ? [id] : []);
   const requestedEmployment = params.get('contratacao');
   const [employment, setEmployment] = useState<EmploymentType | ''>(requestedEmployment && Object.hasOwn(employmentLabels, requestedEmployment) ? requestedEmployment as EmploymentType : '');
   const [specialty, setSpecialty] = useState(params.get('specialty') || '');
@@ -154,6 +164,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [statusFilter, setStatusFilter] = useState<Shift['status'] | 'all' | 'exchange'>('all');
   const view = mobile ? (requestedShiftId || statusFilter === 'cancelled' ? 'list' : mobileView) : desktopView;
   const [form, setForm] = useState<Shift | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<{ shiftId?: string } | null>(null);
   const [sectorEditorOpen, setSectorEditorOpen] = useState(false);
   const [sectorNotice, setSectorNotice] = useState('');
   const [openedShift, setOpenedShift] = useState<Shift>();
@@ -171,12 +182,14 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [formError, setFormError] = useState('');
   const [pageError, setPageError] = useState('');
   const [focusedTurn, setFocusedTurn] = useState<{ day: string; sectorId: string; kind: CoveragePeriodKind; nonce: number } | null>(null);
-  const [referenceTime] = useState(Date.now);
+  const [referenceTime, setReferenceTime] = useState(Date.now);
+  useEffect(() => { const timer = window.setInterval(() => setReferenceTime(Date.now()), 60_000); return () => clearInterval(timer); }, []);
   const [weekPreview, setWeekPreview] = useState<{ clones: Shift[]; sectors: number; turns: number; range: string; blocked: number; duplicates: number; conflicts: number } | null>(null);
   const [recurringPreview, setRecurringPreview] = useState<{ inputs: Omit<ShiftWrite, 'id' | 'organizationId'>[]; dates: string[]; countPerDate: number; cents?: number } | null>(null);
   const [recurringError, setRecurringError] = useState('');
   const [deleteRequest, setDeleteRequest] = useState<ScheduleDeletionSelection | null>(null);
   const orgId = store.activeOrganizationId;
+  const availableVacancies = useAvailableScheduleVacancies(orgId, store.shifts, opportunityRevision);
   useEffect(() => {
     const client = createClient();
     let active = true;
@@ -219,11 +232,11 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }, [eligibilityKey, eligibilityRevision, unchangedAssignment, store.shifts]);
   const canSeeFinancial = canViewPermission(store.currentUser, 'financeiro');
   const canEditFinancial = canEditPermission(store.currentUser, 'financeiro');
-  const canEditSchedule = canEditPermission(store.currentUser, 'escala');
-  const canCreateSchedule = canPerformAction(store.currentUser, 'escala', 'create');
-  const canDeleteSchedule = canPerformAction(store.currentUser, 'escala', 'delete');
-  const canApproveSchedule = canPerformAction(store.currentUser, 'escala', 'approve');
-  const canCreateSector = canPerformAction(store.currentUser, 'unidades', 'create');
+  const canEditSchedule = editGuard.unlocked && canEditPermission(store.currentUser, 'escala');
+  const canCreateSchedule = canEditSchedule && canPerformAction(store.currentUser, 'escala', 'create');
+  const canDeleteSchedule = canEditSchedule && canPerformAction(store.currentUser, 'escala', 'delete');
+  const canApproveSchedule = canEditSchedule && canPerformAction(store.currentUser, 'escala', 'approve');
+  const canCreateSector = canEditSchedule && canPerformAction(store.currentUser, 'unidades', 'create');
   const canSaveShift = form?.id ? canEditSchedule : canCreateSchedule;
   const newPjAgreement = form?.employmentType === 'pj' && (!openedShift || openedShift.employmentType !== 'pj'
     || Boolean(form.doctorId && form.doctorId !== openedShift.doctorId));
@@ -239,10 +252,12 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const activeOrganization = store.organizations.find(item => item.id === orgId);
   const organizationDocuments = store.documents.filter(item => item.organizationId === orgId);
   const doctorDocumentState = new Map(doctors.map(doctor => [doctor.id, doctorScheduleCompliance(doctor, organizationDocuments, activeOrganization)]));
-  const selectedSector = selectedScheduleSector(unitId, sectorId, units, sectors);
-  const scopeReady = Boolean(selectedSector);
-  const visibleSectors = scopeReady ? sectors.filter(item => (!unitId || item.unitId === unitId) && (!sectorId || item.id === sectorId)
-    && (!specialty || (mobile ? specialtyChoices(item.unitId, item).includes(specialty) : item.specialties.includes(specialty)))) : [];
+  const selectedSectors = scheduleSectors(unitId, sectorSelection, units, sectors);
+  const sectorIds = selectedSectors.map(item => item.id);
+  const sectorId = sectorIds.length === 1 ? sectorIds[0] : '';
+  const selectedSector = selectedSectors.length === 1 ? selectedSectors[0] : undefined;
+  const scopeReady = selectedSectors.length > 0;
+  const visibleSectors = scopeReady ? selectedSectors : [];
   const visibleDoctors = doctors.filter(item => (!unitId || item.linkedUnits.includes(unitId) || shifts.some(shift => shift.doctorId === item.id && shift.unitId === unitId)) && (!specialty || item.specialty === specialty));
   const weekStart = mondayOf(date);
   const week = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -256,16 +271,18 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const coverageFor = (sector: Sector, day: string) => summarizeSectorCoverage(sector, shiftsFor(sector, day));
   const conflictIds = scheduleConflictIds(scopeReady ? shifts : []);
   const isCritical = (period: ReturnType<typeof coverageFor>['periods'][number], day: string) => isCriticalCoverage(period, day, conflictIds, doctorDocumentState, referenceTime);
-  const periodDays = !scopeReady ? [] : view === 'day' ? [date] : view === 'week' ? week : Array.from({ length: daysInMonth }, (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`);
-  const matchesAdvanced = (period: ReturnType<typeof coverageFor>['periods'][number]) => (!periodKind || period.period.kind === periodKind)
-    && (!doctorId || period.assigned.some(item => item.doctorId === doctorId))
-    && (!employment || period.items.some(item => item.employmentType === employment))
-    && (documentFilter === 'all' || period.assigned.some(item => { const warning = doctorDocumentState.get(item.doctorId || '')?.warning || false; return documentFilter === 'pending' ? warning : !warning; }));
-  const periodCoverage = visibleSectors.flatMap(sector => periodDays.flatMap(day => coverageFor(sector, day).periods.filter(matchesAdvanced).map(period => ({ sector, day, period }))));
+  const periodMode = view === 'list' ? listRange : view;
+  const periodDays = !scopeReady ? [] : periodMode === 'day' ? [date] : periodMode === 'week' ? week : Array.from({ length: daysInMonth }, (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`);
+  const filterContext = { availableVacancyIds: availableVacancies.ids, conflicts: conflictIds, warnings: doctorDocumentState, now: referenceTime };
+  const filters: ScheduleFilters = { statusFilter, coverageFilter, employment, doctorId, periodKind, documentFilter, specialty, coverageMode: coverageModeFilter };
+  // The operational summary deliberately covers the selected unit/sectors/turn,
+  // while the shared item predicate controls every displayed shift.
+  const periodCoverage = visibleSectors.flatMap(sector => periodDays.flatMap(day => coverageFor(sector, day).periods
+    .filter(period => !periodKind || period.period.kind === periodKind).map(period => ({ sector, day, period }))));
   const required = periodCoverage.reduce((sum, item) => sum + item.period.required, 0);
   const filled = periodCoverage.reduce((sum, item) => sum + item.period.required - item.period.deficit, 0);
   const deficit = periodCoverage.filter(item => item.period.deficit > 0).length;
-  const open = periodCoverage.reduce((sum, item) => sum + item.period.open, 0);
+  const open = periodCoverage.reduce((sum, item) => sum + item.period.vacancies.filter(shift => isAvailableScheduleVacancy(shift, filterContext)).length, 0);
   const pending = periodCoverage.reduce((sum, item) => sum + item.period.assigned.filter(shift => shift.status === 'pending').length, 0);
   const conflicts = periodCoverage.filter(item => item.period.assigned.some(shift => conflictIds.has(shift.id))).length;
   const critical = periodCoverage.filter(item => isCritical(item.period, item.day)).length;
@@ -276,39 +293,28 @@ function Schedule({ params }: { params: URLSearchParams }) {
     .sort((a, b) => Number(b.day >= today) - Number(a.day >= today) || a.day.localeCompare(b.day) || b.period.deficit - a.period.deficit).slice(0, 4);
   const employers = [...new Set(shifts.map(item => item.employerName).filter(Boolean))] as string[];
   const listShifts = (scopeReady ? shifts : [])
-    .filter(item => !requestedShiftId || item.id === requestedShiftId)
-    .filter(item => item.date.startsWith(month) && (statusFilter === 'all' ? item.status !== 'cancelled'
-      : statusFilter === (item.exchangeRequested ? 'exchange' : item.status)))
-    .filter(item => coverageModeFilter === 'all' || (item.coverageMode || 'regular') === coverageModeFilter)
-    .filter(item => (!unitId || item.unitId === unitId) && (!sectorId || item.sectorId === sectorId))
-    .filter(item => !employment || item.employmentType === employment)
-    .filter(item => (!specialty || (item.specialty ? item.specialty === specialty : sectors.find(sector => sector.id === item.sectorId)?.specialties.includes(specialty))) && (!doctorId || item.doctorId === doctorId))
-    .filter(item => !periodKind || (() => { const sector = sectors.find(value => value.id === item.sectorId); return sector && coverageKindForShift(item, sectorCoveragePeriods(sector)) === periodKind; })())
-    .filter(item => documentFilter === 'all' || (item.doctorId && (documentFilter === 'pending' ? doctorDocumentState.get(item.doctorId)?.warning : !doctorDocumentState.get(item.doctorId)?.warning)))
+    .filter(item => (!requestedShiftId || item.id === requestedShiftId) && periodDays.includes(item.date) && item.unitId === unitId && sectorIds.includes(item.sectorId || ''))
     .filter(item => {
-      if (coverageFilter === 'all') return true;
-      if (coverageFilter === 'open') return !item.doctorId;
-      if (coverageFilter === 'pending') return item.status === 'pending';
-      if (coverageFilter === 'conflict') return conflictIds.has(item.id);
-      const sector = visibleSectors.find(value => value.id === item.sectorId);
-      const period = sector && coverageFor(sector, item.date).periods.find(value => value.items.some(shift => shift.id === item.id));
-      return Boolean(period && (coverageFilter === 'critical' ? isCritical(period, item.date) : coverageFilter === 'deficit' ? period.deficit > 0 : period.deficit === 0));
+      const sector = sectors.find(value => value.id === item.sectorId);
+      const period = sector && coverageFor(sector, item.date).periods.find(value => value.period.kind === coverageKindForShift(item, sectorCoveragePeriods(sector)));
+      return Boolean(sector && period && scheduleShiftMatches(item, sector, period, filters, filterContext));
     })
-    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || (a.sector || '').localeCompare(b.sector || ''));
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id));
   const listDays = [...new Set(listShifts.map(item => item.date))];
 
   function openDelete(scope: ScheduleDeletionScope, options: Partial<ScheduleDeletionSelection> = {}) {
     if (scope === 'doctor' ? !canEditSchedule : !canDeleteSchedule) return;
     setPageError('');
-    setDeleteRequest({ scope, from: view === 'day' ? date : view === 'week' ? week[0] : `${month}-01`, to: view === 'day' ? date : view === 'week' ? week[6] : `${month}-${String(daysInMonth).padStart(2, '0')}`, unitId, sectorId, kind: periodKind, doctorId, shiftId: '', ...options });
+    if (!editGuard.check()) return;
+    setDeleteRequest({ scope, from: view === 'day' ? date : view === 'week' ? week[0] : `${month}-01`, to: view === 'day' ? date : view === 'week' ? week[6] : `${month}-${String(daysInMonth).padStart(2, '0')}`, unitId, sectorId, sectorIds, kind: periodKind, doctorId, shiftId: '', ...options });
   }
 
   async function confirmDelete(targets: Shift[], scope: ScheduleDeletionScope): Promise<string | null> {
-    const ok = scope === 'doctor' ? await store.vacateShifts(targets.map(item => item.id)) : await store.deleteShifts(targets.map(item => item.id));
+    const ok = await editGuard.run(() => scope === 'doctor' ? store.vacateShifts(targets.map(item => item.id)) : store.deleteShifts(targets.map(item => item.id)));
     return ok ? null : useStore.getState().error || 'Não foi possível concluir a ação.';
   }
 
-  function navigate(amount: number) { setDate(view === 'day' ? addDays(date, amount) : view === 'week' ? addDays(date, amount * 7) : moveScheduleMonth(date, amount)); }
+  function navigate(amount: number) { setDate(periodMode === 'day' ? addDays(date, amount) : periodMode === 'week' ? addDays(date, amount * 7) : moveScheduleMonth(date, amount)); }
   function openShift(shift?: Shift, sector = selectedSector, day = date, requestedKind?: CoveragePeriodKind, suggestedCount = 1, adhoc = false) {
     if (!shift && !canCreateSchedule) return;
     store.clearFeedback(); setSectorNotice(''); setFormError(''); setPageError(''); setVacancyCount(Math.max(1, suggestedCount)); setRecurrence('once'); setCustomWeekdays([new Date(`${day}T12:00:00`).getDay()]); setRepeatUntil(adhoc ? endOfMonth(day) : addDays(day, 90));
@@ -387,6 +393,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!form || !canSaveShift || store.saving) return;
+    if (!editGuard.check()) return;
     setFormError('');
     const sector = sectors.find(item => item.id === form.sectorId && item.unitId === form.unitId);
     if (!sector && !(form.coverageMode === 'adhoc' && !form.sectorId)) return setFormError('Selecione um setor válido desta unidade.');
@@ -427,7 +434,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     const conflict = candidates.find(candidate => hasConflict(candidate, shifts));
     if (conflict) return setFormError(`O médico já está escalado em horário coincidente em ${new Date(conflict.date + 'T12:00:00').toLocaleDateString('pt-BR')}.`);
     let ok: boolean;
-    if (form.id) ok = await store.updateShift(normalized);
+    if (form.id) ok = Boolean(await editGuard.run(() => store.updateShift(normalized)));
     else {
       const countPerDate = form.doctorId ? 1 : vacancyCount;
       const inputs = candidates.flatMap(candidate => Array.from({ length: countPerDate }, () => toNewShift(candidate)));
@@ -436,14 +443,15 @@ function Schedule({ params }: { params: URLSearchParams }) {
         setRecurringPreview({ inputs, dates, countPerDate, cents: normalized.agreement?.mode === 'default' ? formRate?.amount_cents : normalized.agreement?.amount_cents });
         return;
       }
-      ok = inputs.length > 1 ? await store.addShifts(inputs) : await store.addShift(inputs[0]);
+      ok = Boolean(await editGuard.run(() => inputs.length > 1 ? store.addShifts(inputs) : store.addShift(inputs[0])));
     }
     if (ok) setForm(null); else setFormError(useStore.getState().error || 'Não foi possível salvar o posto.');
   }
   async function confirmRecurrence() {
     if (!recurringPreview || !canCreateSchedule || store.saving) return;
+    if (!editGuard.check()) return;
     setRecurringError('');
-    if (await store.addShifts(recurringPreview.inputs)) {
+    if (await editGuard.run(() => store.addShifts(recurringPreview.inputs))) {
       setRecurringPreview(null);
       setForm(null);
     } else setRecurringError(useStore.getState().error || 'Não foi possível salvar a recorrência.');
@@ -452,7 +460,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setPageError('');
     const from = sourceWeek === 'current' ? week[0] : addDays(week[0], -7);
     const to = sourceWeek === 'current' ? week[6] : addDays(week[6], -7);
-    const source = copyableRegularShifts(shifts).filter(item => item.date >= from && item.date <= to && item.status !== 'cancelled' && (!unitId || item.unitId === unitId) && (!sectorId || item.sectorId === sectorId));
+    const source = copyableRegularShifts(shifts).filter(item => item.date >= from && item.date <= to && item.status !== 'cancelled' && (!unitId || item.unitId === unitId) && sectorIds.includes(item.sectorId || ''));
     if (!source.length) return setPageError('Não há postos regulares na semana de origem para copiar. Plantões avulsos não são copiados.');
     const clones = source.map((item, index): Shift => ({ ...item, id: `preview-${index}`, organizationId: orgId, date: addDays(item.date, 7), status: item.doctorId ? 'pending' : 'open', paymentStatus: 'pending', paidAt: undefined }));
     const blocked = clones.filter(candidate => candidate.doctorId && doctorDocumentState.get(candidate.doctorId)?.blocked).length;
@@ -467,6 +475,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (ok) setWeekPreview(null); else if (useStore.getState().error) setPageError(useStore.getState().error || 'Não foi possível copiar a semana.');
   }
   async function saveCopiedShifts(clones: Shift[]) {
+    if (!canCreateSchedule || !editGuard.check()) return false;
     if (clones.some(item => !item.employmentType)) {
       setPageError('Classifique a modalidade dos plantões de origem antes de copiar.');
       return false;
@@ -478,7 +487,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     }
     try {
       const rates = pj.length ? await fetchShiftRates(orgId) : [];
-      return await store.addShifts(clones.map(item => {
+      return Boolean(await editGuard.run(() => store.addShifts(clones.map(item => {
         if (item.employmentType !== 'pj') return toNewShift(item);
         const rate = chooseShiftRate(rates, item, sectors.find(sector => sector.id === item.sectorId), doctors.find(doctor => doctor.id === item.doctorId)?.specialty);
         const cents = Math.round(item.paymentAmount! * 100);
@@ -489,7 +498,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
           overrideReason: item.paymentAgreement?.override_reason || 'Valor do plantão de origem confirmado na cópia.',
         } as const;
         return toNewShift({ ...item, agreement: buildRequiredPjAgreement(draft, rate) });
-      }));
+      }))));
     } catch (error) {
       setPageError(error instanceof Error ? error.message : 'Não foi possível consultar os valores da cópia.');
       return false;
@@ -532,10 +541,12 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
   function editMasterRule(context: MasterShiftContext, effectiveDate?: string) {
     if (!context.rule_id || !canEditSchedule || !canCreateSchedule) return;
-    setForm(null); setScheduleMode('master');
-    if (context.unit_id) setUnitId(context.unit_id);
-    if (context.sector_id) setSectorId(context.sector_id);
-    setMasterEditRequest(previous => ({ ruleId: context.rule_id!, date: effectiveDate, nonce: (previous?.nonce || 0) + 1 }));
+    editGuard.transition(() => {
+      setForm(null); setScheduleMode('master');
+      if (context.unit_id) setUnitId(context.unit_id);
+      if (context.sector_id) setSectorId(context.sector_id);
+      setMasterEditRequest(previous => ({ ruleId: context.rule_id!, date: effectiveDate, nonce: (previous?.nonce || 0) + 1 }));
+    });
   }
   function openMasterShift(id: string) {
     const item = shifts.find(shift => shift.id === id);
@@ -543,30 +554,31 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setScheduleMode('general'); setUnitId(item.unitId); if (item.sectorId) setSectorId(item.sectorId); setDate(item.date); openShift(item);
   }
 
-  const scopePicker = <ScheduleScopePicker units={units} sectors={sectors} unitId={unitId} sectorId={sectorId}
-    onSelectUnit={id => { setUnitId(id); setSectorId(''); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); }}
-    onSelectSector={id => { setSectorId(id); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); }}/>;
+  useScheduleDraft('shift', form ? JSON.stringify([form, agreementDraft, vacancyCount, recurrence, customWeekdays, repeatUntil]) : null, store.saving, () => { setForm(null); setRecurringPreview(null); });
+  const scopePicker = <ScheduleScopePicker units={units} sectors={sectors} unitId={unitId} selection={sectorSelection}
+    onSelectUnit={id => editGuard.transition(() => { setUnitId(id); setSectorId(''); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); })}
+    onSelectSectors={value => editGuard.transition(() => { setSectorSelection(value); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); })}/>;
   if (!scopeReady) return <div className="space-y-5">
-    <header><h1 className="nv-page-title">Escala médica</h1></header>
+    <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="nv-page-title">Escala médica</h1><ScheduleEditControl/></header>
     {scopePicker}
   </div>;
 
   return <div className="space-y-5">
-    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Operação e cobertura</p><h1 className="nv-page-title mt-1">Escala médica</h1><p className="mt-1 text-sm capitalize text-text-secondary">{view === 'day' ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : view === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])} de ${new Date(`${week[6]}T12:00:00`).getFullYear()}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p></div><div className="flex flex-wrap gap-2">{canApproveSchedule && <Link className="nv-button-secondary" href="/escala/candidaturas"><ArrowRightLeft size={16}/>Candidaturas e trocas</Link>}{canCreateSchedule && scheduleMode === 'general' && <><button className="nv-button-secondary" onClick={() => openShift(undefined, undefined, date, undefined, 1, true)} disabled={!units.length}><Plus size={16}/>Plantão avulso</button><button className="nv-button" onClick={() => openShift()} disabled={!units.length}><Plus size={16}/>Novo posto</button></>}</div></header>
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Operação e cobertura</p><h1 className="nv-page-title mt-1">Escala médica</h1><p className="mt-1 text-sm capitalize text-text-secondary">{periodMode === 'day' ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : periodMode === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])} de ${new Date(`${week[6]}T12:00:00`).getFullYear()}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p></div><div className="flex flex-wrap gap-2"><ScheduleEditControl/>{canPerformAction(store.currentUser, 'escala', 'history') && <button type="button" className="nv-button-secondary" onClick={() => setHistoryTarget({})}>Histórico de alterações</button>}{canApproveSchedule && <Link className="nv-button-secondary" href="/escala/candidaturas"><ArrowRightLeft size={16}/>Candidaturas e trocas</Link>}{canCreateSchedule && scheduleMode === 'general' && <><button className="nv-button-secondary" onClick={() => openShift(undefined, undefined, date, undefined, 1, true)} disabled={!units.length}><Plus size={16}/>Plantão avulso</button><button className="nv-button" onClick={() => openShift()} disabled={!units.length}><Plus size={16}/>Novo posto</button></>}</div></header>
     {scopePicker}
     <nav className="flex w-fit gap-1 rounded-lg border border-border bg-card-bg p-1" aria-label="Tipo de escala">
-      {([['general', 'Escala Geral'], ['master', 'Escala Master']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={scheduleMode === value} onClick={() => setScheduleMode(value)} className={`min-h-10 rounded-md px-4 text-sm font-semibold ${scheduleMode === value ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:bg-state-hover'}`}>{label}</button>)}
+      {([['general', 'Escala Geral'], ['master', 'Escala Master']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={scheduleMode === value} onClick={() => editGuard.transition(() => setScheduleMode(value))} className={`min-h-10 rounded-md px-4 text-sm font-semibold ${scheduleMode === value ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:bg-state-hover'}`}>{label}</button>)}
     </nav>
-    {scheduleMode === 'master' ? <ScheduleMasterView key={`${orgId}:${unitId}:${sectorId}`} organization={orgId} unitId={unitId} sectorId={sectorId} doctors={doctors} units={units} sectors={sectors} canCreate={canCreateSchedule} canEdit={canEditSchedule} canApprove={canApproveSchedule} canFinance={canEditFinancial} editRequest={masterEditRequest} onChanged={refreshMasterShifts} onOpenShift={openMasterShift}/> : <>
+    {scheduleMode === 'master' ? <ScheduleMasterView key={`${orgId}:${unitId}:${sectorId}`} organization={orgId} unitId={unitId} sectorId={sectorId} sectorIds={sectorIds} doctors={doctors} units={units} sectors={sectors} canCreate={canCreateSchedule} canEdit={canEditSchedule} canApprove={canApproveSchedule} canFinance={canEditFinancial} canViewHistory={canPerformAction(store.currentUser, 'escala', 'history')} canManageAbsences={canPerformAction(store.currentUser, 'escala', 'edit') && canPerformAction(store.currentUser, 'escala', 'approve')} editRequest={masterEditRequest} onChanged={refreshMasterShifts} onOpenShift={openMasterShift}/> : <>
     {mobile && <div className="space-y-3">
       <nav className="grid grid-cols-4 gap-1 rounded-xl border border-border bg-card-bg p-1" aria-label="Visualização da escala no celular">
         {([['month', 'Mês'], ['week', 'Semana'], ['day', 'Dia'], ['list', 'Lista']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mobileView === value}
           onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); changeMobileView(value); }} className={`min-h-10 rounded-lg text-sm font-semibold ${mobileView === value ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:bg-state-hover'}`}>{label}</button>)}
       </nav>
       <div className="flex items-center justify-between rounded-xl border border-border bg-card-bg px-2">
-        <button type="button" aria-label={view === 'day' ? 'Dia anterior' : view === 'week' ? 'Semana anterior' : 'Mês anterior'} className="p-2.5" onClick={() => navigate(-1)}><ChevronLeft size={19}/></button>
-        <button type="button" className="text-sm font-semibold capitalize" onClick={() => setDate(today)} title="Voltar para hoje">{view === 'day' ? formatDay(date) : view === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</button>
-        <button type="button" aria-label={view === 'day' ? 'Próximo dia' : view === 'week' ? 'Próxima semana' : 'Próximo mês'} className="p-2.5" onClick={() => navigate(1)}><ChevronRight size={19}/></button>
+        <button type="button" aria-label={periodMode === 'day' ? 'Dia anterior' : periodMode === 'week' ? 'Semana anterior' : 'Mês anterior'} className="p-2.5" onClick={() => navigate(-1)}><ChevronLeft size={19}/></button>
+        <button type="button" className="text-sm font-semibold capitalize" onClick={() => setDate(today)} title="Voltar para hoje">{periodMode === 'day' ? formatDay(date) : periodMode === 'week' ? `${formatDay(week[0])} – ${formatDay(week[6])}` : firstOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</button>
+        <button type="button" aria-label={periodMode === 'day' ? 'Próximo dia' : periodMode === 'week' ? 'Próxima semana' : 'Próximo mês'} className="p-2.5" onClick={() => navigate(1)}><ChevronRight size={19}/></button>
       </div>
     </div>}
 
@@ -583,12 +595,13 @@ function Schedule({ params }: { params: URLSearchParams }) {
       {myDoctor && <label className="flex min-h-10 items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={doctorId === myDoctor.id} onChange={event => setDoctorId(event.target.checked ? myDoctor.id : '')}/>Minhas escalas</label>}</div></details>
 
     <div className="hidden flex-wrap items-center justify-between gap-3 md:flex"><div className="inline-flex flex-wrap rounded-lg border border-border bg-card-bg p-1"><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'week' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('week'); }}>Semana</button><button type="button" aria-pressed={view === 'day'} className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'day' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('day'); }}>Dia</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'month' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => { if (statusFilter === 'cancelled') setStatusFilter('all'); setView('month'); }}>Mês</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === 'doctor' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('doctor')}>Por médico</button><button className={`rounded-md px-3 py-2 text-sm font-medium ${view === "specialty" ? "bg-primary text-text-inverse" : "text-text-secondary"}`} onClick={() => setView("specialty")}>Por especialidade</button><button className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${view === 'list' ? 'bg-primary text-text-inverse' : 'text-text-secondary'}`} onClick={() => setView('list')}><List size={15}/>Plantões</button></div><div className="flex flex-wrap items-center gap-1"><button aria-label="Período anterior" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(-1)}><ChevronLeft/></button><button className="min-w-16 px-3 text-sm font-semibold" onClick={() => setDate(today)}>Hoje</button><button aria-label="Próximo período" className="p-2.5 text-text-muted hover:text-primary" onClick={() => navigate(1)}><ChevronRight/></button><input aria-label="Ir para data" title="Ir para data" type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }} className="nv-input ml-2 w-36 text-xs"/></div></div>
+    {(statusFilter === 'open' || coverageFilter === 'open') && (availableVacancies.loading || availableVacancies.error) && <p role={availableVacancies.error ? 'alert' : 'status'} className="text-sm text-text-secondary">{availableVacancies.error || 'Verificando vagas disponíveis…'}</p>}
     {pageError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{pageError}</p>}
 
-    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3"><span className="mr-1 text-xs text-text-muted">Plantões:</span>{([['all', 'Todos'], ['regular', 'Regulares'], ['adhoc', 'Avulsos']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={coverageModeFilter === value && view === 'list'} onClick={() => { setCoverageModeFilter(value); setView('list'); }} className={`min-h-9 rounded-lg px-3 text-xs font-medium transition ${coverageModeFilter === value && view === 'list' ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-state-hover'}`}>{label}</button>)}</div>
+    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3"><span className="mr-1 text-xs text-text-muted">Plantões:</span>{([['all', 'Todos'], ['regular', 'Regulares'], ['adhoc', 'Avulsos']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={coverageModeFilter === value} onClick={() => setCoverageModeFilter(value)} className={`min-h-9 rounded-lg px-3 text-xs font-medium transition ${coverageModeFilter === value ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-state-hover'}`}>{label}</button>)}</div>
     {view === 'list' ? <div id="plantao" tabIndex={-1} className="space-y-3">
       {requestedShiftId && <Link className="nv-button-secondary" href={'/escala?' + new URLSearchParams({ date, unitId, sectorId })}>Voltar para a escala do dia</Link>}
-      <ScheduleList days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift} onDelete={canDeleteSchedule ? item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date }) : undefined}/>
+      <ScheduleList availableVacancyIds={availableVacancies.ids} days={listDays} shifts={listShifts} units={units} sectors={sectors} doctors={doctors} doctorWarnings={doctorDocumentState} onEdit={openShift} onDelete={canDeleteSchedule ? item => openDelete('shift', { shiftId: item.id, from: item.date, to: item.date }) : undefined}/>
     </div> : view === 'doctor' ? <ScheduleDoctorView doctors={visibleDoctors} sectors={sectors} units={units} shifts={listShifts} allShifts={shifts} month={month} canSeeFinancial={canSeeFinancial} onEdit={openShift}/> : view === 'specialty' ? <ScheduleSpecialtyView doctors={doctors} shifts={listShifts} allShifts={shifts} month={month} onEdit={openShift}/> : <ScheduleCalendarView
       key={`${orgId}:${unitId}:${sectorId}:${focusedTurn?.nonce || 0}`}
       view={view}
@@ -605,6 +618,10 @@ function Schedule({ params }: { params: URLSearchParams }) {
       doctorId={doctorId}
       periodKind={periodKind}
       documentFilter={documentFilter}
+      specialty={specialty}
+      coverageMode={coverageModeFilter}
+      availableVacancyIds={availableVacancies.ids}
+      now={referenceTime}
       focus={focusedTurn}
       coverageFilter={coverageFilter}
       statusFilter={statusFilter === 'cancelled' ? 'all' : statusFilter}
@@ -621,6 +638,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
       onDeleteTurn={(sector, day, kind) => openDelete('turn', { from: day, to: day, unitId: sector.unitId, sectorId: sector.id, kind })}
       onCopyPeriod={copyPeriod}
       onEditMasterRule={canEditSchedule && canCreateSchedule ? editMasterRule : undefined}
+      onHistory={canPerformAction(store.currentUser, 'escala', 'history') ? id => setHistoryTarget({ shiftId: id }) : undefined}
     />}
     {(canCreateSchedule || canDeleteSchedule) && <details className="rounded-lg border border-border bg-card-bg px-4 py-3 text-sm"><summary className="cursor-pointer font-medium text-text-secondary">Gerenciar escala</summary><div className="mt-3 flex flex-wrap items-center gap-2"><button className="nv-button-secondary" onClick={() => previewWeek('previous')} disabled={!canCreateSchedule || view !== 'week' || store.saving}><Copy size={15}/>Copiar semana anterior</button><button className="nv-button-secondary" onClick={() => previewWeek('current')} disabled={!canCreateSchedule || view !== 'week' || store.saving}><Copy size={15}/>Replicar para a próxima</button>{canDeleteSchedule && <button type="button" onClick={() => openDelete('period')} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-secondary transition hover:border-danger/40 hover:bg-danger/5 hover:text-danger"><Trash2 size={15}/>Excluir da escala</button>}</div></details>}
 
@@ -629,7 +647,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
       <div className="mt-4 space-y-5">
     <section className="p-1" aria-label="Resumo da cobertura">
       <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-        <div className="min-w-[210px] flex-1"><p className="text-xs font-medium text-text-muted">Cobertura do período</p><p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{coveragePercent}% <span className="text-sm font-normal text-text-muted">· {filled} de {required} postos</span></p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Cobertura do período" aria-valuenow={coveragePercent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-accent transition-[width] motion-reduce:transition-none" style={{ width: `${coveragePercent}%` }}/></div></div>
+        <div className="min-w-[210px] flex-1"><p className="text-xs font-medium text-text-muted">Cobertura operacional · unidade, setores e turno</p><p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{coveragePercent}% <span className="text-sm font-normal text-text-muted">· {filled} de {required} postos</span></p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label="Cobertura do período" aria-valuenow={coveragePercent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-accent transition-[width] motion-reduce:transition-none" style={{ width: `${coveragePercent}%` }}/></div></div>
         <button type="button" onClick={() => setCoverageFilter('deficit')} className="text-left"><span className="block text-2xl font-semibold tabular-nums text-danger">{deficit}</span><span className="text-xs text-text-muted">turnos com déficit</span></button>
         <button type="button" onClick={() => setCoverageFilter('open')} className="text-left"><span className="block text-2xl font-semibold tabular-nums text-info">{open}</span><span className="text-xs text-text-muted">vagas abertas</span></button>
         <button type="button" onClick={() => setCoverageFilter('conflict')} className="text-left"><span className="block text-2xl font-semibold tabular-nums text-warning">{conflicts}</span><span className="text-xs text-text-muted">turnos com conflito</span></button>
@@ -650,7 +668,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
       </div>
     </details>
     </>}
-    {selectionShift && <Dialog title="Candidaturas e histórico do plantão" onClose={() => setSelectionShift(null)}>
+    {historyTarget && canPerformAction(store.currentUser, 'escala', 'history') && <ScheduleHistory organization={orgId} unitId={unitId} sectorIds={sectorIds} shiftId={historyTarget.shiftId} units={units} sectors={sectors} shifts={shifts} onClose={() => setHistoryTarget(null)}/>}
+    {selectionShift && <Dialog title="Candidaturas e histórico do plantão" onClose={() => editGuard.transition(() => setSelectionShift(null))}>
       <ShiftSelectionPanel organization={orgId} shiftId={selectionShift.id} onChanged={() => {
         setOpportunityRevision(value => value + 1);
         void fetchInitialDataFromSupabase().then(store.syncWithCloud).catch(() => {
@@ -665,15 +684,16 @@ function Schedule({ params }: { params: URLSearchParams }) {
       <div className="grid grid-cols-3 gap-3 border-y border-border py-4 text-center"><div><strong className="block text-xl tabular-nums">{weekPreview.sectors}</strong><span className="text-xs text-text-muted">setores</span></div><div><strong className="block text-xl tabular-nums">{weekPreview.turns}</strong><span className="text-xs text-text-muted">turnos</span></div><div><strong className="block text-xl tabular-nums">{weekPreview.clones.length}</strong><span className="text-xs text-text-muted">postos</span></div></div>
       <div className="space-y-1 text-xs"><p className={weekPreview.blocked ? 'text-danger' : 'text-success'}>{weekPreview.blocked} médicos bloqueados por documentos</p><p className={weekPreview.duplicates ? 'text-danger' : 'text-success'}>{weekPreview.duplicates} postos duplicados</p><p className={weekPreview.conflicts ? 'text-danger' : 'text-success'}>{weekPreview.conflicts} conflitos de horário</p></div>
       {weekPreview.blocked + weekPreview.duplicates + weekPreview.conflicts > 0 && <p role="alert" className="rounded-lg bg-danger/5 p-3 text-xs text-danger">Revise os impedimentos na semana de destino antes de copiar.</p>}
-      {pageError && <p role="alert" className="text-xs text-danger">{pageError}</p>}
+      {(statusFilter === 'open' || coverageFilter === 'open') && (availableVacancies.loading || availableVacancies.error) && <p role={availableVacancies.error ? 'alert' : 'status'} className="text-sm text-text-secondary">{availableVacancies.error || 'Verificando vagas disponíveis…'}</p>}
+    {pageError && <p role="alert" className="text-xs text-danger">{pageError}</p>}
       <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setWeekPreview(null)} disabled={store.saving}>Cancelar</button><button type="button" className="nv-button" onClick={() => void confirmWeekPreview()} disabled={Boolean(weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts || store.saving)}>{store.saving ? 'Copiando…' : 'Copiar postos'}</button></div>
     </div></Dialog>}
-    {form && <Dialog title={formTitle} onClose={() => !store.saving && setForm(null)} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setForm(null)} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && (canApproveSchedule || canEditSchedule) && <button type="button" className="nv-button-secondary" onClick={() => { setSelectionShift(form); setForm(null); }}>{canApproveSchedule ? 'Candidaturas e histórico' : 'Histórico da contratação'}</button>}
+    {form && <Dialog title={formTitle} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
       {openedShift && <ShiftRecordSummary shift={openedShift} organization={activeOrganization?.name}
         unit={units.find(item => item.id === openedShift.unitId)?.name}
         sector={sectors.find(item => item.id === openedShift.sectorId)?.name}
         doctor={doctors.find(item => item.id === openedShift.doctorId)?.name} />}
-      {form.id && <MasterShiftOrigin ids={[form.id]} date={form.date} canEdit={canEditSchedule && canCreateSchedule} onEditRule={editMasterRule} editingOccurrence/>}
+      {form.id && canPerformAction(store.currentUser, 'escala', 'history') && <button type="button" className="nv-button-secondary" onClick={() => setHistoryTarget({ shiftId: form.id })}>Ver histórico</button>}{form.id && <MasterShiftOrigin ids={[form.id]} date={form.date} canEdit={canEditSchedule && canCreateSchedule} onEditRule={editMasterRule} editingOccurrence/>}
       <fieldset disabled={!canSaveShift} className="min-w-0 space-y-5">{form.coverageMode === 'adhoc' && <section className="space-y-3 border-l-2 border-primary pl-3"><p className="text-sm font-semibold text-primary">Cobertura temporária</p><p className="text-xs leading-5 text-text-muted">Vale apenas para as datas cadastradas. Não altera os postos fixos do setor e não entra na cópia de semanas.</p><label className="nv-label">Motivo da cobertura<input className="nv-input" required minLength={3} maxLength={200} placeholder="Ex.: Férias de profissional CLT em outubro" value={form.coverageReason || ''} onChange={event => setForm({ ...form, coverageReason: event.target.value })} /></label></section>}<div className="grid gap-4 sm:grid-cols-2">
         <label className="nv-label">Unidade<select aria-label="Unidade" className="nv-input" required value={form.unitId} onChange={event => updateFormUnit(event.target.value)}><option value="">Selecione</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
         <div className="sm:col-span-2"><div className="flex items-end gap-2">
@@ -750,5 +770,5 @@ function ScheduleRoute() {
 }
 
 export default function SchedulePage() {
-  return <AccessGuard requiredPermission="escala"><Suspense fallback={<p role="status">Carregando escala…</p>}><ScheduleRoute /></Suspense></AccessGuard>;
+  return <AccessGuard requiredPermission="escala"><ScheduleEditBoundary><Suspense fallback={<p role="status">Carregando escala…</p>}><ScheduleRoute /></Suspense></ScheduleEditBoundary></AccessGuard>;
 }

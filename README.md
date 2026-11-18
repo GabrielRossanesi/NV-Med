@@ -64,6 +64,10 @@ Abra [a aplicação local](http://localhost:3000) no navegador. Copie `.env.exam
 
 ## Banco e validação
 
+Escalas: seleção multissetorial compartilhada entre Geral/Master, cadeado de edição por aba e histórico administrativo com permissão própria. A migration 38 deve acompanhar esta versão. [Filtros, bloqueio e auditoria](docs/filtros-bloqueio-e-auditoria-escalas.md)
+
+Correção do filtro exclusivo de vagas disponíveis e cartões compartilhados entre mês, semana e dia, com nomes em duas linhas no mês. [Filtros e calendários](docs/correcao-filtros-calendario-escalas.md)
+
 O guia do banco descreve a ordem de instalação. O plano de implantação reúne a preparação do piloto interno, o domínio oficial e a recuperação. [Guia do Supabase](supabase/README.md) · [Implantação controlada](docs/implantacao-controlada-nv-med.md)
 
 ```bash

@@ -9,6 +9,7 @@ export interface ScheduleDeletionSelection {
   to: string;
   unitId: string;
   sectorId: string;
+  sectorIds?: string[];
   kind: CoveragePeriodKind | '';
   doctorId: string;
   shiftId: string;
@@ -33,6 +34,7 @@ export function getScheduleDeletionTargets(
     if (shift.organizationId !== organizationId || shift.date < selection.from || shift.date > selection.to) return false;
     if (selection.unitId && shift.unitId !== selection.unitId) return false;
     if (selection.sectorId && shift.sectorId !== selection.sectorId) return false;
+    if (selection.sectorIds && !selection.sectorIds.includes(shift.sectorId || '')) return false;
     if (selection.scope === 'doctor') return shift.doctorId === selection.doctorId;
     if (selection.scope === 'turn') {
       const sector = sectorById.get(shift.sectorId || '');

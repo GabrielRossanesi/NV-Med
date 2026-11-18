@@ -26,7 +26,7 @@ export const ADDITIONAL_PERMISSION_MODULES = [
   { key: 'medicos', label: 'Médicos', actions: ['view', 'create', 'edit', 'delete', 'approve'] },
   { key: 'unidades', label: 'Unidades e setores', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'documentos', label: 'Documentos', actions: ['view', 'edit', 'approve'] },
-  { key: 'escala', label: 'Escalas', actions: ['view', 'create', 'edit', 'delete', 'approve'] },
+  { key: 'escala', label: 'Escalas', actions: ['view', 'create', 'edit', 'delete', 'approve', 'history'] },
   { key: 'financeiro', label: 'Financeiro', actions: ['view', 'edit'] },
   { key: 'dados_bancarios', label: 'Dados bancários médicos', actions: ['view', 'edit', 'history'] },
   { key: 'portal_medico', label: 'Acesso ao Portal Médico', actions: ['view', 'edit'] },
@@ -42,11 +42,16 @@ export const permissionActionLabels: Record<PermissionAction, string> = {
 const allowedActions = new Set<string>(ADDITIONAL_PERMISSION_MODULES.flatMap(module => module.actions.map(action => `${module.key}.${action}`)));
 const legacyModules = new Set<string>(ADDITIONAL_PERMISSION_MODULES.filter(module => !['usuarios', 'dados_bancarios', 'portal_medico'].includes(module.key)).map(module => module.key));
 
+export function isScheduleAdministrator(user: Pick<UserAccount, 'type' | 'role'>) {
+  return (user.type === 'tenant_user' ? TENANT_ROLES : user.type === 'saas_admin' ? SAAS_ROLES : []).includes(user.role);
+}
+
 export function roleHasPermission(type: UserAccount['type'], role: string, module: string) {
   return (ROLE_PERMISSIONS[`${type}:${role}`] || []).includes(module);
 }
 
 export function roleHasAction(type: UserAccount['type'], role: string, module: string, action: PermissionAction): boolean {
+  if (module === 'escala' && action === 'history') return (type === 'saas_admin' ? ['CEO', 'Gerente', 'Coordenador'] : ['Diretor', 'Gerente', 'Coordenador de Escalas']).includes(role);
   if (module === 'portal_medico') return ['view', 'edit'].includes(action) && (type === 'saas_admin' ? ['CEO', 'Gerente'] : ['Diretor', 'Gerente']).includes(role);
   if (module === 'dados_bancarios') return ['view', 'edit', 'history'].includes(action) && (type === 'saas_admin' ? ['CEO', 'Gerente', 'Financeiro'] : ['Diretor', 'Gerente', 'Financeiro']).includes(role);
   if (action === 'view') return roleHasPermission(type, role, module);
@@ -67,6 +72,11 @@ export function roleHasAction(type: UserAccount['type'], role: string, module: s
 }
 
 export function permissionDecision(user: PermissionUser, module: string, action: PermissionAction) {
+  if (module === 'escala' && !isScheduleAdministrator(user)) return { allowed: false, origin: 'Consulte a escala pelo Portal Médico' };
+  if (module === 'escala' && action !== 'view') {
+    if (!isScheduleAdministrator(user)) return { allowed: false, origin: 'Ação exclusiva da administração da empresa' };
+    if (!['edit', 'history'].includes(action) && !permissionDecision(user, module, 'edit').allowed) return { allowed: false, origin: 'Exige edição de escalas' };
+  }
   const baseline = roleHasAction(user.type, user.role, module, action);
   if (module === 'usuarios' && action !== 'view' && !baseline) return { allowed: false, origin: 'Ação reservada à gestão de usuários' };
   const exception = user.type === 'tenant_user' ? user.additionalPermissions?.[`${module}.${action}`] : undefined;

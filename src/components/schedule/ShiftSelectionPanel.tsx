@@ -5,7 +5,8 @@ import { ArrowRightLeft, History, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
 import { employmentLabel, employmentLabels, paymentFrequencyLabels } from '@/lib/scheduling';
-import { canEditPermission } from '@/lib/permissions';
+import { canEditPermission, canPerformAction } from '@/lib/permissions';
+import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
 import { buildRequiredPjAgreement, chooseShiftRate, formatShiftMoney, initialAgreementDraft, sectorFinanceDefaults } from '@/lib/shiftPricing';
 import { useStore } from '@/store/useStore';
 import type { EmploymentType, Shift, ShiftType } from '@/types';
@@ -20,6 +21,7 @@ type Opportunity = {
 type HistoryItem = { id: number; at: string; previous?: string; next?: string; actor?: string; previous_employment?: EmploymentType; next_employment?: EmploymentType };
 
 function Decision({ item, organization, onSaved }: { item: Opportunity; organization: string; onSaved: (message: string) => void }) {
+  const guard = useScheduleEdit();
   const [employment, setEmployment] = useState<EmploymentType | ''>('');
   const [draft, setDraft] = useState(() => initialAgreementDraft());
   const currentUser = useStore(state => state.currentUser);
@@ -27,8 +29,10 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
   const canEditFinance = canEditPermission(currentUser, 'financeiro');
   const rates = useShiftRates(organization, employment === 'pj' && canEditFinance);
   const [candidate, setCandidate] = useState('');
+  const [employer, setEmployer] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useScheduleDraft(`approval:${item.id}`, JSON.stringify([candidate, employment, employer, draft]), busy, () => { setCandidate(''); setEmployment(''); setEmployer(''); setDraft(initialAgreementDraft()); });
   const candidateSpecialty = useStore(state => state.doctors.find(doctor => doctor.id === candidate && doctor.organizationId === organization)?.specialty);
   const proposed: Shift = {
     id: item.shift_id, organizationId: organization, unitId: item.unit_id, sectorId: item.sector_id, doctorId: candidate,
@@ -47,7 +51,7 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
-    if (!candidate || !employment || item.settled || busy) return;
+    if (!candidate || !employment || item.settled || busy || !guard.check()) return;
     setError('');
     try {
       if (employment === 'pj' && (!canEditFinance || !rates.ready)) {
@@ -58,9 +62,9 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
       const payment = agreement && cents != null ? ` · ${formatShiftMoney(cents)} · ${paymentFrequencyLabels[agreement.frequency]}` : '';
       if (!window.confirm(`Confirmar o médico selecionado? ${employmentLabel(employment)}${payment}`)) return;
       setBusy(true);
-      const result = await createClient()?.rpc('nv_select_shift_candidate', {
+      const result = await guard.run(async () => createClient()?.rpc('nv_select_shift_candidate', {
         target: item.id, candidate, employment, employer: fields.get('employer'), agreement,
-      });
+      }));
       if (!result) throw new Error('Conexão indisponível.');
       if (result.error) throw new Error(portalError(result.error));
       onSaved('Candidatura aprovada. O médico já consta na escala.');
@@ -71,11 +75,12 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
     }
   }
   async function cancel() {
+    if (!guard.check()) return;
     if (!window.confirm(item.kind === 'exchange' ? 'Encerrar a troca e manter o médico atual como responsável?' : 'Encerrar as candidaturas atuais e manter a vaga aberta?')) return;
     setBusy(true);
     setError('');
     try {
-      const result = await createClient()?.rpc('nv_cancel_shift_opportunity', { target: item.id });
+      const result = await guard.run(async () => createClient()?.rpc('nv_cancel_shift_opportunity', { target: item.id }));
       if (!result) throw new Error('Conexão indisponível.');
       if (result.error) throw new Error(portalError(result.error));
       onSaved(item.kind === 'exchange' ? 'Solicitação de troca encerrada.' : 'Candidaturas encerradas. A vaga segue aberta.');
@@ -85,7 +90,8 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
       setBusy(false);
     }
   }
-  return <article className="space-y-3 rounded-xl border border-border bg-card-bg p-4">
+  if (!canPerformAction(currentUser, 'escala', 'approve')) return null;
+  return <article><fieldset data-schedule-edit disabled={!guard.unlocked || busy} className="space-y-3 rounded-xl border border-border bg-card-bg p-4">
     <p className={'flex items-center gap-2 text-sm font-semibold ' + (item.kind === 'exchange' ? 'text-warning' : 'text-danger')}>
       {item.kind === 'exchange' ? <ArrowRightLeft size={17}/> : <Users size={17}/>}
       {item.kind === 'exchange' ? 'Troca de plantão' : 'Vaga aberta'}
@@ -110,7 +116,7 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
         }}>
           <option value="">Selecione</option>{Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
-        <label className="nv-label">Empregador<input className="nv-input" name="employer" maxLength={150} required={employment === 'pj'}/></label>
+        <label className="nv-label">Empregador<input className="nv-input" name="employer" maxLength={150} value={employer} onChange={event => setEmployer(event.target.value)} required={employment === 'pj'}/></label>
       </div>
       {employment === 'pj' && (canEditFinance ? (rates.ready
         ? <ShiftAgreementFields draft={agreementDraft} onChange={setDraft} rate={reference} requireAmount dueFor={proposed}/>
@@ -122,12 +128,14 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
     <button className="nv-button-secondary" type="button" disabled={busy} onClick={() => void cancel()}>
       {item.kind === 'exchange' ? 'Encerrar solicitação de troca' : 'Encerrar candidaturas atuais'}
     </button>
-  </article>;
+  </fieldset></article>;
 }
 
 export default function ShiftSelectionPanel({ organization, shiftId, scope, onChanged }: {
   organization: string; shiftId?: string; scope?: 'exchange' | 'applications'; onChanged?: () => void;
 }) {
+  const currentUser = useStore(state => state.currentUser);
+  const canHistory = canPerformAction(currentUser, 'escala', 'history');
   const [queue, setQueue] = useState<Opportunity[] | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState('');
@@ -138,7 +146,7 @@ export default function ShiftSelectionPanel({ organization, shiftId, scope, onCh
     let active = true;
     if (client && organization) void Promise.all([
       client.rpc('nv_shift_selection_queue', { org: organization, target: shiftId || null, scope: scope || null }),
-      shiftId ? client.rpc('nv_shift_history', { target: shiftId }) : Promise.resolve(null),
+      shiftId && canHistory ? client.rpc('nv_shift_history', { target: shiftId }) : Promise.resolve(null),
     ]).then(([opportunities, events]) => {
       if (!active) return;
       if (opportunities.error || events?.error) setError('Não foi possível carregar as candidaturas e o histórico.');
@@ -148,7 +156,7 @@ export default function ShiftSelectionPanel({ organization, shiftId, scope, onCh
       }
     });
     return () => { active = false; };
-  }, [organization, shiftId, scope, revision]);
+  }, [organization, shiftId, scope, revision, canHistory]);
   return <section className="space-y-3">
     {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -159,7 +167,7 @@ export default function ShiftSelectionPanel({ organization, shiftId, scope, onCh
       setRevision(value => value + 1);
       onChanged?.();
     }}/>)}
-    {shiftId && <div className="space-y-2 border-t border-border pt-4">
+    {shiftId && canHistory && <div className="space-y-2 border-t border-border pt-4">
       <h3 className="flex items-center gap-2 text-sm font-semibold"><History size={16}/>Histórico de responsáveis e contratações</h3>
       {history.length === 0 && <p className="text-sm text-text-muted">Nenhuma mudança de responsável registrada.</p>}
       <ul className="divide-y divide-border">{history.map(event => <li key={event.id} className="py-2 text-sm">
