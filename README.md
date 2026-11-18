@@ -68,6 +68,8 @@ Escalas: seleção multissetorial compartilhada entre Geral/Master, cadeado de e
 
 Correção do filtro exclusivo de vagas disponíveis e cartões compartilhados entre mês, semana e dia, com nomes em duas linhas no mês. [Filtros e calendários](docs/correcao-filtros-calendario-escalas.md)
 
+A migration 38 e a interface correspondente foram publicadas no domínio principal em 18/11/2026. [Registro da implantação](docs/publicacao-escalas-migration38.md)
+
 O guia do banco descreve a ordem de instalação. O plano de implantação reúne a preparação do piloto interno, o domínio oficial e a recuperação. [Guia do Supabase](supabase/README.md) · [Implantação controlada](docs/implantacao-controlada-nv-med.md)
 
 ```bash

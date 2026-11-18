@@ -48,7 +48,7 @@ A interface oferece filtros de data da alteração, usuário, unidade, setor, op
 3. O job `nvmed-master-daily` e seu horário permanecem configurados como antes. A função executada pelo job é atualizada mantendo sua identidade e restrições de execução, para registrar a origem automática corretamente.
 4. Publicar a versão correspondente e validar com contas administrativas de edição/leitura e contas do Portal. Não executar as suítes sintéticas no banco de produção.
 
-A preparação e os testes foram executados localmente, sem criação de dados de teste na produção. A aplicação da migration e a publicação exigem a autorização do usuário para o ambiente de destino. O registro da implantação reúne o resultado da aplicação autorizada.
+A preparação e os testes foram executados localmente, sem criação de dados de teste na produção. Após autorização do usuário, a migration 38 foi aplicada e a versão correspondente foi publicada no domínio principal em 18/11/2026. O [registro da implantação](publicacao-escalas-migration38.md) reúne os resultados.
 
 ## Validação executada
 

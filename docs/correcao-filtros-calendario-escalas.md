@@ -38,11 +38,11 @@ Sem filtros, os indicadores de ocupação usam médicos atribuídos e postos pre
 
 Telas menores mantêm o calendário com rolagem horizontal dentro da grade; a página não ganha rolagem lateral. A visualização diária oferece uma alternativa de uma coluna. Não foram reduzidos os nomes a uma fonte menor para fazê-los caber.
 
-## Banco, permissões e implantação pendente
+## Banco, permissões e implantação
 
-A RPC de disponibilidade foi acrescentada à **migration 38 ainda local e não aplicada**, junto do trabalho anterior de filtros, cadeado e auditoria. Ela é de leitura, exige acesso à empresa e não concede escrita. A migration 37, o Cron, as regras de recorrência e os fluxos de candidatura não foram alterados nesta correção. Não há nova migration nem alteração de dados de escalas, vínculos ou confirmações.
+A RPC de disponibilidade foi acrescentada à **migration 38**, junto do trabalho anterior de filtros, cadeado e auditoria. Ela é de leitura, exige acesso à empresa e não concede escrita. A migration 37, o Cron, as regras de recorrência e os fluxos de candidatura não foram alterados nesta correção. Não há nova migration nem alteração de dados de escalas, vínculos ou confirmações.
 
-A publicação precisa aplicar a versão atual da 38 antes de disponibilizar a interface. A preparação inicial foi mantida localmente, sem migration em produção, commit ou deploy. A implantação foi autorizada posteriormente pelo usuário e tem seu resultado registrado separadamente.
+A preparação inicial foi mantida localmente. Após autorização posterior do usuário, a migration 38 foi aplicada antes da promoção da interface para o domínio principal em 18/11/2026. Consulte o [registro da implantação](publicacao-escalas-migration38.md).
 
 ## Validação
 
