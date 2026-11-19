@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ArrowUpRight, Building2, CalendarDays, CalendarCheck, ChevronLeft, ChevronRight, Clock3, FileClock, ListChecks, WalletCards, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Building2, CalendarDays, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Clock3, type LucideIcon } from 'lucide-react';
 import OperationalIndicators, { useOperationalCounts } from '@/components/OperationalIndicators';
 import UserAvatar from '@/components/UserAvatar';
 import { coverageDays, coverageWeeks, dashboardAgenda, dashboardPayments, dashboardRange, dashboardShiftMatches, doctorsWithDocumentIssues, moveDashboardMonth, shiftScheduleHref, type DashboardPeriod } from '@/lib/dashboardOverview';
@@ -69,9 +69,36 @@ function MonthNavigation({ month, onChange }: { month: string; onChange: (value:
 
 type CoverageFilters = { unit: string; specialty: string; employment: EmploymentType | '' };
 
-function CoveragePanel({ today, sectors, shifts, unitById, doctorById, specialties, filters, onFilter }: {
+function ScheduleFilterBar({ units, specialties, filters, onFilter }: {
+  units: Unit[]; specialties: string[]; filters: CoverageFilters; onFilter: (filters: CoverageFilters) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const fieldsId = useId();
+  const activeCount = Object.values(filters).filter(Boolean).length;
+  return <div className="nv-panel rounded-xl px-3 py-2 sm:px-4 sm:py-3">
+    <button type="button" aria-expanded={expanded} aria-controls={fieldsId} onClick={() => setExpanded(value => !value)}
+      className="flex min-h-10 w-full items-center justify-between gap-2 text-left text-sm font-semibold sm:hidden">
+      <span>Filtros de cobertura e agenda{activeCount > 0 && <span className="ml-2 text-xs text-primary">({activeCount})</span>}</span>
+      <ChevronDown size={16} aria-hidden="true" className={expanded ? 'shrink-0 rotate-180' : 'shrink-0'}/>
+    </button>
+    <fieldset id={fieldsId} className={`${expanded ? 'grid' : 'hidden'} min-w-0 gap-3 pb-2 pt-1 sm:grid sm:grid-cols-3 sm:p-0`}>
+      <legend className="sr-only">Filtros de cobertura e agenda</legend>
+      <label className="nv-label text-xs">Unidade<select className="nv-input" value={filters.unit} onChange={event => onFilter({ ...filters, unit: event.target.value })}>
+        <option value="">Todas</option>{units.map(unit => <option value={unit.id} key={unit.id}>{unit.name}</option>)}
+      </select></label>
+      <label className="nv-label text-xs">Especialidade<select className="nv-input" value={filters.specialty} onChange={event => onFilter({ ...filters, specialty: event.target.value })}>
+        <option value="">Todas</option>{specialties.map(item => <option key={item}>{item}</option>)}
+      </select></label>
+      <label className="nv-label text-xs">Modalidade de contratação<select className="nv-input" value={filters.employment} onChange={event => onFilter({ ...filters, employment: event.target.value as EmploymentType | '' })}>
+        <option value="">Todas</option>{Object.entries(employmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select></label>
+    </fieldset>
+  </div>;
+}
+
+function CoveragePanel({ today, sectors, shifts, unitById, doctorById, filters }: {
   today: string; sectors: Sector[]; shifts: Shift[]; unitById: Map<string, Unit>; doctorById: Map<string, Doctor>;
-  specialties: string[]; filters: CoverageFilters; onFilter: (filters: CoverageFilters) => void;
+  filters: CoverageFilters;
 }) {
   const [range, setRange] = useState<DashboardPeriod>('week');
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -109,19 +136,6 @@ function CoveragePanel({ today, sectors, shifts, unitById, doctorById, specialti
       <SegmentedControl label="Período de cobertura" value={range} onChange={setRange} options={periodOptions} />
     </div>
     {range === 'month' && <MonthNavigation month={month} onChange={setMonth} />}
-    <div className="mt-3 grid gap-2 min-[390px]:grid-cols-2">
-      <label className="nv-label text-xs">Unidade<select className="nv-input" value={filters.unit} onChange={event => onFilter({ ...filters, unit: event.target.value })}>
-        <option value="">Todas</option>{[...unitById.values()].map(unit => <option value={unit.id} key={unit.id}>{unit.name}</option>)}
-      </select></label>
-      <label className="nv-label text-xs">Especialidade<select className="nv-input" value={filters.specialty} onChange={event => onFilter({ ...filters, specialty: event.target.value })}>
-        <option value="">Todas</option>{specialties.map(item => <option key={item}>{item}</option>)}
-      </select></label>
-      <label className="nv-label text-xs">Modalidade de contratação<select className="nv-input" value={filters.employment} onChange={event => onFilter({ ...filters, employment: event.target.value as EmploymentType | '' })}>
-        <option value="">Todas</option>{Object.entries(employmentLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
-      </select></label>
-    </div>
-    <p className="mt-2 text-xs text-text-muted">Os filtros também se aplicam à agenda de próximos plantões.</p>
-
     <div className="my-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <strong className="text-4xl font-semibold tracking-[-0.06em] tabular-nums text-text-primary">{percent === null ? '—' : `${percent}%`}</strong>
       <span className="text-sm text-text-secondary">{required ? `${required - deficit} de ${required} postos preenchidos` : 'Sem previsão de cobertura'}</span>
@@ -184,10 +198,7 @@ function UpcomingPanel({ today, shifts, unitById, doctorById, filters }: {
 
   return <section aria-labelledby="agenda-title" className="nv-panel self-start rounded-[1.375rem] p-4 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 id="agenda-title" className="nv-section-title">Próximos plantões</h2>
-        <p className="mt-1 text-sm text-text-muted">Agenda de plantões confirmados.</p>
-      </div>
+      <h2 id="agenda-title" className="nv-section-title">Próximos plantões confirmados</h2>
       <SegmentedControl label="Período dos plantões" value={selected} onChange={setSelected} options={periodOptions} />
     </div>
     {selected === 'month' && <MonthNavigation month={month} onChange={setMonth} />}
@@ -235,19 +246,18 @@ function PendingPanel({ units, issues, canSeeDocuments, checkins, checkinHref }:
 
   return <section id="pendencias" tabIndex={-1} aria-labelledby="pending-title" className="nv-panel self-start rounded-[1.375rem] p-4 sm:p-6">
     <h2 id="pending-title" className="nv-section-title">Pendências</h2>
-    <p className="mt-1 text-sm text-text-muted">Documentação e registros de presença para acompanhar.</p>
     {canSeeDocuments && <>
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><FileClock size={19} aria-hidden="true" /></span>
-          <div><p className="text-sm font-semibold">Médicos com documentação pendente</p><p className="text-xs text-text-muted">Inclui documentos próximos do vencimento.</p></div>
+      {issues.length > 0 && <details className="mt-3 rounded-lg border border-border px-3">
+        <summary className="min-h-10 cursor-pointer py-2 text-sm font-medium text-text-secondary">Filtrar documentação{(unit || specialty) && <span className="ml-2 text-xs text-primary">({Number(Boolean(unit)) + Number(Boolean(specialty))})</span>}</summary>
+        <div className="grid gap-2 pb-3 min-[390px]:grid-cols-2">
+          <label className="nv-label text-xs">Unidade<select className="nv-input" value={unit} onChange={event => setUnit(event.target.value)}><option value="">Todas</option>{units.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+          <label className="nv-label text-xs">Especialidade<select className="nv-input" value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">Todas</option>{specialties.map(item => <option key={item}>{item}</option>)}</select></label>
         </div>
+      </details>}
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+        <div><p className="text-sm font-semibold">Médicos com documentação pendente</p><p className="text-xs text-text-muted">Inclui documentos próximos do vencimento.</p></div>
         <strong className="text-2xl font-semibold tabular-nums">{filtered.length}</strong>
       </div>
-      {issues.length > 0 && <div className="mt-3 grid grid-cols-1 gap-2 min-[390px]:grid-cols-2">
-        <label className="nv-label text-xs">Unidade<select className="nv-input" value={unit} onChange={event => setUnit(event.target.value)}><option value="">Todas</option>{units.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        <label className="nv-label text-xs">Especialidade<select className="nv-input" value={specialty} onChange={event => setSpecialty(event.target.value)}><option value="">Todas</option>{specialties.map(item => <option key={item}>{item}</option>)}</select></label>
-      </div>}
       <ul aria-label="Situação dos documentos" className="my-3 flex flex-wrap gap-2">
         <li className="nv-badge bg-danger/10 text-danger">{expired} {expired === 1 ? 'vencido' : 'vencidos'}</li>
         <li className="nv-badge bg-warning/10 text-warning">{nearExpiry} a vencer</li>
@@ -263,9 +273,9 @@ function PendingPanel({ units, issues, canSeeDocuments, checkins, checkinHref }:
       </ul> : <p className="rounded-lg bg-surface-muted/55 p-3 text-sm text-text-muted">Nenhum médico com pendência para os filtros selecionados.</p>}
       <div className="mt-2"><TextLink href={`/documentos?${docsQuery}`}>Ver pastas pendentes</TextLink></div>
     </>}
-    {checkins != null && <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-muted/55 px-3 py-2.5">
-      <div><p className="text-sm font-semibold">{checkins} {checkins === 1 ? 'check-in pendente' : 'check-ins pendentes'} hoje</p>{checkinHref && <TextLink href={checkinHref}>Ver relatório de presença</TextLink>}</div>
-      <ListChecks size={19} className="shrink-0 text-accent" aria-hidden="true" />
+    {checkins != null && <div className="mt-4 rounded-xl bg-surface-muted/55 px-3 py-2.5">
+      <p className="text-sm font-semibold">{checkins} {checkins === 1 ? 'check-in pendente' : 'check-ins pendentes'} hoje</p>
+      {checkinHref && <TextLink href={checkinHref}>Ver relatório de presença</TextLink>}
     </div>}
     {!canSeeDocuments && checkins == null && <p className="mt-4 text-sm text-text-muted">Nenhuma fila de pendências disponível para este acesso.</p>}
   </section>;
@@ -279,17 +289,11 @@ function FinancePanel({ shifts }: { shifts: Shift[] }) {
 
   return <section aria-labelledby="finance-title" className="nv-panel self-start rounded-[1.375rem] p-4 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>
-        <h2 id="finance-title" className="nv-section-title">Financeiro</h2>
-        <p className="mt-1 text-sm text-text-muted">Saldos em aberto e conciliação da empresa.</p>
-      </div>
+      <h2 id="finance-title" className="nv-section-title">Financeiro</h2>
       <TextLink href={financeHref}>Abrir financeiro</TextLink>
     </div>
     <Link href={`${financeHref}&period=all&frequency=on_delivery&status=unpaid`} className="group mt-4 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-accent/20 bg-[var(--dashboard-wash)] p-3.5 hover:border-primary/40">
-      <div className="flex min-w-0 items-start gap-2.5">
-        <WalletCards size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-        <div><p className="text-sm font-semibold">Pagamentos à vista pendentes</p><p className="mt-1 text-xs text-text-muted">{onDelivery.count} {onDelivery.count === 1 ? 'plantão sem baixa' : 'plantões sem baixa'}</p></div>
-      </div>
+      <div className="min-w-0"><p className="text-sm font-semibold">Pagamentos à vista pendentes</p><p className="mt-1 text-xs text-text-muted">{onDelivery.count} {onDelivery.count === 1 ? 'plantão sem baixa' : 'plantões sem baixa'}</p></div>
       <span className="flex max-w-full items-center gap-1.5 text-lg font-semibold tabular-nums"><span className="wrap-anywhere">{money.format(onDelivery.amount)}</span><ArrowUpRight size={15} className="shrink-0 text-accent group-hover:text-primary" aria-hidden="true" /></span>
     </Link>
     <dl className="mt-4 grid grid-cols-2 gap-3">
@@ -343,16 +347,12 @@ function DashboardContent({ organization }: { organization: string }) {
 
   return <div className="nv-overview mx-auto max-w-[104rem] space-y-6 max-md:space-y-4 lg:space-y-7">
     <header className="flex flex-wrap items-end justify-between gap-3 max-md:gap-2">
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 text-xs font-semibold text-primary"><span className="size-1.5 rounded-full bg-primary" aria-hidden="true" /> Operação médica</p>
-        <h1 className="nv-page-title mt-2 text-3xl max-md:mt-1 sm:text-[2.75rem]">Painel de controle</h1>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted max-md:mt-1 max-md:leading-snug">{activeOrg?.name ? <>Acompanhe as escalas e as pendências de <strong className="font-semibold text-text-secondary">{activeOrg.name}</strong>.</> : 'Acompanhe as escalas e as pendências da empresa ativa.'}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2.5">
-        <time dateTime={today} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-surface px-3.5 text-xs font-medium text-text-secondary max-md:px-2.5">
+      <h1 className="nv-page-title min-w-0 text-3xl sm:text-[2.75rem]">Painel de controle</h1>
+      <div className="flex flex-wrap items-center gap-2.5 max-[389px]:gap-2">
+        <time dateTime={today} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-surface px-3.5 text-xs font-medium text-text-secondary max-md:px-2.5 max-[389px]:gap-1.5 max-[389px]:px-2">
           <CalendarDays size={15} aria-hidden="true" className="text-accent" />{displayDay(today)}
         </time>
-        {canSeeSchedule && organization && <Link href={`/escala?date=${today}`} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-3.5 text-xs font-semibold text-text-inverse transition-colors hover:bg-primary-hover">Abrir escala <ArrowRight size={15} aria-hidden="true" /></Link>}
+        {canSeeSchedule && organization && <Link href={`/escala?date=${today}`} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-3.5 text-xs font-semibold text-text-inverse transition-colors hover:bg-primary-hover max-[389px]:gap-1.5 max-[389px]:px-2.5">Abrir escala <ArrowRight size={15} aria-hidden="true" /></Link>}
       </div>
     </header>
 
@@ -367,10 +367,13 @@ function DashboardContent({ organization }: { organization: string }) {
         </div>
       </section>}
       <OperationalIndicators today={today} gaps={todayCoverage.deficit} canSeeSchedule={canSeeSchedule} canSeeDoctors={canSeeDoctors} result={result} />
-      {canSeeSchedule && <div className="nv-overview-grid grid gap-4 lg:gap-5">
-        <CoveragePanel today={today} sectors={activeSectors.filter(sector => !scheduleFilters.unit || sector.unitId === scheduleFilters.unit)} shifts={scheduleShifts} unitById={unitById} doctorById={doctorById} specialties={specialties} filters={scheduleFilters} onFilter={setScheduleFilters} />
-        <UpcomingPanel today={today} shifts={scheduleShifts} unitById={unitById} doctorById={doctorById} filters={scheduleFilters} />
-      </div>}
+      {canSeeSchedule && <section aria-label="Cobertura e agenda de plantões" className="space-y-3">
+        <ScheduleFilterBar units={orgUnits} specialties={specialties} filters={scheduleFilters} onFilter={setScheduleFilters}/>
+        <div className="nv-overview-grid grid gap-4 lg:gap-5">
+          <CoveragePanel today={today} sectors={activeSectors.filter(sector => !scheduleFilters.unit || sector.unitId === scheduleFilters.unit)} shifts={scheduleShifts} unitById={unitById} doctorById={doctorById} filters={scheduleFilters} />
+          <UpcomingPanel today={today} shifts={scheduleShifts} unitById={unitById} doctorById={doctorById} filters={scheduleFilters} />
+        </div>
+      </section>}
       <div className="nv-overview-grid grid gap-4 lg:gap-5">
         <PendingPanel units={orgUnits} issues={issues} canSeeDocuments={canSeeDocuments} checkins={checkins} checkinHref={checkinHref} />
         {canSeeFinance && <FinancePanel shifts={orgShifts} />}

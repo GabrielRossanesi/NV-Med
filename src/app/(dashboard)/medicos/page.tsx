@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useId, useState, Suspense } from 'react';
 import { useStore } from '@/store/useStore';
 import { useSearchParams } from 'next/navigation';
 import { DoctorStatus } from '@/types';
@@ -13,12 +13,11 @@ import {
   XCircle,
   Eye,
   Trash2,
-  UserCheck,
-  Users,
   AlertTriangle,
   FileCheck2
 } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
+import Dialog from '@/components/Dialog';
 import { canPerformAction } from '@/lib/permissions';
 import Link from 'next/link';
 import { getDoctorCompliance } from '@/lib/documentCompliance';
@@ -90,7 +89,8 @@ function DoctorsPageContent() {
   }
 
 
-  const [bankingError, setBankingError] = useState('');
+  const createFormId = useId();
+  const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
 
   const orgDocuments = documents.filter(document => document.organizationId === activeOrganizationId);
@@ -114,20 +114,29 @@ function DoctorsPageContent() {
   });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    if (!canCreate) return;
     e.preventDefault();
-    setBankingError('');
+    if (!canCreate || creating) return;
+    setCreateError('');
+    const fields = new FormData(e.currentTarget);
     let banking;
-    try { banking = canCreateBanking ? bankingFromForm(new FormData(e.currentTarget)) : undefined; }
-    catch (failure) { setBankingError((failure as Error).message); return; }
+    try { banking = canCreateBanking ? bankingFromForm(fields) : undefined; }
+    catch (failure) { setCreateError((failure as Error).message); return; }
     
     setCreating(true);
-    const saved = await addDoctor(doctorProfileFromForm(new FormData(e.currentTarget)), banking);
+    const saved = await addDoctor(doctorProfileFromForm(fields), banking);
     setCreating(false);
-    if (!saved) return;
+    if (!saved) {
+      setCreateError(useStore.getState().error || 'Não foi possível salvar o cadastro. Tente novamente.');
+      return;
+    }
 
     setIsModalOpen(false);
   };
+
+  function closeCreateForm() {
+    setCreateError('');
+    setIsModalOpen(false);
+  }
 
   const handleDelete = (id: string) => {
     if (!canDelete) return;
@@ -166,14 +175,7 @@ function DoctorsPageContent() {
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="nv-page-title">
-            Corpo Clínico (Médicos)
-          </h2>
-          <p className="text-sm text-text-muted mt-1">
-            Cadastro, vínculos e conformidade documental do corpo clínico da empresa ativa.
-          </p>
-        </div>
+        <h2 className="nv-page-title">Médicos</h2>
         <button
           disabled={!canCreate}
           onClick={() => {
@@ -182,21 +184,13 @@ function DoctorsPageContent() {
           className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl py-2.5 px-4 font-semibold text-xs flex items-center justify-center gap-2 self-start transition duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
-          Novo Médico
+          Novo médico
         </button>
       </div>
 
       {orgDoctors.length === 0 ? (
         <div className="bg-card-bg border border-card-border rounded-xl p-12 text-center max-w-xl mx-auto space-y-6 my-8">
-          <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Users className="h-8 w-8" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-text-primary">Nenhum Médico Cadastrado</h3>
-            <p className="text-xs text-text-muted mt-2 max-w-md mx-auto">
-              Esta empresa ainda não possui médicos em seu corpo clínico. Comece adicionando um profissional.
-            </p>
-          </div>
+          <h3 className="text-lg font-bold text-text-primary">Nenhum médico cadastrado</h3>
           <button
             disabled={!canCreate}
             onClick={() => {
@@ -424,54 +418,27 @@ function DoctorsPageContent() {
         </>
       )}
 
-      {/* Creation Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-[2px] p-4">
-          <div className="nv-panel bg-modal-bg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-strong animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <UserCheck className="h-4 w-4 text-primary" />
-                  Cadastrar Novo Médico
-                </h3>
-                <p className="text-[10px] text-text-muted mt-0.5">Informe os dados cadastrais do médico para a empresa ativa</p>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-text-muted hover:text-text-primary text-lg font-bold cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Form Body */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-              <DoctorProfileFields specialties={activeOrg?.settings.specialties || []}/>
-              <p className="text-xs text-text-muted">O cadastro não cria acesso ao portal nem envia convites. A liberação será individual na página do médico.</p>
-
-              {canCreateBanking ? <DoctorBankingFields/> : <p className="text-sm text-text-muted">O cadastro será salvo como pendente. Um usuário autorizado ou o próprio médico deverá preencher a chave PIX e seu tipo para concluir o cadastro.</p>}
-              {bankingError && <p role="alert" className="text-sm text-danger">{bankingError}</p>}
-              {/* Modal Footer Actions */}
-              <div className="border-t border-border pt-4 flex items-center justify-end gap-3 bg-card-bg">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-card-border text-text-muted dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-text-inverse font-semibold text-xs transition duration-200"
-                >
-                  {creating ? 'Salvando…' : 'Salvar cadastro'}
-                </button>
-              </div>
-            </form>
+      {isModalOpen && <Dialog title="Cadastrar médico" size="lg" onClose={closeCreateForm} closeDisabled={creating}
+        footer={<div className="space-y-2">
+          {createError && <p role="alert" className="text-sm text-danger">{createError}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="nv-button-secondary" onClick={closeCreateForm} disabled={creating}>Cancelar</button>
+            <button type="submit" form={createFormId} className="nv-button" disabled={creating || !canCreate}>{creating ? 'Salvando…' : 'Salvar cadastro'}</button>
           </div>
-        </div>
-      )}
+        </div>}>
+        <form id={createFormId} onSubmit={handleSubmit} aria-busy={creating}>
+          <fieldset disabled={creating || !canCreate} className="min-w-0 space-y-6">
+            <DoctorProfileFields specialties={activeOrg?.settings.specialties || []}/>
+            <div className="border-t border-border pt-4">
+              {canCreateBanking ? <DoctorBankingFields/> : <section aria-label="Dados bancários" className="space-y-2">
+                <h3 className="nv-section-title">Dados bancários</h3>
+                <p className="text-sm text-text-muted">O cadastro será salvo como pendente. Um usuário autorizado ou o próprio médico deverá preencher a chave PIX e seu tipo para concluir o cadastro.</p>
+              </section>}
+            </div>
+            <p className="text-xs text-text-muted">O cadastro não cria acesso ao portal nem envia convites. A liberação será individual na página do médico.</p>
+          </fieldset>
+        </form>
+      </Dialog>}
     </div>
   );
 }

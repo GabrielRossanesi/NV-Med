@@ -3,3 +3,7 @@
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+
+## Interface do NV Med
+
+Siga as [diretrizes de UI/UX do NV Med](docs/UI_UX_GUIDELINES.md) ao criar, editar ou auditar interfaces.

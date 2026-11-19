@@ -4,12 +4,13 @@ import { X } from 'lucide-react';
 
 const widthClasses = { md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' } as const;
 
-export default function Dialog({ title, children, onClose, size = 'md', footer }: { title: string; children: React.ReactNode; onClose: () => void; size?: keyof typeof widthClasses; footer?: React.ReactNode }) {
+export default function Dialog({ title, children, onClose, size = 'md', footer, closeDisabled = false }: { title: string; children: React.ReactNode; onClose: () => void; size?: keyof typeof widthClasses; footer?: React.ReactNode; closeDisabled?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
+    const opener = document.activeElement;
     const viewport = window.visualViewport;
     function fitViewport() {
       if (!dialog || !viewport || viewport.scale !== 1) return;
@@ -25,14 +26,17 @@ export default function Dialog({ title, children, onClose, size = 'md', footer }
       viewport?.removeEventListener('resize', fitViewport);
       viewport?.removeEventListener('scroll', fitViewport);
       dialog.close();
+      if (opener instanceof HTMLElement && opener.isConnected && document.activeElement === document.body) {
+        opener.focus({ preventScroll: true });
+      }
     };
   }, []);
   return (
-    <dialog ref={ref} onCancel={event => { event.preventDefault(); onClose(); }} aria-labelledby={titleId} className={`nv-dialog m-auto max-h-[calc(var(--nv-dialog-viewport,100dvh)_-_1rem)] w-[calc(100%_-_1rem)] ${widthClasses[size]} overflow-hidden rounded-2xl border border-border p-0 sm:w-[calc(100%_-_2rem)]`}>
+    <dialog ref={ref} onCancel={event => { event.preventDefault(); if (!closeDisabled) onClose(); }} aria-labelledby={titleId} className={`nv-dialog m-auto max-h-[calc(var(--nv-dialog-viewport,100dvh)_-_1rem)] w-[calc(100%_-_1rem)] ${widthClasses[size]} overflow-hidden rounded-2xl border border-border p-0 sm:w-[calc(100%_-_2rem)]`}>
       <div className="flex max-h-[min(90dvh,calc(var(--nv-dialog-viewport,100dvh)_-_1rem))] flex-col">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-modal-bg py-2 pl-4 pr-2 sm:pl-6 sm:pr-3">
           <h2 id={titleId} className="nv-section-title">{title}</h2>
-          <button type="button" aria-label="Fechar" onClick={onClose} className="grid size-11 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-state-hover hover:text-text-primary">
+          <button type="button" aria-label="Fechar" onClick={onClose} disabled={closeDisabled} className="grid size-11 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-state-hover hover:text-text-primary disabled:opacity-50">
             <X size={19} aria-hidden="true" />
           </button>
         </header>

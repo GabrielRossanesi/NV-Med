@@ -48,7 +48,8 @@ function loadView() {
   const modules = new Map();
   function load(filename) {
     if (modules.has(filename)) return modules.get(filename).exports;
-    const module = { exports: {} }; modules.set(filename, module);
+    const sourceModule = { exports: {} };
+    modules.set(filename, sourceModule);
     const native = createRequire(filename);
     const requireSource = name => {
       if (name === './useMasterSchedule') return { useMasterSchedule: () => ({ data: overview, reload: async () => {} }) };
@@ -61,8 +62,8 @@ function loadView() {
     const { outputText } = ts.transpileModule(readFileSync(filename, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true, target: ts.ScriptTarget.ES2022 }, fileName: filename,
     });
-    new Function('require', 'module', 'exports', outputText)(requireSource, module, module.exports);
-    return module.exports;
+    new Function('require', 'module', 'exports', outputText)(requireSource, sourceModule, sourceModule.exports);
+    return sourceModule.exports;
   }
   return load(path.join(root, 'src/components/schedule/ScheduleMasterView.tsx')).default;
 }

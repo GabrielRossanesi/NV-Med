@@ -11,7 +11,7 @@ export default function ScheduleSpecialtyView({ doctors, shifts, allShifts, mont
   const specialties = [...new Set(assigned.map(shift => shift.specialty || doctorById.get(shift.doctorId || '')?.specialty || 'Sem especialidade'))].sort();
   const duration = (shift: Shift) => { const interval = shiftInterval(shift); return (interval.end - interval.start) / 3_600_000; };
   const hours = (value: number) => `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value)}h`;
-  return <section className="space-y-4" aria-label="Escala por especialidade"><div className="border-b border-border pb-4"><h2 className="text-base font-semibold">Plantões por especialidade</h2><p className="mt-1 text-xs text-text-muted">{new Date(`${month}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} · distribuição dos plantões visíveis</p></div>
+  return <section className="space-y-4" aria-label="Escala por especialidade"><div className="border-b border-border pb-4"><h2 className="text-base font-semibold">Plantões por especialidade</h2><p className="mt-1 text-xs text-text-muted">{new Date(`${month}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p></div>
     {specialties.length ? <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card-bg">{specialties.map(specialty => {
       const items = assigned.filter(shift => (shift.specialty || doctorById.get(shift.doctorId || '')?.specialty || 'Sem especialidade') === specialty);
       const doctorCount = new Set(items.map(shift => shift.doctorId)).size;

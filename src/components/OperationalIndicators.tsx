@@ -43,7 +43,7 @@ type Metric = {
 };
 
 function MetricCard({ label, value, href, icon: Icon, action, highlight }: Metric) {
-  const tone = highlight ? (value ? 'text-danger bg-danger/10' : 'text-primary bg-primary/10') : 'text-accent bg-accent/10';
+  const tone = highlight ? 'text-danger bg-danger/10' : value === 0 ? 'text-text-muted bg-surface-muted' : 'text-accent bg-accent/10';
   return <Link href={href} className={`group flex min-w-0 flex-col rounded-2xl border p-3.5 shadow-soft transition-[background-color,border-color,box-shadow] hover:border-primary/35 hover:shadow-medium motion-reduce:transition-none max-md:p-3 sm:p-5 ${highlight ? 'border-accent/25 bg-[var(--dashboard-wash)]' : 'border-card-border bg-card-bg'}`}>
     <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
       <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={18} aria-hidden="true" /></span>
@@ -65,17 +65,17 @@ export default function OperationalIndicators({ today, gaps, canSeeSchedule, can
   const loading = result === null;
   const metrics: Metric[] = [];
   if (canSeeSchedule) {
-    metrics.push({ label: 'Postos descobertos hoje', value: gaps, href: `/escala?date=${today}&coverage=deficit`, icon: CalendarX2, action: 'Ver cobertura do dia', highlight: true });
+    metrics.push({ label: 'Postos descobertos hoje', value: gaps, href: `/escala?date=${today}&coverage=deficit`, icon: CalendarX2, action: 'Ver cobertura do dia', highlight: gaps > 0 });
     if (loading || counts?.exchanges != null) metrics.push({ label: 'Solicitações de troca', value: counts?.exchanges ?? null, href: '/escala/candidaturas?filtro=exchange', icon: Repeat2, action: 'Revisar trocas' });
     if (loading || counts?.applications != null) metrics.push({ label: 'Candidaturas aguardando decisão', value: counts?.applications ?? null, href: '/escala/candidaturas?filtro=applications', icon: UserRoundPlus, action: 'Analisar candidaturas' });
   }
   if (canSeeDoctors && (loading || counts?.enrollments != null)) metrics.push({ label: 'Credenciamentos pendentes', value: counts?.enrollments ?? null, href: '/medicos/credenciamento', icon: ClipboardCheck, action: 'Abrir credenciamento' });
   if (!metrics.length && !result?.error) return null;
+  metrics.sort((a, b) => Number((b.value ?? 0) > 0) - Number((a.value ?? 0) > 0));
 
   return <section aria-labelledby="operational-title">
     <h2 id="operational-title" className="nv-section-title">Visão operacional</h2>
-    <p className="mb-3 mt-1 text-sm text-text-muted">Cobertura de hoje e solicitações que aguardam análise.</p>
-    <div className="nv-priority-grid grid grid-cols-2 gap-3 max-[349px]:grid-cols-1 max-md:gap-2 lg:gap-4">
+    <div className="nv-priority-grid mt-3 grid grid-cols-2 gap-3 max-[349px]:grid-cols-1 max-md:gap-2 lg:gap-4">
       {metrics.map(metric => <MetricCard key={metric.label} {...metric} />)}
     </div>
     {result?.error && <p role="alert" className="mt-3 text-sm text-warning">Não foi possível consultar as filas de aprovação. Os dados da escala continuam disponíveis.</p>}

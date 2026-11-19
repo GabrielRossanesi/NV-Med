@@ -12,7 +12,7 @@ export default function ScheduleMonthGrid({ days, offset, selectedDate, today, o
   const headings = mode === 'month' ? weekdays : days.map(item => weekdays[new Date(`${item.day}T12:00:00`).getDay()]);
   const periodLabel = mode === 'month' ? 'mensal' : mode === 'week' ? 'semanal' : 'diário';
   return <div className="space-y-3">
-    <p className="text-xs text-text-muted md:hidden">Deslize na horizontal para ver os dias. Toque em uma data para abrir os detalhes.</p>
+    {mode !== 'day' && <p className="text-xs text-text-muted md:hidden">Deslize na horizontal para ver os dias.</p>}
     {filtered && <p className="text-xs text-text-muted">{vacanciesOnly ? 'Somente vagas disponíveis para cobertura.' : 'Somente plantões que correspondem aos filtros.'} A contagem mostra os resultados; consulte a cobertura total nos detalhes do dia.</p>}
     <div tabIndex={0} role="region" aria-label={`Calendário ${periodLabel} com médicos e vagas`} className="relative max-h-[75vh] min-w-0 overflow-auto rounded-xl border border-border bg-card-bg focus-visible:outline-2 focus-visible:outline-primary">
       <table className={`w-full ${mode === 'day' ? '' : 'min-w-[1120px]'} table-fixed border-separate border-spacing-0`}>
