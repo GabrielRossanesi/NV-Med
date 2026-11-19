@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { LockKeyhole, LockKeyholeOpen } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import { canUseScheduleEditor } from '@/lib/scheduleEditAccess';
-import { scheduleLeaseValid } from '@/lib/scheduleScope';
+import { scheduleIdleMs, scheduleLeaseValid } from '@/lib/scheduleScope';
 import { useStore } from '@/store/useStore';
 
 type Draft = { dirty: boolean; saving: boolean; discard: () => void };
@@ -70,11 +70,11 @@ function Provider({ children, allowed, userId, organizationId }: { children: Rea
     else { setPrompt(null); const action = next.current; next.current = null; action?.(); }
   }, [hasDirty, isSaving]);
   const check = useCallback(() => {
-    if (!allowedNow() || document.visibilityState === 'hidden' || state.current.locking || !scheduleLeaseValid(state.current.unlocked, state.current.last, Date.now(), isSaving())) {
+    if (!allowedNow() || state.current.locking || !scheduleLeaseValid(state.current.unlocked, state.current.last, Date.now())) {
       lock(); return false;
     }
     return true;
-  }, [allowedNow, isSaving, lock]);
+  }, [allowedNow, lock]);
   const touch = useCallback(() => { if (check()) state.current.last = Date.now(); }, [check]);
   const transition = useCallback((action: () => void) => {
     if (isSaving()) return;
@@ -87,15 +87,48 @@ function Provider({ children, allowed, userId, organizationId }: { children: Rea
     try { return await operation(); }
     finally {
       state.current.pending--; setBusy(false);
-      if (state.current.locking || document.visibilityState === 'hidden' || Date.now() - state.current.last >= 60_000) setTimeout(lock, 0);
+      if (state.current.locking || !scheduleLeaseValid(state.current.unlocked, state.current.last, Date.now())) {
+        state.current.locking = true;
+        setTimeout(() => { if (mounted.current && state.current.unlocked && state.current.locking) lock(); }, 0);
+      }
     }
   }, [check, isSaving, lock]);
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (state.current.unlocked && (!allowedNow() || !scheduleLeaseValid(true, state.current.last, Date.now(), isSaving()))) lock();
-      else if (state.current.locking && !isSaving() && state.current.unlocked) lock();
-    }, 500);
-    const visibility = () => { if (document.visibilityState === 'hidden' && state.current.unlocked) lock(); };
+    if (!unlocked) return;
+    let timer: number | undefined;
+    function recheck() {
+      window.clearTimeout(timer);
+      if (!state.current.unlocked) return;
+      const now = Date.now();
+      if (state.current.locking || !allowedNow() || !scheduleLeaseValid(true, state.current.last, now)) {
+        lock();
+        // Finish a pending lock once an in-flight save settles.
+        if (state.current.unlocked) timer = window.setTimeout(recheck, 500);
+        return;
+      }
+      timer = window.setTimeout(recheck, state.current.last + scheduleIdleMs - now);
+    }
+    function onReturn() {
+      if (document.visibilityState === 'visible') recheck();
+    }
+    function onPageHide() {
+      if (state.current.unlocked) lock();
+    }
+
+    recheck();
+    document.addEventListener('visibilitychange', onReturn);
+    window.addEventListener('focus', onReturn);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onReturn);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onReturn);
+      window.removeEventListener('focus', onReturn);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onReturn);
+    };
+  }, [allowedNow, lock, unlocked]);
+  useEffect(() => {
     const unload = (event: BeforeUnloadEvent) => { if (hasDirty() || isSaving()) { event.preventDefault(); event.returnValue = ''; } };
     const navigation = (event: MouseEvent) => {
       const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
@@ -116,17 +149,24 @@ function Provider({ children, allowed, userId, organizationId }: { children: Rea
         : () => { sentinel.current = false; location.assign(destination); };
       lock();
     };
-    document.addEventListener('visibilitychange', visibility);
     document.addEventListener('click', navigation, true);
     window.addEventListener('beforeunload', unload);
     window.addEventListener('popstate', traverse, true);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', visibility); document.removeEventListener('click', navigation, true); window.removeEventListener('beforeunload', unload); window.removeEventListener('popstate', traverse, true); };
-  }, [allowedNow, hasDirty, isSaving, lock, transition]);
+    return () => { document.removeEventListener('click', navigation, true); window.removeEventListener('beforeunload', unload); window.removeEventListener('popstate', traverse, true); };
+  }, [hasDirty, isSaving, lock, transition]);
   useEffect(() => { if (!allowed && state.current.unlocked) lock(); }, [allowed, lock]);
-  function enable() { if (!allowedNow() || document.visibilityState === 'hidden') return; state.current = { unlocked: true, last: Date.now(), pending: 0, locking: false }; next.current = null; setUnlocked(true); setPrompt(null); }
+  function enable() { if (!allowedNow()) return; state.current = { unlocked: true, last: Date.now(), pending: 0, locking: false }; next.current = null; setUnlocked(true); setPrompt(null); }
   return <Context.Provider value={{ unlocked: allowed && unlocked, allowed, busy, check, touch, run, transition, register, lock, askUnlock: () => allowed && setPrompt('unlock') }}>
-    <div onChangeCapture={event => { if ((event.target as Element).closest('[data-schedule-edit]') && check()) { state.current.last = Date.now(); changedInEvent.current = true; armHistory(); } }} onClickCapture={event => { if ((event.target as Element).closest('[data-schedule-edit]')) touch(); }}>{children}</div>
-    {prompt && <Dialog title={prompt === 'unlock' ? 'Ativar modo edição?' : 'Alterações não salvas'} onClose={() => setPrompt(null)}><div className="space-y-4"><p className="text-sm text-text-secondary">{!allowed ? 'Sua permissão de edição não está disponível. O formulário foi preservado; nenhuma gravação será permitida até a autorização ser restabelecida.' : prompt === 'unlock' ? 'As ações ficarão disponíveis conforme suas permissões. A escala será bloqueada após 60 segundos sem interação de edição ou ao colocar a aba em segundo plano.' : 'A edição foi bloqueada e seu rascunho foi preservado. Retome para conferir e salvar no formulário ou descarte as alterações.'}</p><div className="flex flex-wrap gap-2"><button type="button" className="nv-button" disabled={!allowed || busy} onClick={enable}>{prompt === 'unlock' ? 'Confirmar desbloqueio' : 'Retomar para salvar'}</button>{prompt === 'draft' && <button type="button" className="nv-button-secondary" disabled={busy} onClick={() => { for (const draft of drafts.current.values()) draft.discard(); drafts.current.clear(); changedInEvent.current = false; state.current.unlocked = false; setUnlocked(false); setPrompt(null); const action = next.current; next.current = null; action?.(); }}>Descartar e bloquear</button>}<button type="button" className="nv-button-secondary" onClick={() => { next.current = null; setPrompt(null); }}>{prompt === 'unlock' ? 'Cancelar' : 'Manter rascunho bloqueado'}</button></div></div></Dialog>}
+    <div onChangeCapture={event => {
+      if (!(event.target as Element).closest('[data-schedule-edit]') || !check()) return;
+      state.current.last = Date.now();
+      changedInEvent.current = true;
+      armHistory();
+    }} onClickCapture={event => {
+      const button = (event.target as Element).closest('button:enabled');
+      if (button?.closest('[data-schedule-edit]')) touch();
+    }}>{children}</div>
+    {prompt && <Dialog title={prompt === 'unlock' ? 'Ativar modo edição?' : 'Alterações não salvas'} onClose={() => setPrompt(null)}><div className="space-y-4"><p className="text-sm text-text-secondary">{!allowed ? 'Sua permissão de edição não está disponível. O formulário foi preservado; nenhuma gravação será permitida até a autorização ser restabelecida.' : prompt === 'unlock' ? 'As ações ficarão disponíveis conforme suas permissões. A escala será bloqueada após 5 minutos sem atividade de edição, incluindo o tempo em segundo plano.' : 'A edição foi bloqueada e seu rascunho foi preservado. Retome para conferir e salvar no formulário ou descarte as alterações.'}</p><div className="flex flex-wrap gap-2"><button type="button" className="nv-button" disabled={!allowed || busy} onClick={enable}>{prompt === 'unlock' ? 'Confirmar desbloqueio' : 'Retomar para salvar'}</button>{prompt === 'draft' && <button type="button" className="nv-button-secondary" disabled={busy} onClick={() => { for (const draft of drafts.current.values()) draft.discard(); drafts.current.clear(); changedInEvent.current = false; state.current.unlocked = false; setUnlocked(false); setPrompt(null); const action = next.current; next.current = null; action?.(); }}>Descartar e bloquear</button>}<button type="button" className="nv-button-secondary" onClick={() => { next.current = null; setPrompt(null); }}>{prompt === 'unlock' ? 'Cancelar' : 'Manter rascunho bloqueado'}</button></div></div></Dialog>}
   </Context.Provider>;
 }
 export function ScheduleEditControl() {

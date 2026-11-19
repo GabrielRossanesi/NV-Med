@@ -42,13 +42,20 @@ test('all sectors is dynamic, explicit selections are deduplicated, and foreign/
   assert.deepEqual(scheduleSectors('u2', ['s1'], units, sectors), []);
   assert.deepEqual(scheduleSectors('u1', 'all', units, [...sectors, { ...sectors[0], id: 'new' }]).map(s => s.id), ['s1', 's2', 'new']);
 });
-test('unlock lease expires by wall time and only defers expiration during a save', () => {
-  assert.equal(scheduleLeaseValid(false, 0, 1, false), false);
-  assert.equal(scheduleLeaseValid(true, 1000, 60999, false), true);
-  assert.equal(scheduleLeaseValid(true, 1000, 61000, false), false);
-  assert.equal(scheduleLeaseValid(true, 1000, 120000, false), false);
-  assert.equal(scheduleLeaseValid(true, 1000, 120000, true), true);
-  assert.equal(scheduleLeaseValid(false, 1000, 120000, true), false);
+test('the edit lease expires after five minutes of elapsed time, even after a long timer suspension', () => {
+  const unlockedAt = 1_000;
+  assert.equal(scheduleLeaseValid(false, unlockedAt, unlockedAt + 1), false);
+  assert.equal(scheduleLeaseValid(true, unlockedAt, unlockedAt + 299_999), true);
+  assert.equal(scheduleLeaseValid(true, unlockedAt, unlockedAt + 300_000), false);
+  assert.equal(scheduleLeaseValid(true, unlockedAt, unlockedAt + 900_000), false);
+});
+test('an edit moves the deadline, so returning before the renewed deadline keeps the lease', () => {
+  const unlockedAt = 1_000;
+  const lastEdit = unlockedAt + 240_000;
+  const returnAt = unlockedAt + 400_000;
+  assert.equal(scheduleLeaseValid(true, unlockedAt, returnAt), false);
+  assert.equal(scheduleLeaseValid(true, lastEdit, returnAt), true);
+  assert.equal(scheduleLeaseValid(true, lastEdit, lastEdit + 300_000), false);
 });
 test('bulk removal stays inside the selected sectors and never widens an empty selection', () => {
   const shifts = ['s1', 's2', 's3'].map((sectorId, index) => ({ id: String(index), organizationId: 'org', unitId: 'u1', sectorId, date: '2026-12-01' }));

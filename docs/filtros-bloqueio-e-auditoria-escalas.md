@@ -23,7 +23,7 @@ O modelo atual concede às contas administrativas acesso às unidades da própri
 
 Cada aba começa bloqueada e exige confirmação para ativar a edição. O estado não é salvo em armazenamento compartilhado. Mudanças de usuário, empresa ou permissões reiniciam o controle.
 
-O prazo é de 60 segundos medidos pelo relógio, renovado por interação nos formulários de edição. Movimento do mouse, rolagem e navegação de leitura não renovam o prazo. Colocar a aba em segundo plano bloqueia; uma gravação em andamento termina antes de concluir o bloqueio. Cada ação de escrita verifica o controle novamente.
+O prazo é de cinco minutos medidos pelo relógio e se renova com interações nos formulários de edição. Movimento do mouse, rolagem e navegação de leitura não renovam o prazo. O tempo em segundo plano conta como inatividade. Ao retornar à aba, o cadeado só fecha se o prazo venceu. Uma gravação em andamento termina antes de concluir o bloqueio. Cada ação de escrita verifica o controle novamente.
 
 Rascunhos alterados permanecem no formulário bloqueado. O diálogo permite **Retomar para salvar**, **Descartar e bloquear** ou **Manter rascunho bloqueado**. Retomar exige a confirmação explícita e devolve o usuário ao formulário para validação e salvamento. Não salva automaticamente campos inválidos. Fechar o editor, trocar o recorte ou usar Voltar pede a decisão quando há alterações. Uma entrada temporária no histórico da aba protege o retorno pelo navegador; ela não contém dados de formulário nem estado de desbloqueio. Saídas e recargas com rascunho usam também a proteção nativa de `beforeunload`.
 
