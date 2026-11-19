@@ -2,6 +2,7 @@
 
 import { useId, useState } from 'react';
 import Dialog from '@/components/Dialog';
+import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
 import { canEditPermission, canPerformAction, canViewPermission } from '@/lib/permissions';
 import { coveragePeriodLabel, paymentFrequencyLabels, sectorCoveragePeriods } from '@/lib/scheduling';
 import { formatShiftMoneyInput, parseMoneyCents, sectorFinanceDefaults } from '@/lib/shiftPricing';
@@ -11,7 +12,7 @@ import type { CoveragePeriodKind, PaymentFrequency, Sector, SectorFinanceDefault
 
 type Props = {
   unit: Unit; organizationName: string; specialties: string[]; sector?: Sector; initialSpecialty?: string;
-  initialPeriod?: Sector['coveragePeriods'][number]; onClose: () => void; onSaved: (sector: Sector) => void;
+  scheduleContext?: boolean; initialPeriod?: Sector['coveragePeriods'][number]; onClose: () => void; onSaved: (sector: Sector) => void;
 };
 const defaultCoverage = (kind: CoveragePeriodKind): Sector['coveragePeriods'][number] => ({
   kind, startTime: kind === 'day' ? '07:00' : '19:00', endTime: kind === 'day' ? '19:00' : '07:00', requiredDoctors: 1,
@@ -19,8 +20,9 @@ const defaultCoverage = (kind: CoveragePeriodKind): Sector['coveragePeriods'][nu
 type FinanceDraft = { amount: string; day: string; night: string; frequency: PaymentFrequency | ''; notes: string };
 const moneyInput = (cents: number | null) => cents == null ? '' : formatShiftMoneyInput(cents);
 
-export default function SectorEditorDialog({ unit, organizationName, specialties, sector, initialSpecialty, initialPeriod, onClose, onSaved }: Props) {
+export default function SectorEditorDialog({ unit, organizationName, specialties, sector, initialSpecialty, initialPeriod, onClose, onSaved, scheduleContext = false }: Props) {
   const id = useId();
+  const guard = useScheduleEdit();
   const store = useStore();
   const [name, setName] = useState(sector?.name || '');
   const [description, setDescription] = useState(sector?.description || '');
@@ -36,7 +38,9 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
     && item.organizationId === unit.organizationId && !['cancelled', 'completed'].includes(item.status)
     && new Date(item.date + 'T' + item.endTime).getTime() + (item.endTime < item.startTime ? 86_400_000 : 0) > referenceTime
     && item.specialty !== primarySpecialty) : [];
-  const canSave = canPerformAction(store.currentUser, 'unidades', sector ? 'edit' : 'create');
+  useScheduleDraft(`sector:${id}`, scheduleContext ? JSON.stringify([name, description, status, primarySpecialty, periods, financialDraft]) : null, store.saving, onClose);
+  const close = () => scheduleContext ? guard.transition(onClose) : onClose();
+  const canSave = (!scheduleContext || guard.unlocked) && canPerformAction(store.currentUser, 'unidades', sector ? 'edit' : 'create');
   const canSeeFinance = canViewPermission(store.currentUser, 'financeiro');
   const canEditFinance = canSave && canEditPermission(store.currentUser, 'financeiro');
   const rateQuery = useShiftRates(unit.organizationId, Boolean(sector) && canSeeFinance);
@@ -47,7 +51,7 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    if (!canSave || store.saving) return;
+    if (!canSave || store.saving || (scheduleContext && !guard.check())) return;
     if (!name.trim()) return setError('Informe o nome do setor.');
     if (!available.includes(primarySpecialty)) return setError('Escolha uma especialidade ativa da empresa para este setor.');
     if (affected.length) return setError('Regularize os plantões futuros e as trocas antes de alterar a especialidade do setor.');
@@ -67,14 +71,15 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
       }
       defaults = { amount_cents: value(finance.amount), day_cents: value(day), night_cents: value(night), frequency: finance.frequency || null, notes: finance.notes.trim() };
     }
-    const saved = updated ? (await store.updateSector(updated, defaults) ? updated : null) : await store.addSector(payload, defaults);
+    const persist = async () => updated ? (await store.updateSector(updated, defaults) ? updated : null) : await store.addSector(payload, defaults);
+    const saved = scheduleContext ? await guard.run(persist) : await persist();
     if (saved) onSaved(saved);
     else setError(useStore.getState().error || 'Não foi possível salvar o setor.');
   }
 
-  return <Dialog title={sector ? 'Editar setor' : 'Novo setor'} onClose={() => !store.saving && onClose()}
-    footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={onClose}>Cancelar</button><button type="submit" form={id} className="nv-button" disabled={store.saving || !canSave}>{store.saving ? 'Salvando…' : 'Salvar setor'}</button></div>}>
-    <form id={id} onSubmit={save} className="space-y-4">
+  return <Dialog title={sector ? 'Editar setor' : 'Novo setor'} onClose={() => !store.saving && close()}
+    footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={close}>Cancelar</button><button type="submit" form={id} className="nv-button" disabled={store.saving || !canSave}>{store.saving ? 'Salvando…' : 'Salvar setor'}</button></div>}>
+    <form id={id} onSubmit={save} data-schedule-edit={scheduleContext || undefined}><fieldset disabled={!canSave || store.saving} className="space-y-4">
       <p className="text-xs text-text-muted">{organizationName} · {unit.name}</p>
       <label className="nv-label">Nome do setor<input autoFocus className="nv-input" maxLength={100} required value={name} onChange={event => setName(event.target.value)} /></label>
       <label className="nv-label">Descrição <span className="font-normal text-text-muted">(opcional)</span><textarea className="nv-input" rows={2} maxLength={1000} value={description} onChange={event => setDescription(event.target.value)} /></label>
@@ -117,6 +122,6 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
       </fieldset>}
       <label className="nv-label">Situação<select className="nv-input" value={status} onChange={event => setStatus(event.target.value as Sector['status'])}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    </form>
+    </fieldset></form>
   </Dialog>;
 }

@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import { canPerformAction, isScheduleAdministrator, sanitizeAdditionalPermissions } from '../src/lib/permissions.ts';
 import { scheduleSectors, scheduleLeaseValid } from '../src/lib/scheduleScope.ts';
 import { getScheduleDeletionTargets } from '../src/lib/scheduleDeletion.ts';
+import { canUseScheduleEditor } from '../src/lib/scheduleEditAccess.ts';
+
+test('editor permission is rechecked against the current user and company without granting medical roles', () => {
+  const user = { id: 'admin', authUserId: 'auth-admin', organizationId: 'org', type: 'tenant_user', role: 'Diretor', status: 'active', additionalPermissions: {} };
+  const session = { userId: 'auth-admin', organizationId: 'org' };
+  assert.equal(canUseScheduleEditor(user, 'org', session), true);
+  for (const patch of [{ additionalPermissions: { 'escala.edit': 'deny' } }, { status: 'inactive' }, { authUserId: 'another-user' }, { organizationId: 'other-company' }, { role: 'Médico', additionalPermissions: { 'escala.edit': 'allow' } }, { role: 'Coordenador Médico', additionalPermissions: { escala: 'edit' } }]) {
+    assert.equal(canUseScheduleEditor({ ...user, ...patch }, 'org', session), false);
+  }
+  assert.equal(canUseScheduleEditor(user, 'other-company', session), false);
+  assert.equal(canUseScheduleEditor(user, '', session), false);
+  // Restoring a legitimate permission allows a fresh explicit unlock, not an
+  // automatic unlock or an assignment of administrative powers to a doctor.
+  assert.equal(canUseScheduleEditor({ ...user, role: 'Escalista' }, 'org', session), true);
+});
 
 test('medical and medical coordinator profiles cannot acquire administrative powers through grants', () => {
   for (const role of ['Médico', 'Coordenador Médico', 'Medico', 'Unknown']) {

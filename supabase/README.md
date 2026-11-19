@@ -1,5 +1,7 @@
 # Banco de dados do NV Med
 
+`39_schedule_audit_context.sql` reutiliza o histórico e o estágio privados da 38 para correlação transacional, contexto histórico de unidades e importações privilegiadas. Aplique após a 38. [Guia dos complementos](../docs/complementos-controle-auditoria-escalas.md)
+
 Filtros e controle administrativo das escalas: aplicar `38_schedule_controls_and_audit.sql` após a 37 e antes da interface correspondente. Reforça a autorização usada por RLS/RPCs e amplia o histórico existente, sem modificar escalas reais nem reagendar o Cron. [Guia de filtros, bloqueio e auditoria](../docs/filtros-bloqueio-e-auditoria-escalas.md)
 
 Escala Master e afastamentos: aplicar `37_master_schedule.sql` após a 36 e configurar `master-schedule-cron.setup.sql` para geração diária. Não converte escalas importadas. O [guia de recorrências e ausências](../docs/escala-master-e-afastamentos.md) descreve permissões, prévia obrigatória, contratos, laboratório e ativação.

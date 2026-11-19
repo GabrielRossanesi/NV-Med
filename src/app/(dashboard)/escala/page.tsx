@@ -554,6 +554,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setScheduleMode('general'); setUnitId(item.unitId); if (item.sectorId) setSectorId(item.sectorId); setDate(item.date); openShift(item);
   }
 
+  useScheduleDraft('week-copy', weekPreview ? JSON.stringify(weekPreview.clones.map(shift => shift.id)) : null, store.saving, () => setWeekPreview(null));
   useScheduleDraft('shift', form ? JSON.stringify([form, agreementDraft, vacancyCount, recurrence, customWeekdays, repeatUntil]) : null, store.saving, () => { setForm(null); setRecurringPreview(null); });
   const scopePicker = <ScheduleScopePicker units={units} sectors={sectors} unitId={unitId} selection={sectorSelection}
     onSelectUnit={id => editGuard.transition(() => { setUnitId(id); setSectorId(''); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); })}
@@ -686,7 +687,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
       {weekPreview.blocked + weekPreview.duplicates + weekPreview.conflicts > 0 && <p role="alert" className="rounded-lg bg-danger/5 p-3 text-xs text-danger">Revise os impedimentos na semana de destino antes de copiar.</p>}
       {(statusFilter === 'open' || coverageFilter === 'open') && (availableVacancies.loading || availableVacancies.error) && <p role={availableVacancies.error ? 'alert' : 'status'} className="text-sm text-text-secondary">{availableVacancies.error || 'Verificando vagas disponíveis…'}</p>}
     {pageError && <p role="alert" className="text-xs text-danger">{pageError}</p>}
-      <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setWeekPreview(null)} disabled={store.saving}>Cancelar</button><button type="button" className="nv-button" onClick={() => void confirmWeekPreview()} disabled={Boolean(weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts || store.saving)}>{store.saving ? 'Copiando…' : 'Copiar postos'}</button></div>
+      <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setWeekPreview(null)} disabled={store.saving}>Cancelar</button><button type="button" className="nv-button" onClick={() => void confirmWeekPreview()} disabled={Boolean(weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts || store.saving || !canCreateSchedule)}>{store.saving ? 'Copiando…' : 'Copiar postos'}</button></div>
     </div></Dialog>}
     {form && <Dialog title={formTitle} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
       {openedShift && <ShiftRecordSummary shift={openedShift} organization={activeOrganization?.name}
@@ -746,12 +747,12 @@ function Schedule({ params }: { params: URLSearchParams }) {
           {rateQuery.error && <button type="button" className="text-primary underline" onClick={rateQuery.reload}>Tentar novamente</button>}
         </div>)}
       {formError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{formError}</p>}{store.saving && <p role="status" className="flex items-center gap-2 text-xs text-text-muted"><LoaderCircle size={14} className="animate-spin"/>Confirmando o plantão no banco de dados…</p>}</form></Dialog>}
-    {sectorEditorOpen && form && formUnit && <SectorEditorDialog unit={formUnit} organizationName={activeOrganization?.name || ''} specialties={formSpecialties}
+    {sectorEditorOpen && form && formUnit && <SectorEditorDialog scheduleContext unit={formUnit} organizationName={activeOrganization?.name || ''} specialties={formSpecialties}
       initialSpecialty={formSpecialties.includes(form.specialty || '') ? form.specialty : undefined}
       initialPeriod={{ kind: coverageKind, startTime: form.startTime, endTime: form.endTime, requiredDoctors: 1 }}
       onClose={() => setSectorEditorOpen(false)} onSaved={selectCreatedSector}/>}
     {recurringPreview && <Dialog title="Revisar plantões recorrentes" onClose={() => !store.saving && setRecurringPreview(null)}
-      footer={<div className="flex flex-wrap justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setRecurringPreview(null)}>Voltar à edição</button><button type="button" className="nv-button" disabled={store.saving} onClick={() => void confirmRecurrence()}>{store.saving ? 'Salvando…' : 'Confirmar criação'}</button></div>}>
+      footer={<div className="flex flex-wrap justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setRecurringPreview(null)}>Voltar à edição</button><button type="button" className="nv-button" disabled={store.saving || !canCreateSchedule} onClick={() => void confirmRecurrence()}>{store.saving ? 'Salvando…' : 'Confirmar criação'}</button></div>}>
       <div className="space-y-3">
         <p className="text-sm font-semibold">{recurringPreview.inputs.length} postos em {recurringPreview.dates.length} datas</p>
         {canSeeFinancial && <p className="text-sm text-text-secondary">{recurringPreview.cents == null ? 'Sem valor combinado' : `${formatShiftMoney(recurringPreview.cents)} por plantão`}{recurringPreview.inputs[0]?.agreement && ` · ${paymentFrequencyLabels[recurringPreview.inputs[0].agreement.frequency]}`}. Cada plantão terá seu próprio registro.</p>}

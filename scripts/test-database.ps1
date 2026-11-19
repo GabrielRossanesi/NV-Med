@@ -91,7 +91,11 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '38_schedule_controls_and_audit.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-controls.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-38, pré/pós-verificação e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '39_schedule_audit_context.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-audit-context.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-controls.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
+  Write-Output 'PASS: baseline 01-18, migrations 19-39, pré/pós-verificação e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

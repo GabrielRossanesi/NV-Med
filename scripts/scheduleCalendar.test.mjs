@@ -347,3 +347,21 @@ test('a valid selected scope renders the actual calendar and keeps operational i
     assert.ok(!grid.includes('Confirmação pendente'));
   }
 });
+
+const { ScheduleHistoryEvent } = loadSource(path.join(root, 'src/components/schedule/ScheduleHistory.tsx'));
+const auditEntry = {
+  id: 42, entity_id: 'shift-1', shift_id: 'shift-1', action: 'doctor_replaced', actor_id: 'user-1', actor_name: 'Gestão de validação', actor_role: 'Gerente',
+  origin: 'approval', organization_id: 'org', organization: 'Empresa fictícia', correlation_id: 'server-transaction-123', unit: 'Hospital registrado', sector: 'Cirurgia',
+  shift_date: '2026-11-23', created_at: '2026-11-18T17:35:00Z', previous: { doctor: 'Dra. Ana Completa' }, next: { doctor: 'Dr. Bruno Completo' },
+};
+test('history presents structured changes, company, server correlation and Sao Paulo time', () => {
+  const html = renderToStaticMarkup(createElement(ScheduleHistoryEvent, { entry: auditEntry, units: [], sectors: [] }));
+  for (const value of ['Gestão de validação', 'Gerente', 'Empresa fictícia', 'Hospital registrado', 'Dra. Ana Completa', 'Dr. Bruno Completo', '14:35:00', 'server-transaction-123', 'shift-1', 'user-1']) assert.ok(html.includes(value), value);
+  assert.ok(!html.includes('Reverter'));
+});
+test('automatic history identifies the system and legacy events do not fabricate a correlation', () => {
+  const html = renderToStaticMarkup(createElement(ScheduleHistoryEvent, { entry: { ...auditEntry, origin: 'cron', actor_id: null, actor_name: null, actor_role: null, correlation_id: null }, units: [], sectors: [] }));
+  assert.ok(html.includes('Sistema — Geração automática'));
+  assert.ok(!html.includes('Gestão de validação'));
+  assert.ok(!html.includes('Correlação:'));
+});

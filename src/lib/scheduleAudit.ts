@@ -8,6 +8,7 @@ export const scheduleAuditLabels: Record<string, string> = {
 };
 export const scheduleOriginLabels: Record<string, string> = { manual: 'Manual', cron: 'Cron da Escala Master', master: 'Escala Master', approval: 'Aprovação de candidatura ou troca', portal: 'Portal Médico', import: 'Importação', database: 'Processo do banco' };
 export interface ScheduleAuditEntry {
+  organization_id?: string; organization?: string | null; correlation_id?: string | null;
   id: number; entity_id: string; shift_id: string | null; action: string; actor_id: string | null; actor_name: string | null; actor_role: string | null;
   origin: string | null; previous: Record<string, unknown> | null; next: Record<string, unknown> | null; created_at: string; shift_date: string | null; unit: string | null; sector: string | null;
 }
