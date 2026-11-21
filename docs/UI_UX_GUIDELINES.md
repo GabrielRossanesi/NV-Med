@@ -26,6 +26,13 @@
 - Use a ordem natural de navegação. Garanta foco visível, alvos de toque adequados e operação por teclado. Dê nomes acessíveis aos botões de ícone e preserve rótulos ao simplificar a interface.
 - Combine cor com texto ou ícone identificável para distinguir estados. Anuncie carregamento, erro e sucesso quando o feedback for assíncrono.
 
+## Notificações de ações
+
+- Use `notify` de `src/lib/notifications.ts` para confirmar ações relevantes depois que o servidor responder. Escolha sucesso para a conclusão, informação para um próximo estado, atenção para um cuidado necessário e erro para uma falha sem feedback adequado na tela.
+- Use títulos curtos e inclua uma descrição quando ela explicar o resultado ou orientar a recuperação. Mantenha validações e falhas de formulário perto da ação e preserve o que foi digitado. Mantenha confirmações, avisos operacionais e resumos que precisem ficar na tela.
+- Evite Toasts ao navegar, filtrar ou abrir uma área. Evite repetir a mesma mensagem como Toast e como aviso inline. Use `persistent` para erros que exigem leitura ou ação antes de continuar.
+- Use `withinDialog` para confirmações exibidas em um diálogo que permanece aberto. Por padrão, erros globais usam o diálogo ativo e confirmações usam a página.
+
 ## Identidade visual e auditoria
 
 - Reutilize componentes, classes `nv-*` e tokens existentes de cor, tipografia, espaçamento e estados. Mantenha padrões de navegação e interação reconhecíveis entre módulos.

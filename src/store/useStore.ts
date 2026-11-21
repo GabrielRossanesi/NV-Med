@@ -5,25 +5,28 @@ import * as cloud from '@/services/supabaseService';
 import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission, canPerformAction } from '@/lib/permissions';
 import type { DoctorBanking } from '@/lib/doctorBanking';
+import { notify } from '@/lib/notifications';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
+type SaveFeedback = { success?: string | false; inlineError?: boolean; withinDialog?: boolean };
+
 interface NVMedState {
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
   currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
-  saving: boolean; error: string | null; notice: string | null;
+  saving: boolean; error: string | null;
   clearFeedback: () => void; clearSession: () => void;
   syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
   addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<boolean>;
   updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
-  updateUnit: (unit: Unit) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
-  addSector: (sector: Omit<Sector, 'id' | 'organizationId'>, finance?: SectorFinanceDefaults) => Promise<Sector | null>;
+  updateUnit: (unit: Unit, feedback?: SaveFeedback) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
+  addSector: (sector: Omit<Sector, 'id' | 'organizationId'>, finance?: SectorFinanceDefaults, feedback?: SaveFeedback) => Promise<Sector | null>;
   updateSector: (sector: Sector, finance?: SectorFinanceDefaults) => Promise<boolean>; deleteSector: (id: string) => Promise<boolean>;
   addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>) => Promise<boolean>;
-  addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[]) => Promise<boolean>;
+  addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[], feedback?: SaveFeedback) => Promise<boolean>;
   updateShift: (shift: ShiftWrite) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
   updateShiftFinancials: (...input: Parameters<typeof cloud.updateShiftFinancialsInSupabase>) => Promise<boolean>;
@@ -38,7 +41,7 @@ interface NVMedState {
   addOrganization: (org: Omit<Organization, 'id'>) => Promise<boolean>;
   updateOrganization: (org: Organization) => Promise<boolean>;
   deleteOrganization: (id: string, confirmation: string) => Promise<boolean>;
-  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>) => Promise<boolean>;
+  updateOrganizationSettings: (orgId: string, updates: Partial<Organization>, feedback?: SaveFeedback) => Promise<boolean>;
   addUser: (user: Omit<UserAccount, 'id' | 'createdAt'> & { reason?: string }) => Promise<boolean>;
   updateUser: (user: UserAccount & { reason?: string }) => Promise<boolean>;
   deleteUser: (id: string, confirmation: string) => Promise<boolean>;
@@ -50,12 +53,21 @@ interface NVMedState {
 }
 
 export const useStore = create<NVMedState>()(persist((set, get) => {
-  async function commit(work: () => Promise<void>) {
+  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', inlineError = false, withinDialog }: SaveFeedback = {}) {
     if (get().saving) return false;
-    set({ saving: true, error: null, notice: null });
-    try { await work(); set({ notice: 'Alteração salva no banco.' }); return true; }
-    catch (error) { set({ error: error instanceof Error ? error.message : 'Não foi possível salvar. Tente novamente.' }); return false; }
-    finally { set({ saving: false }); }
+    set({ saving: true, error: null });
+    try {
+      await work();
+      if (success) notify.success(success, { withinDialog });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível salvar. Tente novamente.';
+      set({ error: message });
+      if (!inlineError) notify.error('Não foi possível concluir a ação.', { description: message, persistent: true });
+      return false;
+    } finally {
+      set({ saving: false });
+    }
   }
   function orgId() {
     const id = get().activeOrganizationId;
@@ -68,10 +80,10 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   }
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
-    saving: false, error: null, notice: null, theme: 'light', sidebarCollapsed: true,
-    setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null, notice: null }),
+    saving: false, error: null, theme: 'light', sidebarCollapsed: true,
+    setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null }),
     setSidebarCollapsed: sidebarCollapsed => set({ sidebarCollapsed }),
-    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null, notice: null }),
+    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
     addDoctor: (input, banking) => commit(async () => {
@@ -81,31 +93,31 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       set({ doctors: [...get().doctors, doctor] });
       try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
       catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
-    }),
+    }, { success: 'Médico cadastrado.', inlineError: true }),
     updateDoctor: doctor => commit(async () => { await cloud.saveDoctorToSupabase(doctor); set({ doctors: get().doctors.map(d => d.id === doctor.id ? doctor : d) }); }),
     deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
     addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit, true); set({ units: [...get().units, unit] }); }),
-    updateUnit: unit => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }),
+    updateUnit: (unit, feedback) => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }, feedback),
     deleteUnit: id => commit(async () => { await cloud.deleteUnitFromSupabase(id); set({ units: get().units.filter(u => u.id !== id), sectors: get().sectors.filter(s => s.unitId !== id), shifts: get().shifts.filter(s => s.unitId !== id) }); }),
-    addSector: async (input, finance) => {
+    addSector: async (input, finance, feedback) => {
       const sector = { ...input, id: crypto.randomUUID(), organizationId: orgId() };
-      const saved = await commit(async () => { await cloud.saveSectorToSupabase(sector, true, finance); set({ sectors: [...get().sectors, sector] }); });
+      const saved = await commit(async () => { await cloud.saveSectorToSupabase(sector, true, finance); set({ sectors: [...get().sectors, sector] }); }, { success: 'Setor cadastrado.', inlineError: true, ...feedback });
       return saved ? sector : null;
     },
-    updateSector: (sector, finance) => commit(async () => { await cloud.saveSectorToSupabase(sector, false, finance); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }),
+    updateSector: (sector, finance) => commit(async () => { await cloud.saveSectorToSupabase(sector, false, finance); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }, { success: 'Setor atualizado.', inlineError: true }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
     addShift: input => commit(async () => {
       const saved = await cloud.saveShiftToSupabase({ ...input, id: crypto.randomUUID(), organizationId: orgId() });
       set({ shifts: [...get().shifts, saved] });
-    }),
-    addShifts: inputs => commit(async () => {
+    }, { success: 'Plantão cadastrado.', inlineError: true }),
+    addShifts: (inputs, feedback) => commit(async () => {
       const saved = await cloud.saveShiftsToSupabase(inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })));
       set({ shifts: [...get().shifts, ...saved] });
-    }),
+    }, { success: 'Plantões cadastrados.', inlineError: true, ...feedback }),
     updateShift: shift => commit(async () => {
       const saved = await cloud.saveShiftToSupabase(shift);
       set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
-    }),
+    }, { success: 'Plantão atualizado.', inlineError: true }),
     updateShiftPayment: (id, status) => commit(async () => {
       const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
@@ -117,12 +129,12 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
       const updated = await cloud.updateShiftFinancialsInSupabase(id, amount, frequency, status, settlement);
       set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
-    }),
+    }, { success: 'Pagamento atualizado.', inlineError: true, withinDialog: true }),
     updateShiftAgreement: (id, selection, adjustment) => commit(async () => {
       if (!get().shifts.some(shift => shift.id === id && shift.organizationId === orgId())) throw new Error('Plantão não encontrado nesta empresa.');
       const updated = await cloud.editShiftAgreement(id, selection, adjustment);
       set({ shifts: get().shifts.map(shift => shift.id === id ? updated : shift) });
-    }),
+    }, { success: 'Acordo atualizado.', inlineError: true, withinDialog: true }),
     deleteShift: id => commit(async () => { await cloud.deleteShiftFromSupabase(id); set({ shifts: get().shifts.filter(s => s.id !== id) }); }),
     deleteShifts: ids => commit(async () => {
       if (!canPerformAction(get().currentUser, 'escala', 'delete')) throw new Error('Seu acesso não permite excluir plantões.');
@@ -134,7 +146,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
       const deleted = new Set(uniqueIds);
       set({ shifts: get().shifts.filter(shift => !deleted.has(shift.id)) });
-    }),
+    }, { success: 'Exclusão de plantões concluída.', inlineError: true }),
     vacateShifts: ids => commit(async () => {
       if (!canEditPermission(get().currentUser, 'escala')) throw new Error('Seu acesso permite apenas visualizar a escala.');
       const uniqueIds = [...new Set(ids)];
@@ -148,7 +160,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
       const byId = new Map(saved.map(shift => [shift.id, shift]));
       set({ shifts: get().shifts.map(shift => byId.get(shift.id) || shift) });
-    }),
+    }, { success: 'Plantões liberados.', inlineError: true }),
     uploadDocument: (doctorId, type, file) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());
       if (!doctor) throw new Error('Médico não encontrado nesta empresa.');
@@ -157,9 +169,9 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const saved = await cloud.uploadDocumentFileToSupabase(file, previous.id);
       set({ documents: [...get().documents.filter(d => d.id !== saved.id), saved] });
       await refreshDocumentAudits();
-    }),
-    updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const saved = await cloud.saveDocumentToSupabase({ ...previous, status }); set({ documents: get().documents.map(d => d.id === id ? saved : d) }); await refreshDocumentAudits(); }),
-    updateDocument: document => commit(async () => { const saved = await cloud.saveDocumentToSupabase(document); set({ documents: get().documents.map(item => item.id === document.id ? saved : item) }); await refreshDocumentAudits(); }),
+    }, { success: 'Documento enviado.' }),
+    updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const saved = await cloud.saveDocumentToSupabase({ ...previous, status }); set({ documents: get().documents.map(d => d.id === id ? saved : d) }); await refreshDocumentAudits(); }, { success: 'Status do documento atualizado.' }),
+    updateDocument: document => commit(async () => { const saved = await cloud.saveDocumentToSupabase(document); set({ documents: get().documents.map(item => item.id === document.id ? saved : item) }); await refreshDocumentAudits(); }, { success: 'Documento atualizado.' }),
     bulkUpdateDocuments: (documentIds, status, reviewNote) => commit(async () => {
       const idSet = new Set(documentIds);
       const selected = get().documents.filter(document => idSet.has(document.id) && document.organizationId === orgId());
@@ -169,7 +181,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const savedMap = new Map(saved.map(document => [document.id, document]));
       set({ documents: get().documents.map(document => savedMap.get(document.id) || document) });
       await refreshDocumentAudits();
-    }),
+    }, { success: 'Documentos atualizados.' }),
     addOrganization: input => commit(async () => { const org = { ...input, id: crypto.randomUUID() }; await cloud.createOrganizationInSupabase(org); set({ organizations: [...get().organizations, org], activeOrganizationId: org.id }); }),
     updateOrganization: org => commit(async () => { await cloud.updateOrganizationInSupabase(org); set({ organizations: get().organizations.map(o => o.id === org.id ? org : o) }); }),
     deleteOrganization: (id, confirmation) => commit(async () => {
@@ -191,7 +203,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         simulatedOrganizationId: get().simulatedOrganizationId === id ? null : get().simulatedOrganizationId,
       });
     }),
-    updateOrganizationSettings: (id, updates) => commit(async () => {
+    updateOrganizationSettings: (id, updates, feedback) => commit(async () => {
       const previous = get().organizations.find(o => o.id === id);
       if (!previous) throw new Error('Empresa não encontrada.');
       const org = { ...previous, ...updates };
@@ -205,11 +217,11 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
           ? [...get().documents.filter(document => document.organizationId !== id), ...refreshedDocuments]
           : get().documents,
       });
-    }),
-    addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }),
-    updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }),
+    }, feedback),
+    addUser: input => commit(async () => { const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível criar o acesso.'); set({ users: [...get().users, result.user] }); }, { inlineError: true }),
+    updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }, { inlineError: true }),
     deleteUser: (id, confirmation) => commit(async () => { const res = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível excluir o usuário.'); set({ users: get().users.filter(user => user.id !== id) }); }),
-    setUserTemporaryPassword: (id, password) => commit(async () => { const res = await fetch('/api/admin/users/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar a senha.'); }),
+    setUserTemporaryPassword: (id, password) => commit(async () => { const res = await fetch('/api/admin/users/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar a senha.'); }, { success: false }),
     updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }),
     startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
     stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),

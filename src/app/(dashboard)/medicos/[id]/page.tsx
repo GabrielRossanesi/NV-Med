@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { getDoctorOperationalUnitIds } from '@/lib/doctorUnits';
 import { createClient } from '@/lib/supabase/client';
+import { notify } from '@/lib/notifications';
 import { canPerformAction, canViewPermission } from '@/lib/permissions';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import DoctorProfileEditor from '@/components/DoctorProfileEditor';
@@ -72,7 +73,9 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       if (!result?.data?.profile) throw new Error('Atualize a página para consultar o perfil salvo.');
       const updated = mapDoctorFromDb(result.data.profile);
       useStore.setState(state => ({ doctors: state.doctors.map(d => d.id === updated.id ? updated : d) }));
-    } catch { useStore.setState({ error: 'Não foi possível atualizar a visualização. Recarregue a página para conferir os dados.' }); }
+    } catch {
+      notify.warning('A visualização está desatualizada.', { description: 'Recarregue a página para conferir os dados salvos.' });
+    }
   }
   const [portalRole, setPortalRole] = useState<string | null>(null);
   const [roleError, setRoleError] = useState('');
@@ -98,7 +101,11 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     setRoleSaving(true); setRoleError('');
     const result = await createClient()?.rpc('nv_prepare_doctor_credential', { target: doctorId });
     if (!result || result.error) setRoleError('Não foi possível preparar o credenciamento.');
-    else { setPortalRole('Médico'); setRevision(v => v + 1); useStore.setState({ notice: 'Cadastro disponível para análise em Credenciamento. Nenhum acesso ao portal foi criado.' }); }
+    else {
+      setPortalRole('Médico');
+      setRevision(v => v + 1);
+      notify.info('Cadastro disponível para análise.', { description: 'Consulte Credenciamento. Nenhum acesso ao portal foi criado.' });
+    }
     setRoleSaving(false);
   }
 
@@ -129,9 +136,14 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       if (!snapshot?.data?.profile) throw new Error('Não foi possível consultar o cadastro atual.');
       const result = await client?.rpc('nv_update_doctor_profile', { target: doctorId, profile: { status: newStatus }, revision: snapshot.data.profile.updated_at });
       if (!result || result.error) throw new Error(result?.error?.message || 'Não foi possível alterar o status.');
-      useStore.setState({ notice: 'Status do cadastro atualizado.' });
+      notify.success('Status do cadastro atualizado.');
       await refreshProfile();
-    } catch (failure) { useStore.setState({ error: (failure as Error).message }); }
+    } catch (failure) {
+      notify.error('Não foi possível atualizar o status.', {
+        description: failure instanceof Error ? failure.message : undefined,
+        persistent: true,
+      });
+    }
     finally { setStatusSaving(false); }
   };
 
@@ -386,7 +398,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                         <h4 className="font-semibold text-xs text-text-primary leading-snug">{doc.name}</h4>
                       </div>
                       
-                      {doc.filePath && <button className="text-primary text-xs underline" onClick={async () => { try { const url = await openDocument(doc.id); window.open(url, '_blank', 'noopener,noreferrer'); } catch (e) { useStore.setState({error: e instanceof Error ? e.message : 'Falha ao abrir documento.'}); } }}>Abrir documento</button>}
+                      {doc.filePath && <button className="text-primary text-xs underline" onClick={async () => { try { const url = await openDocument(doc.id); window.open(url, '_blank', 'noopener,noreferrer'); } catch (e) { notify.error('Não foi possível abrir o documento.', { description: e instanceof Error ? e.message : undefined }); } }}>Abrir documento</button>}
                       {doc.fileName && (
                         <div className="text-[10px] text-text-muted flex flex-col sm:flex-row sm:gap-4 gap-1 pl-6">
                           <span className="truncate max-w-[200px] font-mono">Arquivo: {doc.fileName}</span>
@@ -466,7 +478,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       <DoctorPortalAccess key={doctor.id + '-access'} doctorId={doctor.id} organizationId={doctor.organizationId} revision={revision} onChanged={() => void refreshProfile()}/>
       <DoctorProfileHistory key={doctor.id + '-history'} doctorId={doctor.id} revision={revision}/>
       {editing && <DoctorProfileEditor doctorId={doctor.id} specialties={organizations.find(o => o.id === doctor.organizationId)?.settings.specialties || []}
-        onClose={() => setEditing(false)} onSaved={() => { setEditing(false); useStore.setState({ notice: 'Perfil médico atualizado com sucesso.' }); void refreshProfile(); }}/>}
+        onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void refreshProfile(); }}/>}
     </div>
     </AccessGuard>
   );

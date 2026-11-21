@@ -46,7 +46,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
     event.preventDefault();
     if (!unit || !unitSpecialties || !canEditUnit) return;
     const specialties = [...new Set(unitSpecialties)].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    if (await store.updateUnit({ ...unit, specialties })) setUnitSpecialties(null);
+    if (await store.updateUnit({ ...unit, specialties }, { inlineError: true })) setUnitSpecialties(null);
     else setUnitFormError(useStore.getState().error || 'Não foi possível atualizar as especialidades.');
   }
 

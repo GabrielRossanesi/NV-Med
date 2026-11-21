@@ -8,6 +8,7 @@ import MasterRuleEditor from './MasterRuleEditor';
 import DoctorAbsenceManager from './DoctorAbsenceManager';
 import { generateMaster, masterRuleStatus, publishMasterCoverage } from '@/services/masterScheduleService';
 import { employmentLabels } from '@/lib/scheduling';
+import { notify } from '@/lib/notifications';
 import { masterStatusLabels, type MasterRule } from '@/lib/masterSchedule';
 import type { Doctor, Sector, Unit } from '@/types';
 import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
@@ -44,14 +45,28 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
   async function saveStatus() {
     if (!statusEditor || !confirmed || !guard.check()) return;
     setBusy(true); setActionError('');
-    try { await guard.run(() => masterRuleStatus(statusEditor.rule.id, statusEditor.state, statusEditor.rule.revision, decision, true)); await changed(); setStatusEditor(null); }
+    try {
+      const saved = await guard.run(async () => {
+        await masterRuleStatus(statusEditor.rule.id, statusEditor.state, statusEditor.rule.revision, decision, true);
+        return true;
+      });
+      await changed();
+      setStatusEditor(null);
+      if (saved) notify.success('Status da recorrência atualizado.');
+    }
     catch (failure) { setActionError(failure instanceof Error ? failure.message : 'Não foi possível alterar a recorrência.'); }
     finally { setBusy(false); }
   }
   async function publish(id: string, enabled: boolean) {
     if (!guard.check()) return;
     setBusy(true); setActionError('');
-    try { await guard.run(() => publishMasterCoverage(id, enabled)); await changed(); }
+    try {
+      await guard.run(async () => {
+        await publishMasterCoverage(id, enabled);
+        notify.success(enabled ? 'Oferta de cobertura publicada.' : 'Oferta de cobertura retirada.');
+      });
+      await changed();
+    }
     catch (failure) { setActionError(failure instanceof Error ? failure.message : 'Não foi possível atualizar a oferta.'); }
     finally { setBusy(false); }
   }

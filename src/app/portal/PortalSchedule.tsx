@@ -7,6 +7,7 @@ import EmploymentBadge from '@/components/schedule/EmploymentBadge';
 import type { EmploymentType } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
+import { notify } from '@/lib/notifications';
 import PresencePanel from '@/components/schedule/PresencePanel';
 import { useLocationHash } from '@/components/useLocationHash';
 
@@ -42,7 +43,7 @@ function StatusLabel({ status }: { status: Status }) {
   return <span className={'nv-badge ' + color}><Icon size={15}/>{label}</span>;
 }
 
-function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () => void; onSaved: (message: string) => void }) {
+function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () => void; onSaved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const canExchange = shift.assigned_to_me && shift.upcoming && (shift.status === 'confirmed' || shift.status === 'exchange');
@@ -58,8 +59,14 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
         ? await client.rpc('nv_request_exchange', { target: shift.id, cancel_request: cancel })
         : await client.rpc('nv_apply_for_shift', { target: shift.id, cancel_application: cancel });
       if (result.error) throw new Error(portalError(result.error));
-      onSaved(canExchange ? (cancel ? 'Solicitação de troca cancelada.' : 'Troca publicada. Você segue responsável até a aprovação.') :
-        (cancel ? 'Candidatura cancelada.' : 'Candidatura enviada à coordenação.'));
+      onSaved();
+      if (canExchange && !cancel) {
+        notify.warning('Troca publicada.', { description: 'Você segue responsável até a aprovação.' });
+      } else if (cancel) {
+        notify.success(canExchange ? 'Solicitação de troca cancelada.' : 'Candidatura cancelada.');
+      } else {
+        notify.info('Candidatura enviada à coordenação.');
+      }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível atualizar o plantão.');
     } finally {
@@ -98,7 +105,6 @@ export default function PortalSchedule() {
   const [applications, setApplications] = useState<Application[] | null>(null);
   const [selected, setSelected] = useState<Shift | null>(null);
   const [revision, setRevision] = useState(0);
-  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [year, monthNumber] = month.split('-').map(Number);
   const days = new Date(year, monthNumber, 0).getDate();
@@ -139,7 +145,6 @@ export default function PortalSchedule() {
     setSchedule(null);
     setApplications(null);
     setError('');
-    setNotice('');
   }
   const tabs = [
     { value: 'agenda', desktop: 'Minha agenda', mobile: 'Agenda', icon: CalendarDays },
@@ -160,7 +165,6 @@ export default function PortalSchedule() {
         <UserRound size={20} aria-hidden="true"/><span>Perfil</span>
       </a>
     </nav>
-    {notice && <p role="status" className="nv-feedback text-success">{notice}</p>}
     {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
     {tab === 'applications' ? <>
       {!applications && !error && <p role="status" className="text-sm text-text-muted">Carregando candidaturas…</p>}
@@ -202,8 +206,8 @@ export default function PortalSchedule() {
         </li>)}</ul>
       </div>
     </div>}
-    {selected && <ShiftDetail shift={selected} onClose={() => setSelected(null)} onSaved={message => {
-      setSelected(null); setNotice(message); setRevision(value => value + 1);
+    {selected && <ShiftDetail shift={selected} onClose={() => setSelected(null)} onSaved={() => {
+      setSelected(null); setRevision(value => value + 1);
     }}/>}
   </section>;
 }

@@ -2,6 +2,72 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+.nv-toaster [data-sonner-toast] {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  padding: .75rem 3.25rem .75rem .875rem;
+  width: 100%;
+  min-height: 3.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: .75rem;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-medium);
+  font-family: var(--font-geist-sans), sans-serif;
+  transition-duration: 180ms;
+}
+
+.nv-toaster [data-title] {
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.nv-toaster [data-description] {
+  margin-top: .125rem;
+  color: var(--text-secondary);
+  font-size: .8125rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.nv-toaster [data-icon] { flex: none; margin-top: 1px; }
+.nv-toaster [data-type="success"] [data-icon] { color: var(--success); }
+.nv-toaster [data-type="info"] [data-icon] { color: var(--info); }
+.nv-toaster [data-type="warning"] [data-icon] { color: var(--warning); }
+.nv-toaster [data-type="error"] [data-icon] { color: var(--danger); }
+
+.nv-toaster [data-close-button] {
+  position: absolute;
+  top: .3125rem;
+  right: .3125rem;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: .5rem;
+  color: var(--text-muted);
+}
+
+.nv-toaster [data-close-button]:hover { background: var(--state-hover); color: var(--text-primary); }
+.nv-toaster:focus-visible,
+.nv-toaster [data-sonner-toast]:focus-visible,
+.nv-toaster [data-close-button]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+@media (max-width: 600px) {
+  [data-sonner-toaster].nv-toaster[data-x-position="right"] {
+    left: var(--mobile-offset-left);
+    right: var(--mobile-offset-right);
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nv-toaster [data-sonner-toast] { animation: none; transition: none; }
+}
+
 :root {
   --dashboard-wash: #EEEAF9;
   --alert-inverse: #FFFFFF;

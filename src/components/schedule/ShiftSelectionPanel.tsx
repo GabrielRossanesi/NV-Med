@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowRightLeft, History, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
+import { notify } from '@/lib/notifications';
 import { employmentLabel, employmentLabels, paymentFrequencyLabels } from '@/lib/scheduling';
 import { canEditPermission, canPerformAction } from '@/lib/permissions';
 import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
@@ -20,7 +21,7 @@ type Opportunity = {
 };
 type HistoryItem = { id: number; at: string; previous?: string; next?: string; actor?: string; previous_employment?: EmploymentType; next_employment?: EmploymentType };
 
-function Decision({ item, organization, onSaved }: { item: Opportunity; organization: string; onSaved: (message: string) => void }) {
+function Decision({ item, organization, onSaved }: { item: Opportunity; organization: string; onSaved: () => void }) {
   const guard = useScheduleEdit();
   const [employment, setEmployment] = useState<EmploymentType | ''>('');
   const [draft, setDraft] = useState(() => initialAgreementDraft());
@@ -67,7 +68,8 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
       }));
       if (!result) throw new Error('Conexão indisponível.');
       if (result.error) throw new Error(portalError(result.error));
-      onSaved('Candidatura aprovada. O médico já consta na escala.');
+      onSaved();
+      notify.success(item.kind === 'exchange' ? 'Troca aprovada.' : 'Candidatura aprovada.', { description: 'O médico já consta na escala.', withinDialog: true });
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível aprovar a candidatura.');
     } finally {
@@ -83,7 +85,9 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
       const result = await guard.run(async () => createClient()?.rpc('nv_cancel_shift_opportunity', { target: item.id }));
       if (!result) throw new Error('Conexão indisponível.');
       if (result.error) throw new Error(portalError(result.error));
-      onSaved(item.kind === 'exchange' ? 'Solicitação de troca encerrada.' : 'Candidaturas encerradas. A vaga segue aberta.');
+      onSaved();
+      if (item.kind === 'exchange') notify.success('Solicitação de troca encerrada.', { withinDialog: true });
+      else notify.info('Candidaturas encerradas.', { description: 'A vaga segue aberta.', withinDialog: true });
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível encerrar a troca.');
     } finally {
@@ -139,7 +143,6 @@ export default function ShiftSelectionPanel({ organization, shiftId, scope, onCh
   const [queue, setQueue] = useState<Opportunity[] | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const client = createClient();
@@ -158,12 +161,10 @@ export default function ShiftSelectionPanel({ organization, shiftId, scope, onCh
     return () => { active = false; };
   }, [organization, shiftId, scope, revision, canHistory]);
   return <section className="space-y-3">
-    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {!queue && !error && <p role="status" className="text-sm text-text-muted">Carregando candidaturas…</p>}
     {queue?.length === 0 && <p className="text-sm text-text-muted">Nenhuma oportunidade com candidaturas ou troca em andamento.</p>}
-    {queue?.map(item => <Decision key={item.id} item={item} organization={organization} onSaved={message => {
-      setNotice(message);
+    {queue?.map(item => <Decision key={item.id} item={item} organization={organization} onSaved={() => {
       setRevision(value => value + 1);
       onChanged?.();
     }}/>)}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { notify } from '@/lib/notifications';
 import Link from 'next/link';
 import { useStore } from '@/store/useStore';
 import { createClient } from '@/lib/supabase/client';
@@ -72,7 +73,6 @@ function EnrollmentQueue({ organization }: { organization: string }) {
   const [selected, setSelected] = useState<Request | null>(null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   useEffect(() => {
     let current = true;
     if (organization) void (async () => {
@@ -91,7 +91,6 @@ function EnrollmentQueue({ organization }: { organization: string }) {
       {organization && <Link href={'/portal?empresa=' + encodeURIComponent(organization)} className="mt-2 inline-block text-sm font-semibold text-primary underline">Abrir link de credenciamento da empresa</Link>}
     </header>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     {!queue && !error && <p role="status" className="text-sm text-text-muted">Carregando cadastros…</p>}
     {queue?.length === 0 && <p className="text-sm text-text-muted">Nenhum cadastro aguardando decisão nesta empresa.</p>}
     {queue && <ul className="divide-y divide-border">{queue.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
@@ -99,7 +98,7 @@ function EnrollmentQueue({ organization }: { organization: string }) {
       <button className="nv-button-secondary" onClick={() => setSelected(item)}>Analisar cadastro</button>
     </li>)}</ul>}
     {selected && <Decision request={selected} organization={organization} onClose={() => setSelected(null)}
-      onSaved={() => { setSelected(null); setNotice('Decisão registrada.'); setRevision(value => value + 1); }}/>}
+      onSaved={() => { setSelected(null); setRevision(value => value + 1); notify.success('Decisão de credenciamento registrada.'); }}/>}
   </div>;
 }
 

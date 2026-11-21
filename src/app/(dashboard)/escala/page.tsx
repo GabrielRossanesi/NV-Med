@@ -481,10 +481,10 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
   async function confirmWeekPreview() {
     if (!weekPreview || weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts) return;
-    const ok = await saveCopiedShifts(weekPreview.clones);
+    const ok = await saveCopiedShifts(weekPreview.clones, 'Semana copiada.');
     if (ok) setWeekPreview(null); else if (useStore.getState().error) setPageError(useStore.getState().error || 'Não foi possível copiar a semana.');
   }
-  async function saveCopiedShifts(clones: Shift[]) {
+  async function saveCopiedShifts(clones: Shift[], success: string | false = false) {
     if (!canCreateSchedule || !editGuard.check()) return false;
     if (clones.some(item => !item.employmentType)) {
       setPageError('Classifique a modalidade dos plantões de origem antes de copiar.');
@@ -508,7 +508,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
           overrideReason: item.paymentAgreement?.override_reason || 'Valor do plantão de origem confirmado na cópia.',
         } as const;
         return toNewShift({ ...item, agreement: buildRequiredPjAgreement(draft, rate) });
-      }))));
+      }), { success })));
     } catch (error) {
       setPageError(error instanceof Error ? error.message : 'Não foi possível consultar os valores da cópia.');
       return false;

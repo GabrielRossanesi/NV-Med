@@ -7,6 +7,7 @@ import { buildRequiredPjAgreement, chooseShiftRate, initialAgreementDraft } from
 import { localDate, employmentLabels } from '@/lib/scheduling';
 import { masterDates, type MasterDefinition, type MasterRule } from '@/lib/masterSchedule';
 import { saveMasterRule } from '@/services/masterScheduleService';
+import { notify } from '@/lib/notifications';
 import type { Doctor, Sector, Shift, Unit } from '@/types';
 import { useScheduleEdit, useScheduleDraft } from './ScheduleEditGuard';
 
@@ -44,7 +45,9 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
       const finance = spec.employment_type === 'pj' ? buildRequiredPjAgreement(agreement, rate) : null;
       const result = await guard.run(() => saveMasterRule(organization, rule?.id || null, spec, rule?.revision || 0, rule ? since : spec.start_date, horizon, finance, confirmed));
       if (!result) return;
-      await onSaved(); onClose();
+      await onSaved();
+      onClose();
+      notify.success(rule ? 'Recorrência atualizada.' : 'Recorrência cadastrada.');
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Não foi possível salvar a recorrência.'); }
     finally { setBusy(false); }
   }

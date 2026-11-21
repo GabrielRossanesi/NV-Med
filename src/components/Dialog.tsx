@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
+import { registerNotificationDialog } from '@/lib/notifications';
+import Notifications from './Notifications';
 
 const widthClasses = { md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' } as const;
 
@@ -19,18 +21,20 @@ export default function Dialog({ title, children, onClose, size = 'md', footer, 
       dialog.style.bottom = `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`;
     }
     dialog.showModal();
+    const unregisterNotifications = registerNotificationDialog(titleId);
     fitViewport();
     viewport?.addEventListener('resize', fitViewport);
     viewport?.addEventListener('scroll', fitViewport);
     return () => {
       viewport?.removeEventListener('resize', fitViewport);
       viewport?.removeEventListener('scroll', fitViewport);
+      unregisterNotifications();
       dialog.close();
       if (opener instanceof HTMLElement && opener.isConnected && document.activeElement === document.body) {
         opener.focus({ preventScroll: true });
       }
     };
-  }, []);
+  }, [titleId]);
   return (
     <dialog ref={ref} onCancel={event => { event.preventDefault(); if (!closeDisabled) onClose(); }} aria-labelledby={titleId} className={`nv-dialog m-auto max-h-[calc(var(--nv-dialog-viewport,100dvh)_-_1rem)] w-[calc(100%_-_1rem)] ${widthClasses[size]} overflow-hidden rounded-2xl border border-border p-0 sm:w-[calc(100%_-_2rem)]`}>
       <div className="flex max-h-[min(90dvh,calc(var(--nv-dialog-viewport,100dvh)_-_1rem))] flex-col">
@@ -43,6 +47,7 @@ export default function Dialog({ title, children, onClose, size = 'md', footer, 
         <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6">{children}</div>
         {footer && <footer className="shrink-0 border-t border-border bg-modal-bg px-4 py-3 sm:px-6">{footer}</footer>}
       </div>
+      <Notifications id={titleId} />
     </dialog>
   );
 }

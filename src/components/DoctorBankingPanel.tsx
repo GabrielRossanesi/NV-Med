@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { bankingFromForm, pixKeyTypes, type DoctorBanking } from '@/lib/doctorBanking';
 import { portalError } from '@/lib/doctorPortal';
+import { notify } from '@/lib/notifications';
 import DoctorBankingFields from './DoctorBankingFields';
 
 type Snapshot = { complete: boolean; can_edit: boolean; can_history: boolean; details: DoctorBanking };
@@ -16,7 +17,6 @@ export default function DoctorBankingPanel({ doctor, title = 'Dados bancários' 
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [history, setHistory] = useState<Audit[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -38,7 +38,7 @@ export default function DoctorBankingPanel({ doctor, title = 'Dados bancários' 
     } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
   }
   async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(''); setNotice('');
+    event.preventDefault(); setError('');
     try {
       const details = bankingFromForm(new FormData(event.currentTarget));
       setBusy(true);
@@ -47,7 +47,7 @@ export default function DoctorBankingPanel({ doctor, title = 'Dados bancários' 
       if (result.error) throw new Error(portalError(result.error));
       setHistory(null);
       await load(false);
-      setNotice('Dados bancários salvos com sucesso.');
+      notify.success('Dados bancários salvos.');
     } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
   }
   async function showHistory() {
@@ -62,7 +62,6 @@ export default function DoctorBankingPanel({ doctor, title = 'Dados bancários' 
     <div><h3 className="nv-section-title">{title}</h3><p className="mt-1 text-xs text-text-muted">Dados protegidos. Exiba os valores completos apenas quando necessário.</p></div>
     {snapshot && !snapshot.complete && <p role="status" className="rounded-lg bg-warning/10 p-3 text-sm text-warning">Pendência cadastral: confirme a chave PIX e informe seu tipo. Esta pendência não altera os plantões já assumidos.</p>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     {!snapshot && !error && <p role="status" className="text-sm text-text-muted">Carregando dados bancários…</p>}
     {snapshot && (editing ? <form onSubmit={save} className="space-y-4">
       <DoctorBankingFields initial={snapshot.details} disabled={busy}/>

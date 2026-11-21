@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import type { Doctor } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
+import { notify } from '@/lib/notifications';
 import Dialog from './Dialog';
 import DoctorProfileFields, { doctorProfileFromForm } from './DoctorProfileFields';
 
@@ -59,6 +60,7 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
       if (!result) throw new Error('Conexão indisponível.');
       if (result.error) throw new Error(portalError(result.error));
       onSaved();
+      notify.success(own ? 'Seus dados foram atualizados.' : 'Perfil médico atualizado.');
     } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
   }
   const p = snapshot?.profile;

@@ -71,7 +71,10 @@ export default function SectorEditorDialog({ unit, organizationName, specialties
       }
       defaults = { amount_cents: value(finance.amount), day_cents: value(day), night_cents: value(night), frequency: finance.frequency || null, notes: finance.notes.trim() };
     }
-    const persist = async () => updated ? (await store.updateSector(updated, defaults) ? updated : null) : await store.addSector(payload, defaults);
+    async function persist() {
+      if (updated) return await store.updateSector(updated, defaults) ? updated : null;
+      return store.addSector(payload, defaults, scheduleContext ? { success: false } : undefined);
+    }
     const saved = scheduleContext ? await guard.run(persist) : await persist();
     if (saved) onSaved(saved);
     else setError(useStore.getState().error || 'Não foi possível salvar o setor.');

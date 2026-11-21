@@ -18,6 +18,7 @@ import DoctorBankingFields from '@/components/DoctorBankingFields';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileEditor from '@/components/DoctorProfileEditor';
+import { notify } from '@/lib/notifications';
 
 type Enrollment = {
   doctor_id: string; organization_id: string; organization: string; name: string; status: EnrollmentStatus;
@@ -131,7 +132,6 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
 function Documents({ doctor }: { doctor: string }) {
   const [documents, setDocuments] = useState<PortalDocument[] | null>(null);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   async function load() {
     const result = await createClient()?.rpc('nv_portal_documents', { target: doctor });
@@ -147,14 +147,13 @@ function Documents({ doctor }: { doctor: string }) {
     const body = new FormData(form);
     setBusy(document.id);
     setError('');
-    setNotice('');
     try {
       const response = await fetch('/api/portal/documents/' + encodeURIComponent(document.id), { method: 'POST', body });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       form.reset();
       await load();
-      setNotice('Documento enviado para análise.');
+      notify.info('Documento enviado para análise.');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível enviar o documento.');
     } finally {
@@ -165,7 +164,6 @@ function Documents({ doctor }: { doctor: string }) {
     <summary><FileCheck2 className="shrink-0 text-primary" size={18} aria-hidden="true"/><span>Meus documentos</span><ChevronDown className="shrink-0 text-text-muted" size={16} aria-hidden="true"/></summary>
     <div className="space-y-4 p-4 sm:p-5">
       {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
-      {notice && <p role="status" className="nv-feedback text-success">{notice}</p>}
       {!documents && !error && <p role="status" className="text-sm text-text-muted">Carregando documentos…</p>}
       {documents?.length === 0 && <p className="nv-empty">A empresa ainda não tem exigências para este cadastro.</p>}
       {documents?.map(item => <article key={item.id} className="space-y-2 border-t border-border pt-4">
@@ -192,7 +190,6 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [revision, setRevision] = useState(0);
   const [editingDoctor, setEditingDoctor] = useState<string | null>(null);
-  const [profileNotice, setProfileNotice] = useState('');
   const [loadingCompany, setLoadingCompany] = useState(false);
   useEffect(() => {
     if (!email) return;
@@ -229,8 +226,7 @@ export default function PortalHome({ email, initialOrganization }: { email: stri
       {email && <button className="nv-button-secondary" onClick={() => void logoutCurrentSession().catch(failure => setError(failure.message))}>Sair</button>}
     </header>
     {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
-    {profileNotice && <p role="status" className="nv-feedback text-success">{profileNotice}</p>}
-    {editingDoctor && <DoctorProfileEditor doctorId={editingDoctor} own onClose={() => setEditingDoctor(null)} onSaved={() => { setEditingDoctor(null); setProfileNotice('Seus dados foram atualizados.'); setRevision(v => v + 1); }}/>}
+    {editingDoctor && <DoctorProfileEditor doctorId={editingDoctor} own onClose={() => setEditingDoctor(null)} onSaved={() => { setEditingDoctor(null); setRevision(v => v + 1); }}/>}
     {!email ? <RegisterAccount organization={initialOrganization}/> : <>
       {enrollments === null && !error && <p role="status" className="nv-feedback items-center text-info"><LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true"/>Carregando credenciamento…</p>}
       {enrollments?.some(item => item.status === 'approved') && <><PortalSchedule/><PortalAbsences key={`${email}:${organization}`}/></>}

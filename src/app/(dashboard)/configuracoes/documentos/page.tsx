@@ -26,7 +26,6 @@ function RequirementsWorkspace({ organization }: { organization: Organization })
   const [unitFilter, setUnitFilter] = useState('');
   const [governance, setGovernance] = useState(() => getDocumentGovernance(organization));
   const [policyOpen, setPolicyOpen] = useState(false);
-  const [saved, setSaved] = useState('');
   const filtered = requirements.filter(item => !unitFilter || !item.unitIds?.length || item.unitIds.includes(unitFilter));
   const disabled = !canManage || store.saving;
   const starterAdditions = starterDocumentRequirements.filter(item => !requirements.some(current =>
@@ -44,12 +43,10 @@ function RequirementsWorkspace({ organization }: { organization: Organization })
     setScope(requirement?.unitIds?.length ? 'selected' : 'all');
     setForm(requirement ? { ...requirement } : { type: '', name: '', required: true, blocking: true, expiryRequired: false, unitIds: [], specialties: [] });
   }
-  async function persist(next: DocumentRequirement[], message: string) {
+  async function persist(next: DocumentRequirement[], success: string, inlineError = false) {
     const latest = useStore.getState().organizations.find(item => item.id === organization.id);
     if (!latest || !canManage) return false;
-    const ok = await store.updateOrganizationSettings(organization.id, { settings: { ...latest.settings, requiredDocuments: next } });
-    if (ok) setSaved(message);
-    return ok;
+    return store.updateOrganizationSettings(organization.id, { settings: { ...latest.settings, requiredDocuments: next } }, { success, inlineError });
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -58,13 +55,13 @@ function RequirementsWorkspace({ organization }: { organization: Organization })
     const validation = validateDocumentRequirement(next, requirements, units, scope);
     if (validation) return setError(validation);
     const updated = form?.type ? requirements.map(item => item.type === next.type ? next : item) : [...requirements, next];
-    if (await persist(updated, 'Exigência salva. O checklist dos médicos foi atualizado.')) setForm(null);
+    if (await persist(updated, 'Exigência salva. O checklist dos médicos foi atualizado.', true)) setForm(null);
     else setError(useStore.getState().error || 'Não foi possível salvar a exigência.');
   }
   async function savePolicy() {
     const latest = useStore.getState().organizations.find(item => item.id === organization.id);
     if (!latest || disabled) return;
-    if (await store.updateOrganizationSettings(organization.id, { settings: { ...latest.settings, documentGovernance: governance } })) setSaved('Política de documentação salva.');
+    await store.updateOrganizationSettings(organization.id, { settings: { ...latest.settings, documentGovernance: governance } }, { success: 'Política de documentação salva.' });
   }
 
   return <div className="space-y-6">
@@ -81,7 +78,6 @@ function RequirementsWorkspace({ organization }: { organization: Organization })
         void persist([...requirements, ...starterAdditions], 'Checklist inicial adicionado.');
       }
     }}><FilePlus2 size={16}/>Adicionar checklist inicial</button>}
-    {saved && <p role="status" className="text-sm text-success">{saved}</p>}
     <section aria-label="Exigências da empresa">
       <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-4">
         <p className="text-sm text-text-secondary"><strong className="text-text-primary">{filtered.length}</strong> {filtered.length === 1 ? 'exigência' : 'exigências'}<span className="ml-3 text-xs text-text-muted">Regras gerais e da unidade se somam</span></p>

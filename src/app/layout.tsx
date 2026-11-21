@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Notifications from "@/components/Notifications";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +30,7 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-background text-foreground antialiased">
         {children}
+        <Notifications />
       </body>
     </html>
   );
