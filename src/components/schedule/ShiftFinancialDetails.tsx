@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Clock3, WalletCards } from 'lucide-react';
-import { financeState, financeStateLabels, saoPauloDate } from '@/lib/financeState';
+import { financeState, financeStateLabels, paymentBalance, saoPauloDate } from '@/lib/financeState';
 import { paymentFrequencyLabels } from '@/lib/scheduling';
 import { formatShiftMoney, formatShiftMoneyInput, rateScopeLabel, type AgreementDraft } from '@/lib/shiftPricing';
 import { createClient } from '@/lib/supabase/client';
@@ -96,6 +96,7 @@ export function ShiftFinancialDetails({ shift, applicableRate }: { shift: Shift;
       ? [['Padrão atual aplicável', `${formatShiftMoney(applicableRate.amount_cents)} · ${rateScopeLabel(applicableRate)}`]] : []),
     ['Vencimento', displayDate(shift.doctorId ? shift.paymentDueDate : undefined)],
     ['Situação do pagamento', !shift.doctorId && shift.status !== 'cancelled' ? financeStateLabels.unassigned : financeStateLabels[financeState(shift, saoPauloDate())]],
+    ['Saldo pendente', shift.doctorId && shift.paymentAmount != null ? displayMoney(paymentBalance(shift)) : '—'],
     ['Valor efetivamente pago', paid ? displayMoney(shift.paidAmount ?? shift.paymentAmount) : '—'],
     ['Data do pagamento', shift.paidAt ? displayDate(saoPauloDate(new Date(shift.paidAt))) : '—'],
     ['Acordo definido em', agreement ? dateTime.format(new Date(agreement.changed_at)) : '—'],

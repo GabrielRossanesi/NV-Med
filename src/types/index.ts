@@ -66,6 +66,7 @@ export type UnitType = 'hospital' | 'clinic' | 'er' | 'upa' | 'lab';
 export type UnitStatus = 'active' | 'inactive';
 
 export interface Unit {
+  timeZone?: string;
   id: string;
   name: string;
   cnpj: string;

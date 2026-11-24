@@ -137,7 +137,11 @@ REVOKE ALL ON FUNCTION public.nv_permission_actions(),public.nv_role_action(text
 CREATE FUNCTION nv_master_private.require_billing(org text, action text)
 RETURNS void LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
 BEGIN
- IF NOT public.nv_can_action(org,'financeiro',action) OR NOT EXISTS(SELECT FROM public.organizations o WHERE o.id=org AND o.status='active') THEN
+ IF NOT public.nv_can_action(org,'financeiro',action)
+  OR NOT EXISTS(SELECT FROM public.user_accounts u WHERE u.auth_user_id=public.nv_session_actor()
+    AND u.status='active' AND (u.type='saas_admin' OR u.organization_id=org)
+    AND public.nv_schedule_administrative_role(u.type,u.role))
+  OR NOT EXISTS(SELECT FROM public.organizations o WHERE o.id=org AND o.status='active') THEN
   RAISE EXCEPTION 'Seu acesso não permite esta operação financeira.' USING ERRCODE='42501';
  END IF;
 END $$;
@@ -166,9 +170,8 @@ END $$;
 CREATE FUNCTION public.nv_billing_catalog(org text)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
 BEGIN
- IF NOT (public.nv_can_action(org,'financeiro','rates_view') OR public.nv_can_action(org,'financeiro','billing_view')) THEN
-  RAISE EXCEPTION 'Catálogo indisponível.' USING ERRCODE='42501';
- END IF;
+ PERFORM nv_master_private.require_billing(org,CASE WHEN public.nv_can_action(org,'financeiro','rates_view')
+   THEN 'rates_view' ELSE 'billing_view' END);
  RETURN jsonb_build_object(
   'clients',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.name),'[]') FROM public.billing_clients c WHERE c.organization_id=org),
   'contracts',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.name),'[]') FROM public.billing_contracts c WHERE c.organization_id=org),

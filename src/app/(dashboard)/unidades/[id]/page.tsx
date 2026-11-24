@@ -4,6 +4,7 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Building2, CalendarDays, MapPin, Moon, Pencil, Plus, Stethoscope, Sun, UserRound, Users } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
+import UnitTimeZone from '@/components/schedule/UnitTimeZone';
 import UnitAttendanceSettings from '@/components/schedule/UnitAttendanceSettings';
 import Dialog from '@/components/Dialog';
 import SectorEditorDialog from '@/components/schedule/SectorEditorDialog';
@@ -79,6 +80,7 @@ export default function UnitDetailPage({ params }: { params: Promise<{ id: strin
       </section>
 
       <aside className="space-y-5">
+        <UnitTimeZone key={unit.id} unit={unit} editable={canEditUnit}/>
         <section className="rounded-xl border border-border bg-card-bg p-5"><h2 className="flex items-center gap-2 font-semibold"><MapPin size={17} className="text-primary"/>Informações</h2><dl className="mt-4 space-y-3 text-sm"><div><dt className="text-xs text-text-muted">Endereço</dt><dd className="mt-1">{unit.address}, {unit.city} – {unit.state}</dd></div><div><dt className="text-xs text-text-muted">Empresa responsável</dt><dd className="mt-1">{responsibleCompany?.name || unit.manager || 'Não informado'}</dd></div><div><dt className="text-xs text-text-muted">CNPJ da empresa</dt><dd className="mt-1 font-mono">{responsibleCompany?.cnpj || unit.cnpj || 'Não informado'}</dd></div><div><dt className="text-xs text-text-muted">Telefone</dt><dd className="mt-1">{unit.phone || 'Não informado'}</dd></div></dl></section>
 
         <section className="rounded-xl border border-border bg-card-bg p-5">

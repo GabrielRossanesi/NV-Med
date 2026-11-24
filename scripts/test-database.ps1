@@ -95,7 +95,17 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-audit-context.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-controls.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-39, pré/pós-verificação e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-evolution.preflight.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '48_shift_approval.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '49_shift_cash_payments.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-cash-payment.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '50_company_billing.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'company-billing.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '51_finance_overview_and_exports.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-overview.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval-concurrency.verify.sql'))
+  Write-Output 'PASS: baseline 01-18, migrations 19-39 e 48-51, pré/pós-verificação e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

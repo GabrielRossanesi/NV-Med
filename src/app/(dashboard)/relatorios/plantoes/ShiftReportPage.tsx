@@ -9,6 +9,7 @@ import { employmentLabel, employmentLabels } from '@/lib/scheduling';
 import { financeStateLabels, saoPauloDate } from '@/lib/financeState';
 import { formatReportMoney, type summarizeReport } from '@/lib/reportSummary';
 import { presenceReportStates, reportFilterKeys, reportFrequencyLabels, reportPeriodLabels, shiftReportStates, type ReportCatalog, type ShiftReport } from '@/lib/shiftReport';
+import { canPerformAction } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
 
 type Preview = ShiftReport & { total: number; summary: ReturnType<typeof summarizeReport> };
@@ -173,12 +174,12 @@ function Report({ initial, activeOrganization, financial }: { initial: Record<st
     {report && <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-muted">{report.total} {report.total === 1 ? 'plantão encontrado' : 'plantões encontrados'}{report.total > 100 && ' · Prévia dos primeiros 100'}</p>
-        <details ref={menu} className="relative w-full sm:w-auto">
+        {(!report.finance && !financial || canPerformAction(currentUser, 'financeiro', 'export')) && <details ref={menu} className="relative w-full sm:w-auto">
           <summary className="nv-button-secondary cursor-pointer list-none"><Download size={15}/>{busy ? 'Preparando…' : 'Exportar relatório'}</summary>
           <div className="absolute inset-x-0 z-10 mt-1 grid min-w-44 gap-1 rounded-xl border border-border bg-card-bg p-1.5 shadow-soft sm:left-auto">
             {(Object.entries(formats) as [Format, string][]).map(([format, label]) => <button key={format} type="button" disabled={busy || changed} className="rounded-lg px-3 py-2 text-left text-sm hover:bg-state-hover disabled:opacity-50" onClick={() => void download(format)}>{label}</button>)}
           </div>
-        </details>
+        </details>}
       </div>
       {report.summary && <div className="grid gap-3 sm:grid-cols-3">
         {(['agreed', 'paid', 'balance'] as const).map((key, index) => <div key={key} className="rounded-xl border border-border bg-card-bg p-4">

@@ -71,6 +71,7 @@ interface DbDoctor {
 }
 
 interface DbUnit {
+  time_zone?: string;
   id: string;
   organization_id: string;
   name: string;
@@ -229,6 +230,7 @@ export function mapDoctorFromDb(row: DbDoctor): Doctor {
 
 function mapUnitFromDb(row: DbUnit): Unit {
   return {
+    timeZone: row.time_zone,
     id: row.id,
     organizationId: row.organization_id,
     name: row.name,

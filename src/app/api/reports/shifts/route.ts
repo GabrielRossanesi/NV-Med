@@ -62,6 +62,13 @@ export async function GET(request: NextRequest) {
     if (value) filters[parameter] = value;
   }
   if (Object.values(filters).some(value => value.length > 150)) return failure('Um dos filtros é inválido.', 400);
+  if (format !== 'json') {
+    const { data: financialRead } = await client.rpc('nv_can_action', { org, module: 'financeiro', action: 'view' });
+    if (financial || financialRead) {
+      const { data: allowed, error } = await client.rpc('nv_can_action', { org, module: 'financeiro', action: 'export' });
+      if (error || !allowed) return failure('Seu perfil não tem permissão para exportar dados financeiros.', 403);
+    }
+  }
   const { data, error } = await client.rpc('nv_report_filtered_shifts', {
     org, from_date: start, to_date: end, filters, financial_only: financial,
   });

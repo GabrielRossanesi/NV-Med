@@ -86,8 +86,8 @@ BEGIN
       END IF;
       IF NEW.doctor_id IS NULL OR NEW.payment_amount IS NULL THEN
         NEW.payment_due_date := NULL;
-      ELSIF OLD.payment_due_date IS NULL OR (NEW.payment_frequency, NEW.date, NEW.end_time)
-        IS DISTINCT FROM (OLD.payment_frequency, OLD.date, OLD.end_time) THEN
+      ELSIF OLD.payment_due_date IS NULL OR (NEW.payment_frequency, NEW.date, NEW.start_time, NEW.end_time, NEW.unit_id)
+        IS DISTINCT FROM (OLD.payment_frequency, OLD.date, OLD.start_time, OLD.end_time, OLD.unit_id) THEN
         NEW.payment_due_date := public.nv_calculate_shift_due(NEW);
       END IF;
     END IF;

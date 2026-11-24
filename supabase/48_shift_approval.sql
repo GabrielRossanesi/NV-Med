@@ -108,11 +108,13 @@ DECLARE
   operational boolean;
   ended boolean;
   active_settlement boolean;
+  formal_adjustment boolean;
   context nv_master_private.shift_approval_context%ROWTYPE;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     NEW.approval_source := 'pending';
     NEW.approval_revision := 0;
+    IF NEW.status = 'confirmed' THEN NEW.status := 'pending'; END IF;
     RETURN NEW;
   END IF;
 
@@ -120,7 +122,7 @@ BEGIN
   ended := public.nv_shift_ends(OLD) <= statement_timestamp();
   active_settlement := public.nv_shift_has_settlement(OLD);
   IF TG_OP = 'DELETE' THEN
-    IF ended AND (prior IN ('doctor','legacy') OR active_settlement OR OLD.doctor_id IS NOT NULL) THEN
+    IF active_settlement OR (ended AND (prior IN ('doctor','legacy') OR OLD.doctor_id IS NOT NULL)) THEN
       RAISE EXCEPTION 'Use o fluxo de ajuste para preservar o histórico deste plantão encerrado.' USING ERRCODE = '22023';
     END IF;
     RETURN OLD;
@@ -137,7 +139,15 @@ BEGIN
     (NEW.type,NEW.notes,NEW.employment_type,NEW.employer_name,NEW.coverage_mode,NEW.coverage_reason,NEW.status = 'cancelled')
     IS DISTINCT FROM
     (OLD.type,OLD.notes,OLD.employment_type,OLD.employer_name,OLD.coverage_mode,OLD.coverage_reason,OLD.status = 'cancelled');
-  IF ended AND operational THEN
+  formal_adjustment := active_settlement AND NEW.payment_amount IS DISTINCT FROM OLD.payment_amount
+    AND NEW.payment_agreement IS DISTINCT FROM OLD.payment_agreement
+    AND coalesce(NEW.payment_agreement->>'kind' = 'paid_adjustment',false)
+    AND public.nv_can_finance(OLD.organization_id) AND public.nv_can_action(OLD.organization_id,'configuracoes','edit')
+    AND (NEW.doctor_id,NEW.date,NEW.start_time,NEW.end_time,NEW.unit_id,NEW.sector_id,NEW.specialty,
+      NEW.type,NEW.notes,NEW.employment_type,NEW.employer_name,NEW.coverage_mode,NEW.coverage_reason,NEW.status)
+     IS NOT DISTINCT FROM (OLD.doctor_id,OLD.date,OLD.start_time,OLD.end_time,OLD.unit_id,OLD.sector_id,OLD.specialty,
+      OLD.type,OLD.notes,OLD.employment_type,OLD.employer_name,OLD.coverage_mode,OLD.coverage_reason,OLD.status);
+  IF ended AND operational AND NOT formal_adjustment THEN
     IF prior IN ('doctor','legacy') THEN
       RAISE EXCEPTION 'Os dados operacionais deste plantão encerrado estão protegidos pela confirmação.' USING ERRCODE = '22023';
     END IF;

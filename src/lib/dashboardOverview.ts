@@ -1,7 +1,7 @@
 import { documentIsCritical, getDoctorCompliance } from './documentCompliance.ts';
 import { applicableDocuments } from './documentGovernance.ts';
 import { getDoctorOperationalUnitIds } from './doctorUnits.ts';
-import { financeState } from './financeState.ts';
+import { paymentBalance } from './financeState.ts';
 import { localDate, shiftTouchesDay, summarizeSectorCoverage } from './scheduling.ts';
 import type { Doctor, DocumentRequirement, MedicalDocument, Sector, Shift } from '../types/index.ts';
 
@@ -128,20 +128,20 @@ export function doctorsWithDocumentIssues(
 
 export function dashboardPayments(shifts: Shift[], today: string) {
   const assigned = shifts.filter(shift => shift.employmentType === 'pj' && shift.doctorId && shift.paymentAmount != null && shift.status !== 'cancelled');
-  const unpaid = assigned.filter(shift => shift.paymentStatus !== 'paid');
-  const amount = (items: Shift[]) => items.reduce((total, shift) => total + (shift.paymentAmount || 0), 0);
+  const unpaid = assigned.filter(shift => paymentBalance(shift) > 0);
+  const amount = (items: Shift[]) => items.reduce((total, shift) => total + Math.round(paymentBalance(shift) * 100), 0) / 100;
   const onDelivery = unpaid.filter(shift => (shift.paymentFrequency || 'on_delivery') === 'on_delivery');
   const upcoming = new Map<string, number>();
   for (const shift of unpaid) {
     if (!shift.paymentDueDate || shift.paymentDueDate < today) continue;
-    upcoming.set(shift.paymentDueDate, (upcoming.get(shift.paymentDueDate) || 0) + (shift.paymentAmount || 0));
+    upcoming.set(shift.paymentDueDate, (upcoming.get(shift.paymentDueDate) || 0) + Math.round(paymentBalance(shift) * 100));
   }
   const month = today.slice(0, 7);
   return {
     pending: amount(unpaid),
-    overdue: amount(unpaid.filter(shift => financeState(shift, today) === 'overdue')),
+    overdue: amount(unpaid.filter(shift => Boolean(shift.paymentDueDate && shift.paymentDueDate < today))),
     onDelivery: { count: onDelivery.length, amount: amount(onDelivery) },
-    paidThisMonth: assigned.filter(shift => shift.paymentStatus === 'paid' && shift.date.startsWith(month)).length,
-    nextDue: [...upcoming.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, 2),
+    paidThisMonth: assigned.filter(shift => shift.paymentStatus === 'paid' && paymentBalance(shift) === 0 && shift.date.startsWith(month)).length,
+    nextDue: [...upcoming.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, 2).map(([date, cents]): [string, number] => [date, cents / 100]),
   };
 }
