@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { financeState, financeStateLabels, saoPauloDate, type FinanceState } from '@/lib/financeState';
+import { financeState, financeStateLabels, paymentBalance, saoPauloDate, type FinanceState } from '@/lib/financeState';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -20,13 +20,18 @@ import {
 } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
+import ShiftCashPaymentFields from '@/components/schedule/ShiftCashPaymentFields';
+import ShiftPaymentMovements from '@/components/schedule/ShiftPaymentMovements';
+import { readCashPayment, registerShiftPayment } from '@/lib/shiftCashPayment';
+import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
+import { notify } from '@/lib/notifications';
 import ShiftRecordSummary from '@/components/schedule/ShiftRecordSummary';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
 import { createClient } from '@/lib/supabase/client';
 import type { ReportCatalog } from '@/lib/shiftReport';
 import { localDate, paymentFrequencyLabels } from '@/lib/scheduling';
 import { canEditPermission, canViewPermission } from '@/lib/permissions';
-import { buildAgreementSelection, chooseShiftRate, initialAgreementDraft, parseMoneyCents } from '@/lib/shiftPricing';
+import { buildAgreementSelection, chooseShiftRate, initialAgreementDraft } from '@/lib/shiftPricing';
 import { useStore } from '@/store/useStore';
 import type { Doctor, Organization, PaymentFrequency, PaymentStatus, Sector, Shift, Unit } from '@/types';
 
@@ -69,11 +74,12 @@ function recordFinanceState(shift: Shift, today: string): FinanceState {
 function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClose }: {
   shift: Shift; organization?: Organization; unit?: Pick<Unit, 'name'>; sector?: Pick<Sector, 'name' | 'coveragePeriods' | 'defaultStartTime' | 'defaultEndTime' | 'requiredDoctors'>; doctor?: Pick<Doctor, 'name' | 'specialty'>; onClose: () => void;
 }) {
-  const { currentUser, saving, updateShiftAgreement, updateShiftFinancials } = useStore();
+  const { currentUser, saving, updateShiftAgreement, syncWithCloud } = useStore();
+  const [settlementBusy, setSettlementBusy] = useState(false);
   const [view, setView] = useState<'details' | 'agreement' | 'settlement' | 'adjustment'>('details');
   const [draft, setDraft] = useState(() => initialAgreementDraft(shift));
   const [baseline, setBaseline] = useState(shift);
-  const [status, setStatus] = useState<PaymentStatus>('pending');
+  const [settlementId, setSettlementId] = useState('');
   const [error, setError] = useState('');
   const paid = shift.paymentStatus === 'paid';
   const canEdit = canEditPermission(currentUser, 'financeiro');
@@ -87,7 +93,7 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
     setError('');
     setDraft(initialAgreementDraft(shift));
     setBaseline(shift);
-    setStatus('pending');
+    if (next === 'settlement') setSettlementId(crypto.randomUUID());
     setView(next);
   }
 
@@ -103,23 +109,32 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Confira o acordo financeiro.'); }
   }
 
-  async function saveSettlement(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canEdit || paid || saving || !shift.doctorId || baseline.paymentAmount == null) return;
-    setError('');
-    const fields = new FormData(event.currentTarget);
-    const cents = status === 'paid' ? parseMoneyCents(String(fields.get('paidAmount') || '')) : null;
-    if (status === 'paid' && cents === null) return setError('Informe o valor pago em reais, com até duas casas decimais.');
-    const ok = await updateShiftFinancials(shift.id, baseline.paymentAmount, baseline.paymentFrequency || 'on_delivery', status, {
-      amount: cents === null ? null : cents / 100,
-      date: status === 'paid' ? String(fields.get('paidOn') || '') : null,
-      note: String(fields.get('note') || ''),
-    });
-    if (ok) openView('details');
-    else setError(useStore.getState().error || 'Não foi possível atualizar o pagamento.');
+  async function refreshSettlement() {
+    try { syncWithCloud(await fetchInitialDataFromSupabase()); }
+    catch { notify.warning('Atualize a página para consultar o pagamento.', { withinDialog: true }); }
   }
 
-  return <Dialog title="Ficha financeira do plantão" onClose={() => { if (!saving) onClose(); }}>
+  async function saveSettlement(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEdit || settlementBusy || saving || !shift.doctorId || baseline.paymentAmount == null) return;
+    setError('');
+    const fields = new FormData(event.currentTarget);
+    setSettlementBusy(true);
+    const finish = notify.saving();
+    try {
+      await registerShiftPayment(shift.id, await readCashPayment(fields, shift.organizationId, settlementId));
+      await refreshSettlement();
+      openView('details');
+      notify.success('Pagamento registrado.', { withinDialog: true });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Não foi possível registrar o pagamento.');
+    } finally {
+      finish();
+      setSettlementBusy(false);
+    }
+  }
+
+  return <Dialog title="Ficha financeira do plantão" onClose={() => { if (!saving && !settlementBusy) onClose(); }} closeDisabled={settlementBusy}>
     <div className="space-y-4">
       <ShiftRecordSummary shift={shift} organization={organization?.name} unit={unit?.name} sector={sector?.name} doctor={doctor?.name} />
       <ShiftFinancialDetails shift={shift} applicableRate={rate} />
@@ -127,8 +142,9 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
       {view === 'details' && <div className="flex flex-wrap gap-2">
         {canEdit && !paid && <>
           <button type="button" className="nv-button-secondary" onClick={() => openView('agreement')}>Editar acordo</button>
-          {shift.doctorId && shift.paymentAmount != null && <button type="button" className="nv-button" onClick={() => openView('settlement')}>Registrar pagamento</button>}
         </>}
+        {canEdit && shift.doctorId && paymentBalance(shift) > 0 && <button type="button" className="nv-button"
+          onClick={() => openView('settlement')}>Registrar pagamento</button>}
         {paid && canAdjust && <button type="button" className="nv-button-secondary" onClick={() => openView('adjustment')}>Ajuste administrativo</button>}
       </div>}
       {editingAgreement && <form className="space-y-3" onSubmit={saveAgreement}>
@@ -136,16 +152,13 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
         {ready ? <ShiftAgreementFields draft={draft} onChange={setDraft} rate={rate} previous={baseline} adjustment={adjustment} /> : <p role="status" className="text-sm text-text-muted">{rateError || 'Consultando valores padrão…'}{rateError && <button type="button" className="ml-2 text-primary underline" onClick={reload}>Tentar novamente</button>}</p>}
         <div className="flex flex-wrap justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={saving} onClick={() => openView('details')}>Cancelar</button><button className="nv-button" disabled={!ready || saving}>{saving ? 'Salvando…' : adjustment ? 'Registrar ajuste' : 'Salvar acordo'}</button></div>
       </form>}
-      {view === 'settlement' && canEdit && !paid && <form className="space-y-3" onSubmit={saveSettlement}>
-        <label className="nv-label">Situação<select className="nv-input" value={status} onChange={event => setStatus(event.target.value as PaymentStatus)}><option value="pending">Pendente</option><option value="paid">Pago</option></select></label>
-        {status === 'paid' && <div className="grid gap-3 sm:grid-cols-2">
-          <label className="nv-label">Valor efetivamente pago (R$)<input className="nv-input" inputMode="decimal" name="paidAmount" defaultValue={String(shift.paymentAmount ?? 0)} required /></label>
-          <label className="nv-label">Data do pagamento<input className="nv-input" type="date" name="paidOn" max={saoPauloDate()} defaultValue={saoPauloDate()} required /></label>
-        </div>}
-        <label className="nv-label">Observações<textarea className="nv-input" name="note" maxLength={1000} rows={3} defaultValue={shift.paymentNote} /></label>
-        <div className="flex flex-wrap justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={saving} onClick={() => openView('details')}>Cancelar</button><button className="nv-button" disabled={saving}>{saving ? 'Salvando…' : 'Salvar pagamento'}</button></div>
+      {view === 'settlement' && canEdit && <form className="space-y-3" onSubmit={saveSettlement}>
+        <ShiftCashPaymentFields amount={paymentBalance(shift)}/>
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={saving} onClick={() => openView('details')}>Cancelar</button><button className="nv-button" disabled={saving || settlementBusy}>{settlementBusy ? 'Salvando…' : 'Salvar pagamento'}</button></div>
       </form>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <ShiftPaymentMovements key={JSON.stringify([shift.id, shift.paidAmount, shift.paidAt])}
+        shiftId={shift.id} canReverse={canAdjust} onChanged={refreshSettlement}/>
       <ShiftPaymentHistory key={JSON.stringify([shift.id, shift.paymentAgreement?.changed_at, shift.paidAt, shift.paymentNote])} shiftId={shift.id} />
     </div>
   </Dialog>;
@@ -199,14 +212,14 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
     .filter(item => !sectorId || item.sectorId === sectorId)
     .filter(item => !specialty || item.specialty === specialty)
     .filter(item => !frequency || (item.paymentFrequency || 'on_delivery') === frequency)
-    .filter(item => !paymentStatus || (item.paymentAmount != null && (paymentStatus === 'unpaid' ? item.doctorId && item.paymentStatus !== 'paid' : recordFinanceState(item, today) === paymentStatus)))
+    .filter(item => !paymentStatus || (item.paymentAmount != null && (paymentStatus === 'unpaid' ? item.doctorId && (item.paymentStatus !== 'paid' || paymentBalance(item) > 0) : recordFinanceState(item, today) === paymentStatus)))
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)), [organizationShifts, requestedShift, bounds.start, bounds.end, unitId, sectorId, specialty, frequency, paymentStatus, today]);
 
   const assigned = filteredShifts.filter(item => Boolean(item.doctorId));
   const vacancies = filteredShifts.filter(item => !item.doctorId);
   const total = assigned.reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
   const paid = assigned.filter(item => item.paymentStatus === 'paid').reduce((sum, item) => sum + (item.paidAmount ?? item.paymentAmount ?? 0), 0);
-  const pending = assigned.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled').reduce((sum, item) => sum + (item.paymentAmount || 0), 0);
+  const pending = assigned.reduce((sum, item) => sum + paymentBalance(item), 0);
   const onDelivery = assigned.filter(item => (item.paymentFrequency || 'on_delivery') === 'on_delivery');
   const monthly = assigned.filter(item => item.paymentFrequency === 'monthly');
   const visibleSectors = sectors.filter(item => !unitId || item.unitId === unitId);

@@ -541,7 +541,7 @@ export async function saveShiftToSupabase(shift: ShiftWrite) {
 export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string } => ({
+  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string; cash_payment?: ShiftWrite['cashPayment'] } => ({
     id: shift.id,
     coverage_mode: shift.coverageMode || 'regular',
     coverage_reason: shift.coverageMode === 'adhoc' ? shift.coverageReason?.trim() : null,
@@ -556,6 +556,7 @@ export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
     paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
     agreement: shift.agreement,
     retro_reason: shift.retroReason,
+    cash_payment: shift.cashPayment,
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,

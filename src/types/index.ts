@@ -245,7 +245,7 @@ export interface Shift {
   organizationId: string;
 }
 
-export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection; retroReason?: string };
+export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection; retroReason?: string; cashPayment?: import('../lib/shiftCashPayment').ShiftCashPayment };
 
 export type AdditionalPermissions = Record<string, 'view' | 'edit' | 'allow' | 'deny'>;
 

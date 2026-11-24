@@ -107,7 +107,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     updateSector: (sector, finance) => commit(async () => { await cloud.saveSectorToSupabase(sector, false, finance); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }, { success: 'Setor atualizado.', inlineError: true }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
     addShift: input => commit(async () => {
-      const saved = await cloud.saveShiftToSupabase({ ...input, id: crypto.randomUUID(), organizationId: orgId() });
+      const saved = await cloud.saveShiftToSupabase({ ...input, id: input.cashPayment?.id || crypto.randomUUID(), organizationId: orgId() });
       set({ shifts: [...get().shifts, saved] });
     }, { success: 'Plantão cadastrado.', inlineError: true }),
     addShifts: (inputs, feedback) => commit(async () => {

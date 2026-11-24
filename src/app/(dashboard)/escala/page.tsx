@@ -27,6 +27,8 @@ import ScheduleDeleteDialog from '@/components/schedule/ScheduleDeleteDialog';
 import ShiftSelectionPanel from '@/components/schedule/ShiftSelectionPanel';
 import PresencePanel from '@/components/schedule/PresencePanel';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
+import ShiftCashPaymentFields from '@/components/schedule/ShiftCashPaymentFields';
+import { readCashPayment } from '@/lib/shiftCashPayment';
 import ShiftApprovalDialog from '@/components/schedule/ShiftApprovalDialog';
 import { shiftEditRestriction } from '@/lib/shiftApproval';
 import { notify } from '@/lib/notifications';
@@ -73,7 +75,7 @@ function recurrenceDescription(startDate: string, recurrence: ShiftRecurrence) {
   return `na ${ordinal}ª ${weekday} de cada mês`;
 }
 function toNewShift(shift: ShiftWrite): Omit<ShiftWrite, 'id' | 'organizationId'> {
-  return { coverageMode: shift.coverageMode || 'regular', coverageReason: shift.coverageReason, sectorId: shift.sectorId, sector: shift.sector, specialty: shift.specialty, employmentType: shift.employmentType, employerName: shift.employerName, paymentAmount: shift.paymentAmount, paymentStatus: shift.paymentStatus, paymentFrequency: shift.paymentFrequency, paidAt: shift.paidAt, agreement: shift.agreement, doctorId: shift.doctorId, unitId: shift.unitId, date: shift.date, startTime: shift.startTime, endTime: shift.endTime, type: shift.type, status: shift.status, notes: shift.notes };
+  return { coverageMode: shift.coverageMode || 'regular', coverageReason: shift.coverageReason, sectorId: shift.sectorId, sector: shift.sector, specialty: shift.specialty, employmentType: shift.employmentType, employerName: shift.employerName, paymentAmount: shift.paymentAmount, paymentStatus: shift.paymentStatus, paymentFrequency: shift.paymentFrequency, paidAt: shift.paidAt, agreement: shift.agreement, cashPayment: shift.cashPayment, doctorId: shift.doctorId, unitId: shift.unitId, date: shift.date, startTime: shift.startTime, endTime: shift.endTime, type: shift.type, status: shift.status, notes: shift.notes };
 }
 
 function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, onEdit, onDelete, compact = false, availableVacancyIds }: { availableVacancyIds: ReadonlySet<string>; days: string[]; shifts: Shift[]; units: Unit[]; sectors: Sector[]; doctors: Doctor[]; doctorWarnings: Map<string, { warning: boolean; blocked: boolean }>; onEdit: (shift: Shift) => void; onDelete?: (shift: Shift) => void; compact?: boolean }) {
@@ -190,6 +192,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [weekPreview, setWeekPreview] = useState<{ clones: Shift[]; sectors: number; turns: number; range: string; blocked: number; duplicates: number; conflicts: number } | null>(null);
   const [confirmAdministrative, setConfirmAdministrative] = useState<Shift | null>(null);
   const [retroReason, setRetroReason] = useState('');
+  const [cashRequest, setCashRequest] = useState('');
+  const [cashBusy, setCashBusy] = useState(false);
   const [recurringPreview, setRecurringPreview] = useState<{ inputs: Omit<ShiftWrite, 'id' | 'organizationId'>[]; dates: string[]; countPerDate: number; cents?: number } | null>(null);
   const [recurringError, setRecurringError] = useState('');
   const [deleteRequest, setDeleteRequest] = useState<ScheduleDeletionSelection | null>(null);
@@ -343,6 +347,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setOpenedShift(shift);
     setAgreementDraft(initialAgreementDraft(shift));
     setRetroReason('');
+    setCashRequest('');
     setForm(shift || { coverageMode: adhoc ? 'adhoc' : 'regular', coverageReason: '', id: '', organizationId: orgId, unitId: resolvedUnit, sectorId: resolvedSector?.id || '', sector: resolvedSector?.name || '', specialty: resolvedSector?.primarySpecialty || '', doctorId: undefined, date: day, startTime: period?.startTime || resolvedSector?.defaultStartTime || '07:00', endTime: period?.endTime || resolvedSector?.defaultEndTime || '19:00', type: 'onsite', status: 'open', paymentStatus: 'pending', paymentFrequency: 'on_delivery', notes: '' });
   }
   function specialtyChoices(id: string, sector?: Sector) {
@@ -409,8 +414,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setAgreementDraft(initialAgreementDraft(sameAgreement ? openedShift : undefined));
     setForm({ ...form, employmentType, employerName: '' });
   }
-  async function save(event: React.FormEvent) {
-    event.preventDefault(); if (!form || !canSaveShift || store.saving) return;
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!form || !canSaveShift || store.saving || cashBusy) return;
     if (!editGuard.check()) return;
     setFormError('');
     const sector = sectors.find(item => item.id === form.sectorId && item.unitId === form.unitId);
@@ -452,6 +457,19 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (duplicate) return setFormError(`Já existe um plantão igual em ${new Date(duplicate.date + 'T12:00:00').toLocaleDateString('pt-BR')}.`);
     const conflict = candidates.find(candidate => hasConflict(candidate, shifts));
     if (conflict) return setFormError(`O médico já está escalado em horário coincidente em ${new Date(conflict.date + 'T12:00:00').toLocaleDateString('pt-BR')}.`);
+    if (cashEligible && cashRequest) {
+      setCashBusy(true);
+      try {
+        const payment = await readCashPayment(new FormData(event.currentTarget), orgId, cashRequest);
+        normalized.cashPayment = payment;
+        candidates[0].cashPayment = payment;
+      } catch (error) {
+        setFormError(error instanceof Error ? error.message : 'Confira os dados do pagamento.');
+        return;
+      } finally {
+        setCashBusy(false);
+      }
+    }
     let ok: boolean;
     if (form.id) ok = Boolean(await editGuard.run(() => store.updateShift(normalized)));
     else {
@@ -547,6 +565,10 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const formUnit = units.find(item => item.id === form?.unitId);
   const formSpecialties = form ? specialtyChoices(form.unitId) : [];
   const formSectors = form ? sectors.filter(item => item.unitId === form.unitId) : [];
+  const cashEligible = canEditFinancial && canSaveShift && form?.employmentType === 'pj'
+    && Boolean(form.doctorId) && form.status !== 'cancelled' && (form.id || recurrence === 'once')
+    && effectiveDraft.frequency === 'on_delivery' && (openedShift?.paymentAmount == null
+      || (openedShift.paidAmount || 0) < openedShift.paymentAmount);
   const formPeriods = formSector ? sectorCoveragePeriods(formSector) : [];
   const recurrenceDates = form && !form.id ? buildRecurringDates(form.date, repeatUntil, recurrence, customWeekdays) : [];
   const storedFormRate = openedShift && canSeeFinancial ? chooseShiftRate(rateQuery.rates, openedShift,
@@ -760,7 +782,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
         try { await refreshMasterShifts(); }
         catch { notify.warning('Atualize a página para consultar a aprovação.'); }
       }}/>}
-    {form && <Dialog title={formTitle} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift} title={editRestriction || undefined}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
+    {form && <Dialog title={formTitle} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || cashBusy || !canSaveShift} title={editRestriction || undefined}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
       {openedShift && <ShiftRecordSummary shift={openedShift} organization={activeOrganization?.name}
         unit={units.find(item => item.id === openedShift.unitId)?.name}
         sector={sectors.find(item => item.id === openedShift.sectorId)?.name}
@@ -813,6 +835,15 @@ function Schedule({ params }: { params: URLSearchParams }) {
       {newPjAgreement && !canEditFinancial && <p className="text-sm text-warning">A confirmação do valor PJ exige permissão financeira.</p>}
       <div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Modalidade<select className="nv-input" value={form.type} onChange={event => setForm({ ...form, type: event.target.value as Shift['type'] })}>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{form.endTime < form.startTime && <p className="self-end pb-3 text-xs text-primary">Termina no dia seguinte.</p>}</div><label className="nv-label">Observações<textarea className="nv-input" rows={2} maxLength={1000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
       </fieldset>
+      {cashEligible && <section className="space-y-3">
+        <label className="nv-label flex items-center gap-2">
+          <input type="checkbox" checked={Boolean(cashRequest)}
+            onChange={event => setCashRequest(event.target.checked ? crypto.randomUUID() : '')}/>
+          Plantão pago à vista
+        </label>
+        {cashRequest && <ShiftCashPaymentFields amount={openedShift?.paymentAmount == null ? undefined
+          : Math.max(0, openedShift.paymentAmount - (openedShift.paidAmount || 0))}/>}
+      </section>}
       {canSeeFinancial && openedShift && (openedShift.employmentType === 'pj' || openedShift.paymentAgreement || openedShift.paymentAmount != null || openedShift.paidAt) && <>
         <ShiftFinancialDetails shift={openedShift} applicableRate={storedFormRate} />
         <ShiftPaymentHistory key={openedShift.id} shiftId={openedShift.id} />
