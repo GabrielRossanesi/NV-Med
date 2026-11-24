@@ -11,7 +11,6 @@ import { canViewPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
 import DashboardSearch from './DashboardSearch';
 import NotificationInbox from './NotificationInbox';
-import SaveFeedback from './SaveFeedback';
 import UserAvatar from './UserAvatar';
 
 const actions = 'grid size-10 shrink-0 cursor-pointer place-items-center rounded-full text-text-secondary transition-colors hover:bg-state-hover hover:text-primary';
@@ -156,7 +155,6 @@ export default function Header() {
           <button type="button" onClick={stopSimulation} className="underline underline-offset-2">Sair</button>
         </div>}
       </div>
-      <SaveFeedback />
       {searchOpen && <DashboardSearch key={activeOrganizationId} onClose={() => setSearchOpen(false)} />}
     </header>
   );

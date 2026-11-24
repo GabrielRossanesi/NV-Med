@@ -801,7 +801,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
           <p>{rateQuery.error || 'Consultando valores padrão…'}</p>
           {rateQuery.error && <button type="button" className="text-primary underline" onClick={rateQuery.reload}>Tentar novamente</button>}
         </div>)}
-      {formError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{formError}</p>}{store.saving && <p role="status" className="flex items-center gap-2 text-xs text-text-muted"><LoaderCircle size={14} className="animate-spin"/>Confirmando o plantão…</p>}</form></Dialog>}
+      {formError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{formError}</p>}</form></Dialog>}
     {sectorEditorOpen && form && formUnit && <SectorEditorDialog scheduleContext unit={formUnit} organizationName={activeOrganization?.name || ''} specialties={formSpecialties}
       initialSpecialty={formSpecialties.includes(form.specialty || '') ? form.specialty : undefined}
       initialPeriod={{ kind: coverageKind, startTime: form.startTime, endTime: form.endTime, requiredDoctors: 1 }}

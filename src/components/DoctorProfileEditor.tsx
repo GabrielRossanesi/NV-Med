@@ -52,6 +52,7 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
       return original !== (value ?? '');
     }));
     setBusy(true); setError('');
+    const finishSaving = notify.saving();
     try {
       const result = await createClient()?.rpc('nv_update_doctor_profile', {
         target: doctorId, profile, revision: snapshot.profile.updated_at,
@@ -62,7 +63,7 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
       if (result.error) throw new Error(portalError(result.error));
       onSaved();
       notify.success(own ? 'Seus dados foram atualizados.' : 'Perfil médico atualizado.');
-    } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
+    } catch (failure) { setError((failure as Error).message); } finally { finishSaving(); setBusy(false); }
   }
   const p = snapshot?.profile;
   const initial = p ? { ...p, crmUf: p.crm_uf, contractModel: p.contract_model, contractSigned: p.contract_signed } as unknown as Doctor : undefined;

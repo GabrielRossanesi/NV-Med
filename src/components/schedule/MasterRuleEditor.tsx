@@ -40,6 +40,7 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
   const dates = masterDates(spec, rule ? since : today, localDate(end));
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!guard.check()) return; setBusy(true); setError('');
+    const finishSaving = notify.saving();
     try {
       if (!spec.weekdays.length) throw new Error('Selecione pelo menos um dia da semana.');
       const finance = spec.employment_type === 'pj' ? buildRequiredPjAgreement(agreement, rate) : null;
@@ -49,7 +50,7 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
       onClose();
       notify.success(rule ? 'Recorrência atualizada.' : 'Recorrência cadastrada.');
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Não foi possível salvar a recorrência.'); }
-    finally { setBusy(false); }
+    finally { finishSaving(); setBusy(false); }
   }
   return <Dialog title={rule ? 'Editar recorrência' : 'Cadastrar médico fixo'} size="lg" onClose={() => !busy && guard.transition(onClose)}>
     <form data-schedule-edit onSubmit={save} aria-busy={busy}><fieldset disabled={!guard.unlocked || busy} className="space-y-5">

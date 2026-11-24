@@ -57,6 +57,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', inlineError = false, withinDialog }: SaveFeedback = {}) {
     if (get().saving) return false;
     set({ saving: true, error: null });
+    const finishSaving = notify.saving();
     try {
       await work();
       if (success) notify.success(success, { withinDialog });
@@ -67,6 +68,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (!inlineError) notify.error('Não foi possível concluir a ação.', { description: message, persistent: true });
       return false;
     } finally {
+      finishSaving();
       set({ saving: false });
     }
   }
