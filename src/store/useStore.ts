@@ -20,7 +20,8 @@ interface NVMedState {
   syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
   addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<boolean>;
-  updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
+  updateDoctorContract: (id: string, changes: Partial<Pick<Doctor, 'contractModel' | 'contractSigned'>>) => Promise<boolean>;
+  deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
   updateUnit: (unit: Unit, feedback?: SaveFeedback) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
   addSector: (sector: Omit<Sector, 'id' | 'organizationId'>, finance?: SectorFinanceDefaults, feedback?: SaveFeedback) => Promise<Sector | null>;
@@ -89,12 +90,15 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     addDoctor: (input, banking) => commit(async () => {
       const doctor = { ...input, status: banking ? input.status : 'pending' as const, id: crypto.randomUUID(), organizationId: orgId() };
       // The database trigger creates required document rows in the same transaction.
-      await cloud.saveDoctorToSupabase(doctor, true, banking);
+      await cloud.createDoctorInSupabase(doctor, banking);
       set({ doctors: [...get().doctors, doctor] });
       try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
       catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
     }, { success: 'Médico cadastrado.', inlineError: true }),
-    updateDoctor: doctor => commit(async () => { await cloud.saveDoctorToSupabase(doctor); set({ doctors: get().doctors.map(d => d.id === doctor.id ? doctor : d) }); }),
+    updateDoctorContract: (id, changes) => commit(async () => {
+      await cloud.updateDoctorContractInSupabase(id, changes);
+      set(state => ({ doctors: state.doctors.map(doctor => doctor.id === id ? { ...doctor, ...changes } : doctor) }));
+    }),
     deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
     addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit, true); set({ units: [...get().units, unit] }); }),
     updateUnit: (unit, feedback) => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }, feedback),

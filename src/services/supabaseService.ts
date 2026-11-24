@@ -367,23 +367,25 @@ export async function fetchInitialDataFromSupabase() {
     const { data: avatar } = await supabase.storage.from('profile-avatars').createSignedUrl(currentUser.avatar, 3600);
     if (avatar?.signedUrl) currentUser.avatar = avatar.signedUrl;
   }
-  async function rows(table: string) {
-    const result = [];
+  async function rows<Row>(table: string, columns = '*') {
+    const result: Row[] = [];
     for (let offset = 0; ; offset += 500) {
-      let query = supabase!.from(table).select('*').order('id').range(offset, offset + 499);
+      let query = supabase!.from(table).select(columns).order('id').range(offset, offset + 499);
       if (currentUser.type !== 'saas_admin') {
         if (!currentUser.organizationId) throw new Error('Usuário sem empresa vinculada.');
         query = query.eq(table === 'organizations' ? 'id' : 'organization_id', currentUser.organizationId);
       }
-      const { data, error } = await query;
+      const { data, error } = await query.overrideTypes<Row[], { merge: false }>();
       if (error) throw new Error('Não foi possível carregar ' + table + '. Tente novamente.');
       result.push(...data);
       if (data.length < 500) return result;
     }
   }
   const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
-    rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('nv_staff_shifts'),
-    rows('user_accounts'),
+    rows<DbOrganization>('organizations'),
+    rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units'),
+    rows<DbUnit>('units'), rows<DbSector>('sectors'), rows<DbMedicalDocument>('medical_documents'), rows<DbShift>('nv_staff_shifts'),
+    rows<DbUserAccount>('user_accounts'),
     fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
@@ -414,7 +416,7 @@ export async function fetchMedicalDocumentsForOrganization(organizationId: strin
 // OPERAÇÕES DE ESCRITA ASSÍNCRONA (PERSISTÊNCIA EM SEGUNDO PLANO)
 // ==============================================================================
 
-export async function saveDoctorToSupabase(doctor: Doctor, creating = false, banking?: DoctorBanking) {
+export async function createDoctorInSupabase(doctor: Doctor, banking?: DoctorBanking) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
@@ -433,16 +435,21 @@ export async function saveDoctorToSupabase(doctor: Doctor, creating = false, ban
     status: doctor.status,
     contract_model: doctor.contractModel,
     contract_signed: doctor.contractSigned,
-    linked_units: doctor.linkedUnits
   };
 
-  if (creating) {
-    const { error } = await supabase.rpc('nv_create_doctor_with_banking', { profile: payload, banking: banking || null });
-    if (error) throw new Error('Não foi possível cadastrar o médico. Confira os dados e as permissões.');
-  } else {
-    const { error } = await supabase.from('doctors').update(payload).eq('id', doctor.id).select('id').single();
-    if (error) throw new Error('Não foi possível salvar o médico.');
-  }
+  const { error } = await supabase.rpc('nv_create_doctor_with_banking', { profile: payload, banking: banking || null });
+  if (error) throw new Error('Não foi possível cadastrar o médico. Confira os dados e as permissões.');
+}
+
+export async function updateDoctorContractInSupabase(doctorId: string, changes: Partial<Pick<Doctor, 'contractModel' | 'contractSigned'>>) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+
+  const { error } = await supabase.from('doctors').update({
+    contract_model: changes.contractModel,
+    contract_signed: changes.contractSigned,
+  }).eq('id', doctorId).select('id').single();
+  if (error) throw new Error('Não foi possível salvar o contrato do médico.');
 }
 
 export async function deleteDoctorFromSupabase(doctorId: string) {
@@ -746,11 +753,15 @@ export async function uploadDocumentFileToSupabase(file: File, documentId: strin
   return mapDocumentFromDb(data);
 }
 
-export async function openDocument(documentId: string, revision?: string) {
+export async function openDocument(documentId: string, revision?: string, download = false) {
   const query = new URLSearchParams({ preview: '1' });
   if (revision) query.set('revision', revision);
+  if (download) query.set('download', '1');
   const response = await fetch('/api/portal/documents/' + encodeURIComponent(documentId) + '?' + query, { cache: 'no-store' });
-  if (!response.ok) throw new Error('Não foi possível abrir o documento.');
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error || 'Não foi possível abrir o documento.');
+  }
   const data: { url: string } = await response.json();
   return data.url;
 }

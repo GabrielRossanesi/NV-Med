@@ -113,7 +113,7 @@ export default function ReportsPage() {
   }
 
   function exportDoctors() {
-    downloadCsv(`medicos-${safeName(organization?.name || 'empresa')}`, ['Médico', 'CRM', 'UF', 'RQE', 'Especialidade', 'Contratação', 'Contrato', 'Status', 'E-mail', 'Telefone', 'Unidades vinculadas'], doctors.map(doctor => [doctor.name, doctor.crm, doctor.crmUf, doctor.rqe || '', doctor.specialty, doctorContractModelLabels[doctor.contractModel || 'pf'], doctor.contractSigned ? 'Assinado' : 'Pendente', doctor.status === 'active' ? 'Ativo' : doctor.status === 'pending' ? 'Pendente' : 'Inativo', doctor.email, doctor.phone, doctor.linkedUnits.map(id => units.find(unit => unit.id === id)?.name).filter(Boolean).join(' | ')])); exported('Médicos');
+    downloadCsv(`medicos-${safeName(organization?.name || 'empresa')}`, ['Médico', 'CRM', 'UF', 'RQE', 'Especialidade', 'Contratação', 'Contrato', 'Status', 'Unidades vinculadas'], doctors.map(doctor => [doctor.name, doctor.crm, doctor.crmUf, doctor.rqe || '', doctor.specialty, doctorContractModelLabels[doctor.contractModel || 'pf'], doctor.contractSigned ? 'Assinado' : 'Pendente', doctor.status === 'active' ? 'Ativo' : doctor.status === 'pending' ? 'Pendente' : 'Inativo', doctor.linkedUnits.map(id => units.find(unit => unit.id === id)?.name).filter(Boolean).join(' | ')])); exported('Médicos');
   }
 
   function exportCompliance() {

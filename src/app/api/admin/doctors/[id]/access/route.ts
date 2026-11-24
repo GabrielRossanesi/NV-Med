@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
+import { administrativeMfaMessage, getAdministrativeMfaSession, getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { authFlowUrl } from '@/lib/appOrigin';
 import { portalError } from '@/lib/doctorPortal';
 
@@ -12,6 +12,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const client = await createClient();
   if (!client) return response({ error: 'Conexão indisponível.' }, 503);
   if (!await getAuthorizedUser(client)) return response({ error: 'Sua sessão expirou. Entre novamente.' }, 401);
+  if (!await getAdministrativeMfaSession(client)) return response({ error: administrativeMfaMessage }, 403);
   const admin = createAdminClient();
   if (!admin) return response({ error: 'A gestão de acesso precisa ser configurada no servidor.' }, 503);
   const { id } = await context.params;

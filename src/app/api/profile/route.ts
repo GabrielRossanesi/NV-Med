@@ -3,17 +3,22 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { mapUserFromDb } from '@/services/supabaseService';
+import { readBoundedBody } from '@/lib/documentAccess';
+import { decodeAvatar, maxAvatarRequestBytes } from '@/lib/avatarFile';
 
 const avatarBucket = 'profile-avatars';
-const allowedAvatarTypes = new Map([
-  ['image/jpeg', 'jpg'],
-  ['image/png', 'png'],
-  ['image/webp', 'webp'],
-]);
+const sizeError = 'Escolha uma foto JPG, PNG ou WebP de até 5 MB.';
 
 export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin) {
     return NextResponse.json({ error: 'Origem inválida.' }, { status: 403 });
+  }
+  if (Number(request.headers.get('content-length')) > maxAvatarRequestBytes) {
+    return NextResponse.json({ error: sizeError }, { status: 413 });
+  }
+  const contentType = request.headers.get('content-type');
+  if (!contentType || !/^multipart\/form-data;/i.test(contentType)) {
+    return NextResponse.json({ error: 'Envie um formulário de perfil.' }, { status: 415 });
   }
 
   const client = await createClient();
@@ -24,7 +29,10 @@ export async function POST(request: NextRequest) {
   if (!authUser) return NextResponse.json({ error: 'Sua sessão expirou. Entre novamente.' }, { status: 401 });
 
   try {
-    const form = await request.formData();
+    const body = await readBoundedBody(request, maxAvatarRequestBytes);
+    if (body === null) return NextResponse.json({ error: sizeError }, { status: 413 });
+    const form = await new Response(body, { headers: { 'Content-Type': contentType } }).formData().catch(() => null);
+    if (!form || form.getAll('avatar').length > 1) return NextResponse.json({ error: 'Confira o formulário do perfil.' }, { status: 400 });
     const name = String(form.get('name') || '').trim();
     const phone = String(form.get('phone') || '').trim();
     const removeAvatar = form.get('removeAvatar') === 'true';
@@ -33,7 +41,6 @@ export async function POST(request: NextRequest) {
     if (!name || name.length > 150 || phone.length > 40) {
       return NextResponse.json({ error: 'Confira o nome e o telefone.' }, { status: 400 });
     }
-
     const { data: previous, error: profileError } = await admin
       .from('user_accounts')
       .select('*')
@@ -42,16 +49,15 @@ export async function POST(request: NextRequest) {
       .single();
     if (profileError || !previous) return NextResponse.json({ error: 'Perfil ativo não encontrado.' }, { status: 404 });
 
+    const avatar = file instanceof File ? await decodeAvatar(file) : null;
+    if (file !== null && !avatar) return NextResponse.json({ error: sizeError }, { status: 415 });
+
     let nextAvatar = removeAvatar ? '' : (previous.avatar || '');
     let uploadedPath = '';
-    if (file instanceof File && file.size > 0) {
-      const extension = allowedAvatarTypes.get(file.type);
-      if (!extension || file.size > 5 * 1024 * 1024) {
-        return NextResponse.json({ error: 'Escolha uma foto JPG, PNG ou WebP de até 5 MB.' }, { status: 400 });
-      }
-      uploadedPath = `${authUser.id}/${crypto.randomUUID()}.${extension}`;
-      const { error: uploadError } = await admin.storage.from(avatarBucket).upload(uploadedPath, file, {
-        contentType: file.type,
+    if (avatar) {
+      uploadedPath = `${authUser.id}/${crypto.randomUUID()}.${avatar.extension}`;
+      const { error: uploadError } = await admin.storage.from(avatarBucket).upload(uploadedPath, avatar.body, {
+        contentType: avatar.contentType,
         upsert: false,
       });
       if (uploadError) throw uploadError;

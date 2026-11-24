@@ -343,7 +343,6 @@ function DoctorsPageContent() {
                               </div>
                               <div>
                                 <p className="font-semibold text-text-primary">{doc.name}</p>
-                                <p className="text-[10px] text-text-muted">{doc.email}</p>
                               </div>
                             </div>
                           </td>

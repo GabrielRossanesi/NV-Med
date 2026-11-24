@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Camera, Check, Mail, Phone, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import UserAvatar from '@/components/UserAvatar';
+import ProfileMfa from '@/components/ProfileMfa';
 import Link from 'next/link';
 import { canViewPermission } from '@/lib/permissions';
 
@@ -124,6 +125,7 @@ export default function ProfilePage() {
           </div>
         </section>
       </form>
+      <ProfileMfa key={currentUser.id} />
     </div>
   );
 }
