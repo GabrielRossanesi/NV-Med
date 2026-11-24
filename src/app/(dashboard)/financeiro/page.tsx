@@ -19,6 +19,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import Dialog from '@/components/Dialog';
+import BillingNav from '@/components/finance/BillingNav';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import ShiftCashPaymentFields from '@/components/schedule/ShiftCashPaymentFields';
 import ShiftPaymentMovements from '@/components/schedule/ShiftPaymentMovements';
@@ -262,6 +263,7 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
             <Link className="nv-button max-md:min-h-10 max-md:px-2.5 max-md:text-xs" href={`/financeiro/relatorio?${reportParams}`}><Download size={16}/>Relatório e exportação</Link>
           </div>
         </header>
+        <BillingNav active="payable"/>
 
         {!canEditPermission(store.currentUser, 'financeiro') && <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-text-secondary"><ReceiptText size={16} className="shrink-0 text-primary"/><span><strong className="font-semibold text-text-primary">Acesso somente para consulta.</strong> Você pode visualizar e exportar os dados financeiros, sem alterar valores ou pagamentos.</span></div>}
 

@@ -1,7 +1,8 @@
 import type { AdditionalPermissions, UserAccount } from '@/types';
 
 export type PermissionLevel = 'none' | 'view' | 'edit';
-export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'deactivate' | 'history' | 'approve_shift' | 'edit_past';
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'deactivate' | 'history' | 'approve_shift' | 'edit_past' | 'rates_view' | 'rates_edit' | 'billing_view'
+  | 'billing_manage' | 'receipt' | 'adjustment' | 'period_close' | 'period_reopen' | 'export';
 type PermissionUser = Pick<UserAccount, 'type' | 'role' | 'additionalPermissions'>;
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -27,7 +28,8 @@ export const ADDITIONAL_PERMISSION_MODULES = [
   { key: 'unidades', label: 'Unidades e setores', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'documentos', label: 'Documentos', actions: ['view', 'edit', 'approve'] },
   { key: 'escala', label: 'Escalas', actions: ['view', 'create', 'edit', 'delete', 'approve', 'history', 'approve_shift', 'edit_past'] },
-  { key: 'financeiro', label: 'Financeiro', actions: ['view', 'edit'] },
+  { key: 'financeiro', label: 'Financeiro', actions: ['view', 'edit', 'rates_view', 'rates_edit', 'billing_view',
+    'billing_manage', 'receipt', 'adjustment', 'period_close', 'period_reopen', 'export'] },
   { key: 'dados_bancarios', label: 'Dados bancários médicos', actions: ['view', 'edit', 'history'] },
   { key: 'portal_medico', label: 'Acesso ao Portal Médico', actions: ['view', 'edit'] },
   { key: 'relatorios', label: 'Relatórios', actions: ['view'] },
@@ -37,6 +39,10 @@ export const ADDITIONAL_PERMISSION_MODULES = [
 export const permissionActionLabels: Record<PermissionAction, string> = {
   view: 'Visualizar', create: 'Criar', edit: 'Editar', delete: 'Excluir', approve: 'Aprovar', deactivate: 'Desativar',
   history: 'Consultar histórico', approve_shift: 'Aprovar plantão pelo administrativo', edit_past: 'Editar plantão encerrado',
+  rates_view: 'Consultar valores contratuais', rates_edit: 'Gerenciar valores contratuais',
+  billing_view: 'Consultar faturamento', billing_manage: 'Gerenciar faturamento', receipt: 'Registrar repasses',
+  adjustment: 'Ajustar e estornar repasses', period_close: 'Fechar competência', period_reopen: 'Reabrir competência',
+  export: 'Exportar relatórios financeiros',
 };
 
 const allowedActions = new Set<string>(ADDITIONAL_PERMISSION_MODULES.flatMap(module => module.actions.map(action => `${module.key}.${action}`)));
@@ -51,6 +57,11 @@ export function roleHasPermission(type: UserAccount['type'], role: string, modul
 }
 
 export function roleHasAction(type: UserAccount['type'], role: string, module: string, action: PermissionAction): boolean {
+  if (module === 'financeiro' && ['rates_view', 'rates_edit', 'billing_view', 'billing_manage',
+    'receipt', 'adjustment', 'period_close', 'period_reopen', 'export'].includes(action)) {
+    const management = type === 'saas_admin' ? ['CEO', 'Gerente'] : ['Diretor', 'Gerente'];
+    return management.includes(role) || (role === 'Financeiro' && !['adjustment', 'period_reopen'].includes(action));
+  }
   if (module === 'escala' && action === 'history') return (type === 'saas_admin' ? ['CEO', 'Gerente', 'Coordenador'] : ['Diretor', 'Gerente', 'Coordenador de Escalas']).includes(role);
   if (module === 'escala' && (action === 'approve_shift' || action === 'edit_past')) return (type === 'saas_admin'
     ? ['CEO', 'Gerente', 'Coordenador', 'Administrativo'] : ['Diretor', 'Gerente', 'Coordenador de Escalas', 'Escalista']).includes(role);
