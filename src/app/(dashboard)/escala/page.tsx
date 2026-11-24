@@ -27,6 +27,9 @@ import ScheduleDeleteDialog from '@/components/schedule/ScheduleDeleteDialog';
 import ShiftSelectionPanel from '@/components/schedule/ShiftSelectionPanel';
 import PresencePanel from '@/components/schedule/PresencePanel';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
+import ShiftApprovalDialog from '@/components/schedule/ShiftApprovalDialog';
+import { shiftEditRestriction } from '@/lib/shiftApproval';
+import { notify } from '@/lib/notifications';
 import ShiftRecordSummary, { shiftRecordStatusLabels as statusLabels } from '@/components/schedule/ShiftRecordSummary';
 import { createClient } from '@/lib/supabase/client';
 import { fetchInitialDataFromSupabase, fetchShiftRates } from '@/services/supabaseService';
@@ -185,6 +188,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [referenceTime, setReferenceTime] = useState(Date.now);
   useEffect(() => { const timer = window.setInterval(() => setReferenceTime(Date.now()), 60_000); return () => clearInterval(timer); }, []);
   const [weekPreview, setWeekPreview] = useState<{ clones: Shift[]; sectors: number; turns: number; range: string; blocked: number; duplicates: number; conflicts: number } | null>(null);
+  const [confirmAdministrative, setConfirmAdministrative] = useState<Shift | null>(null);
+  const [retroReason, setRetroReason] = useState('');
   const [recurringPreview, setRecurringPreview] = useState<{ inputs: Omit<ShiftWrite, 'id' | 'organizationId'>[]; dates: string[]; countPerDate: number; cents?: number } | null>(null);
   const [recurringError, setRecurringError] = useState('');
   const [deleteRequest, setDeleteRequest] = useState<ScheduleDeletionSelection | null>(null);
@@ -237,7 +242,9 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const canDeleteSchedule = canEditSchedule && canPerformAction(store.currentUser, 'escala', 'delete');
   const canApproveSchedule = canEditSchedule && canPerformAction(store.currentUser, 'escala', 'approve');
   const canCreateSector = canEditSchedule && canPerformAction(store.currentUser, 'unidades', 'create');
-  const canSaveShift = form?.id ? canEditSchedule : canCreateSchedule;
+  const endedShift = Boolean(openedShift?.approvalEndedAt && Date.parse(openedShift.approvalEndedAt) <= referenceTime);
+  const editRestriction = shiftEditRestriction(openedShift, endedShift, canPerformAction(store.currentUser, 'escala', 'edit_past'));
+  const canSaveShift = form?.id ? canEditSchedule && !editRestriction : canCreateSchedule;
   const newPjAgreement = form?.employmentType === 'pj' && (!openedShift || openedShift.employmentType !== 'pj'
     || Boolean(form.doctorId && form.doctorId !== openedShift.doctorId));
   const showAgreementFields = canEditFinancial && canSaveShift && form?.employmentType === 'pj' && openedShift?.paymentStatus !== 'paid';
@@ -335,6 +342,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setCoverageKind(period?.kind || 'day');
     setOpenedShift(shift);
     setAgreementDraft(initialAgreementDraft(shift));
+    setRetroReason('');
     setForm(shift || { coverageMode: adhoc ? 'adhoc' : 'regular', coverageReason: '', id: '', organizationId: orgId, unitId: resolvedUnit, sectorId: resolvedSector?.id || '', sector: resolvedSector?.name || '', specialty: resolvedSector?.primarySpecialty || '', doctorId: undefined, date: day, startTime: period?.startTime || resolvedSector?.defaultStartTime || '07:00', endTime: period?.endTime || resolvedSector?.defaultEndTime || '19:00', type: 'onsite', status: 'open', paymentStatus: 'pending', paymentFrequency: 'on_delivery', notes: '' });
   }
   function specialtyChoices(id: string, sector?: Sector) {
@@ -425,6 +433,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (newPjAgreement && !canEditFinancial) return setFormError('A confirmação de um acordo PJ exige permissão financeira.');
     if (!form.id && recurrence !== 'once' && (!repeatUntil || repeatUntil < form.date)) return setFormError('Defina uma data final igual ou posterior ao primeiro plantão.');
     const normalized: ShiftWrite = { ...form, coverageMode: form.coverageMode || 'regular', coverageReason: form.coverageMode === 'adhoc' ? form.coverageReason?.trim() : undefined, sector: sector?.name, sectorId: sector?.id, status: form.doctorId ? (form.status === 'open' ? 'pending' : form.status) : 'open', employmentType: form.employmentType, employerName: form.employerName?.trim() || undefined };
+    if (openedShift && endedShift) normalized.retroReason = retroReason.trim();
     if (showAgreementFields) {
       const changing = effectiveDraft.mode !== 'keep' || effectiveDraft.frequency !== (openedShift?.paymentFrequency || 'on_delivery');
       if (changing && !rateQuery.ready) return setFormError('Aguarde a consulta dos valores padrão ou tente novamente.');
@@ -744,12 +753,26 @@ function Schedule({ params }: { params: URLSearchParams }) {
     {pageError && <p role="alert" className="text-xs text-danger">{pageError}</p>}
       <div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => setWeekPreview(null)} disabled={store.saving}>Cancelar</button><button type="button" className="nv-button" onClick={() => void confirmWeekPreview()} disabled={Boolean(weekPreview.blocked || weekPreview.duplicates || weekPreview.conflicts || store.saving || !canCreateSchedule)}>{store.saving ? 'Copiando…' : 'Copiar postos'}</button></div>
     </div></Dialog>}
-    {form && <Dialog title={formTitle} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
+    {confirmAdministrative && <ShiftApprovalDialog shift={confirmAdministrative} onClose={() => setConfirmAdministrative(null)}
+      onSaved={async () => {
+        setConfirmAdministrative(null);
+        setForm(null);
+        try { await refreshMasterShifts(); }
+        catch { notify.warning('Atualize a página para consultar a aprovação.'); }
+      }}/>}
+    {form && <Dialog title={formTitle} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || !canSaveShift} title={editRestriction || undefined}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>{form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
       {openedShift && <ShiftRecordSummary shift={openedShift} organization={activeOrganization?.name}
         unit={units.find(item => item.id === openedShift.unitId)?.name}
         sector={sectors.find(item => item.id === openedShift.sectorId)?.name}
         doctor={doctors.find(item => item.id === openedShift.doctorId)?.name} />}
       {form.id && canPerformAction(store.currentUser, 'escala', 'history') && <button type="button" className="nv-button-secondary" onClick={() => setHistoryTarget({ shiftId: form.id })}>Ver histórico</button>}{form.id && <MasterShiftOrigin ids={[form.id]} date={form.date} canEdit={canEditSchedule && canCreateSchedule} onEditRule={editMasterRule} editingOccurrence/>}
+      {openedShift?.doctorId && openedShift.approvalSource === 'pending' && openedShift.status !== 'cancelled'
+        && canEditSchedule && canPerformAction(store.currentUser, 'escala', 'approve_shift') && <button type="button"
+          className="nv-button-secondary" onClick={() => setConfirmAdministrative(openedShift)}>Aprovar pelo administrativo</button>}
+      {editRestriction && <p className="nv-feedback text-text-secondary">{editRestriction}</p>}
+      {openedShift && endedShift && canSaveShift && <label className="nv-label">Justificativa da edição retroativa
+        <textarea className="nv-input" required minLength={3} maxLength={1000} value={retroReason} onChange={event => setRetroReason(event.target.value)}/>
+      </label>}
       <fieldset disabled={!canSaveShift} className="min-w-0 space-y-5">{form.coverageMode === 'adhoc' && <section className="space-y-3 border-l-2 border-primary pl-3"><p className="text-sm font-semibold text-primary">Cobertura temporária</p><p className="text-xs leading-5 text-text-muted">Vale apenas para as datas cadastradas. Não altera os postos fixos do setor e não entra na cópia de semanas.</p><label className="nv-label">Motivo da cobertura<input className="nv-input" required minLength={3} maxLength={200} placeholder="Ex.: Férias de profissional CLT em outubro" value={form.coverageReason || ''} onChange={event => setForm({ ...form, coverageReason: event.target.value })} /></label></section>}<div className="grid gap-4 sm:grid-cols-2">
         <label className="nv-label">Unidade<select aria-label="Unidade" className="nv-input" required value={form.unitId} onChange={event => updateFormUnit(event.target.value)}><option value="">Selecione</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
         <div className="sm:col-span-2"><div className="flex items-end gap-2">
@@ -776,7 +799,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
         </label>
         {form.doctorId && <label className="nv-label">Situação
           <select className="nv-input" value={form.status} onChange={event => setForm({ ...form, status: event.target.value as Shift['status'] })}>
-            <option value="pending">Aguardando confirmação</option><option value="confirmed">Confirmado</option>
+            <option value={form.status === "confirmed" ? "confirmed" : "pending"}>Escalado</option>
             <option value="completed">Concluído</option><option value="cancelled">Cancelado</option>
           </select>
         </label>}

@@ -1,7 +1,7 @@
 import type { AdditionalPermissions, UserAccount } from '@/types';
 
 export type PermissionLevel = 'none' | 'view' | 'edit';
-export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'deactivate' | 'history';
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'deactivate' | 'history' | 'approve_shift' | 'edit_past';
 type PermissionUser = Pick<UserAccount, 'type' | 'role' | 'additionalPermissions'>;
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -26,7 +26,7 @@ export const ADDITIONAL_PERMISSION_MODULES = [
   { key: 'medicos', label: 'Médicos', actions: ['view', 'create', 'edit', 'delete', 'approve'] },
   { key: 'unidades', label: 'Unidades e setores', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'documentos', label: 'Documentos', actions: ['view', 'edit', 'approve'] },
-  { key: 'escala', label: 'Escalas', actions: ['view', 'create', 'edit', 'delete', 'approve', 'history'] },
+  { key: 'escala', label: 'Escalas', actions: ['view', 'create', 'edit', 'delete', 'approve', 'history', 'approve_shift', 'edit_past'] },
   { key: 'financeiro', label: 'Financeiro', actions: ['view', 'edit'] },
   { key: 'dados_bancarios', label: 'Dados bancários médicos', actions: ['view', 'edit', 'history'] },
   { key: 'portal_medico', label: 'Acesso ao Portal Médico', actions: ['view', 'edit'] },
@@ -36,7 +36,7 @@ export const ADDITIONAL_PERMISSION_MODULES = [
 ] as const;
 export const permissionActionLabels: Record<PermissionAction, string> = {
   view: 'Visualizar', create: 'Criar', edit: 'Editar', delete: 'Excluir', approve: 'Aprovar', deactivate: 'Desativar',
-  history: 'Consultar histórico',
+  history: 'Consultar histórico', approve_shift: 'Aprovar plantão pelo administrativo', edit_past: 'Editar plantão encerrado',
 };
 
 const allowedActions = new Set<string>(ADDITIONAL_PERMISSION_MODULES.flatMap(module => module.actions.map(action => `${module.key}.${action}`)));
@@ -52,6 +52,8 @@ export function roleHasPermission(type: UserAccount['type'], role: string, modul
 
 export function roleHasAction(type: UserAccount['type'], role: string, module: string, action: PermissionAction): boolean {
   if (module === 'escala' && action === 'history') return (type === 'saas_admin' ? ['CEO', 'Gerente', 'Coordenador'] : ['Diretor', 'Gerente', 'Coordenador de Escalas']).includes(role);
+  if (module === 'escala' && (action === 'approve_shift' || action === 'edit_past')) return (type === 'saas_admin'
+    ? ['CEO', 'Gerente', 'Coordenador', 'Administrativo'] : ['Diretor', 'Gerente', 'Coordenador de Escalas', 'Escalista']).includes(role);
   if (module === 'portal_medico') return ['view', 'edit'].includes(action) && (type === 'saas_admin' ? ['CEO', 'Gerente'] : ['Diretor', 'Gerente']).includes(role);
   if (module === 'dados_bancarios') return ['view', 'edit', 'history'].includes(action) && (type === 'saas_admin' ? ['CEO', 'Gerente', 'Financeiro'] : ['Diretor', 'Gerente', 'Financeiro']).includes(role);
   if (action === 'view') return roleHasPermission(type, role, module);

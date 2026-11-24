@@ -49,4 +49,17 @@ export const notify = {
   info: (title: string, options?: NotificationOptions) => show('info', title, options),
   warning: (title: string, options?: NotificationOptions) => show('warning', title, options),
   error: (title: string, options?: NotificationOptions) => show('error', title, options),
+  saving: () => {
+    const toasterId = [...dialogScopes].at(-1);
+    let id: ReturnType<typeof toast.loading> | undefined;
+    const timer = window.setTimeout(() => {
+      if (toasterId && !dialogScopes.has(toasterId)) return;
+      id = toast.loading('Salvando…', { toasterId, dismissible: false, duration: Infinity });
+    }, 200);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (id !== undefined) toast.dismiss(id);
+    };
+  },
 };

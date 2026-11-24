@@ -211,7 +211,12 @@ export interface ShiftAgreementSelection {
   expected_changed_at?: string;
 }
 
+export type ShiftApproval = 'pending' | 'doctor' | 'administrative' | 'automatic' | 'legacy';
+
 export interface Shift {
+  approvalSource?: ShiftApproval;
+  approvalRevision?: number;
+  approvalEndedAt?: string;
   exchangeRequested?: boolean;
   coverageMode?: 'regular' | 'adhoc';
   coverageReason?: string;
@@ -240,7 +245,7 @@ export interface Shift {
   organizationId: string;
 }
 
-export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection };
+export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection; retroReason?: string };
 
 export type AdditionalPermissions = Record<string, 'view' | 'edit' | 'allow' | 'deny'>;
 

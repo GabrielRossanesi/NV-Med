@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock3, List, Repeat2, UserRound, XCircle } from 'lucide-react';
 import Dialog from '@/components/Dialog';
 import EmploymentBadge from '@/components/schedule/EmploymentBadge';
-import type { EmploymentType } from '@/types';
+import type { EmploymentType, ShiftApproval } from '@/types';
+import { shiftApprovalLabels, automaticShiftApprovalMessage } from '@/lib/shiftApproval';
 import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
 import { notify } from '@/lib/notifications';
@@ -15,6 +16,7 @@ type Status = 'open' | 'exchange' | 'confirmed' | 'cancelled' | 'completed' | 'p
 type ApplicationStatus = 'pending' | 'selected' | 'not_selected' | 'cancelled';
 type Shift = {
   employment?: EmploymentType;
+  approval_source?: ShiftApproval; approval_revision?: number;
   id: string; date: string; start_time: string; end_time: string; organization: string; unit: string;
   sector: string; specialty?: string; status: Status; notes?: string; assigned_to_me: boolean;
   upcoming: boolean; application?: ApplicationStatus;
@@ -49,6 +51,26 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
   const canExchange = shift.assigned_to_me && shift.upcoming && (shift.status === 'confirmed' || shift.status === 'exchange');
   const canApply = !shift.assigned_to_me && shift.upcoming && (shift.status === 'open' || shift.status === 'exchange');
   const cancel = shift.assigned_to_me ? shift.status === 'exchange' : shift.application === 'pending';
+  const canConfirm = shift.assigned_to_me && shift.approval_source && shift.approval_source !== 'doctor'
+    && shift.status !== 'cancelled' && shift.status !== 'open';
+  async function confirm() {
+    setBusy(true);
+    setError('');
+    try {
+      const client = createClient();
+      if (!client) throw new Error('Conexão indisponível.');
+      const { error } = await client.rpc('nv_approve_shift', {
+        target: shift.id, revision: shift.approval_revision, administrative: false,
+      });
+      if (error) throw new Error(portalError(error));
+      onSaved();
+      notify.success('Plantão confirmado.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Não foi possível confirmar o plantão.');
+    } finally {
+      setBusy(false);
+    }
+  }
   async function act() {
     setBusy(true);
     setError('');
@@ -78,6 +100,10 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
       <div><p className="text-sm text-text-muted">{displayDate(shift.date)}</p>
         <p className="mt-1 text-2xl font-bold tabular-nums">{shift.start_time}–{shift.end_time}</p></div>
       <StatusLabel status={shift.status}/>
+      {shift.approval_source && shift.approval_source !== 'pending' && <span className="ml-2 nv-badge bg-surface-muted text-text-secondary">
+        {shiftApprovalLabels[shift.approval_source]}
+      </span>}
+      {shift.approval_source === 'automatic' && <p className="text-sm text-text-muted">{automaticShiftApprovalMessage}</p>}
       {(shift.assigned_to_me || shift.status === 'open') && <EmploymentBadge employment={shift.employment} provisional={shift.status === 'open'}/>}
       <dl className="grid grid-cols-2 gap-3 border-y border-border py-4 text-sm">
         {Object.entries({ Empresa: shift.organization, Unidade: shift.unit, Posto: shift.sector, Especialidade: shift.specialty || 'Geral' }).map(([label, value]) =>
@@ -87,6 +113,9 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
       {shift.application && <p className="text-sm">Candidatura · {applicationLabels[shift.application]}</p>}
       {canExchange && <p className="text-sm text-text-muted">Sua responsabilidade pelo plantão termina quando a coordenação aprovar um substituto.</p>}
       {error && <p role="alert" className="nv-feedback text-danger">{error}</p>}
+      {canConfirm && <button type="button" className="nv-button mr-2" disabled={busy} onClick={() => void confirm()}>
+        {busy ? 'Registrando…' : 'Confirmar minha alocação'}
+      </button>}
       {(canExchange || canApply) && <button type="button" className="nv-button" disabled={busy} onClick={() => void act()}>
         {busy ? 'Registrando…' : canExchange ? (cancel ? 'Cancelar solicitação de troca' : 'Solicitar troca') : (cancel ? 'Cancelar candidatura' : 'Enviar candidatura')}
       </button>}

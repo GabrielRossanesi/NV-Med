@@ -136,6 +136,9 @@ interface DbDocumentAudit {
 }
 
 interface DbShift {
+  approval_source?: Shift['approvalSource'];
+  approval_revision?: number;
+  approval_ended_at?: string;
   coverage_mode?: Shift['coverageMode'];
   coverage_reason?: string | null;
   sector_id?: string;
@@ -302,6 +305,9 @@ function mapDocumentAuditFromDb(row: DbDocumentAudit): DocumentAuditEntry {
 
 function mapShiftFromDb(row: DbShift): Shift {
   return {
+    approvalSource: row.approval_source ?? undefined,
+    approvalRevision: row.approval_revision,
+    approvalEndedAt: row.approval_ended_at,
     coverageMode: row.coverage_mode || 'regular',
     coverageReason: row.coverage_reason || undefined,
     sectorId: row.sector_id,
@@ -535,7 +541,7 @@ export async function saveShiftToSupabase(shift: ShiftWrite) {
 export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection } => ({
+  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string } => ({
     id: shift.id,
     coverage_mode: shift.coverageMode || 'regular',
     coverage_reason: shift.coverageMode === 'adhoc' ? shift.coverageReason?.trim() : null,
@@ -549,6 +555,7 @@ export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
     payment_frequency: shift.paymentFrequency || 'on_delivery',
     paid_at: shift.paymentStatus === 'paid' ? shift.paidAt || new Date().toISOString() : null,
     agreement: shift.agreement,
+    retro_reason: shift.retroReason,
     organization_id: shift.organizationId,
     doctor_id: shift.doctorId || null,
     unit_id: shift.unitId,
