@@ -9,8 +9,16 @@ CREATE TABLE auth.users (
   raw_app_meta_data jsonb DEFAULT '{}'::jsonb, raw_user_meta_data jsonb DEFAULT '{}'::jsonb, updated_at timestamptz DEFAULT now(),
   banned_until timestamptz, deleted_at timestamptz, last_sign_in_at timestamptz, invited_at timestamptz
 );
+CREATE TABLE auth.mfa_factors (
+  id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  status text NOT NULL, factor_type text NOT NULL DEFAULT 'totp'
+);
 CREATE TABLE auth.sessions (
-  id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id), created_at timestamptz, not_after timestamptz
+  id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id), created_at timestamptz, not_after timestamptz,
+  aal text, factor_id uuid REFERENCES auth.mfa_factors(id) ON DELETE SET NULL, user_agent text
+);
+CREATE TABLE auth.audit_log_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payload json, created_at timestamptz DEFAULT now()
 );
 CREATE TABLE auth.identities (id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users(id));
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
@@ -27,7 +35,8 @@ CREATE TABLE storage.buckets (
   id text PRIMARY KEY, name text NOT NULL, public boolean DEFAULT false,
   file_size_limit bigint, allowed_mime_types text[]
 );
-CREATE TABLE storage.objects (bucket_id text REFERENCES storage.buckets(id), name text, PRIMARY KEY (bucket_id, name));
+CREATE TABLE storage.objects (bucket_id text REFERENCES storage.buckets(id), name text,
+  version text DEFAULT gen_random_uuid()::text, updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (bucket_id, name));
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE FUNCTION storage.foldername(path text) RETURNS text[] LANGUAGE sql IMMUTABLE AS $$
   SELECT (string_to_array(path, '/'))[1:cardinality(string_to_array(path, '/')) - 1];

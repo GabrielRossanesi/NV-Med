@@ -9,7 +9,7 @@ export async function getAuthorizedUser(client: SupabaseClient) {
   return !accessError && data === true ? user : null;
 }
 
-export const administrativeMfaMessage = 'Confirme a verificação em duas etapas em Meu perfil para continuar.';
+export const administrativeMfaMessage = 'Confirme a verificação em duas etapas em Minha conta para continuar.';
 
 export async function getAdministrativeMfaSession(client: SupabaseClient): Promise<string | null> {
   const { data, error } = await client.rpc('nv_admin_mfa_session');

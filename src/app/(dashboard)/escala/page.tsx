@@ -134,11 +134,15 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [listRange, setListRange] = useState<'week' | 'day' | 'month'>(params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
   const [scheduleMode, setScheduleMode] = useState<'general' | 'master'>(params.get('mode') === 'master' ? 'master' : 'general');
   const [masterEditRequest, setMasterEditRequest] = useState<MasterEditRequest | null>(null);
-  const [desktopView, setDesktopView] = useState<ViewMode>(requestedShiftId ? 'list' : params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
+  const preferredView = store.accountPreferences.scheduleView === 'list' ? 'list' : 'week';
+  const explicitView = params.get('view');
+  const initialView: MobileViewMode = requestedShiftId || explicitView === 'list' ? 'list'
+    : explicitView === 'week' || explicitView === 'month' || explicitView === 'day' ? explicitView : preferredView;
+  const [desktopView, setDesktopView] = useState<ViewMode>(initialView);
   const mobile = useSyncExternalStore(subscribeMobile, () => window.matchMedia('(max-width: 767px)').matches, () => false);
   const savedMobileView = useSyncExternalStore(() => () => {}, readMobileView, () => 'week' as const);
   const [mobileChoice, setMobileChoice] = useState<MobileViewMode>();
-  const mobileView = mobileChoice ?? (requestedShiftId ? 'list' : savedMobileView);
+  const mobileView = mobileChoice ?? (requestedShiftId || explicitView || store.hasSavedAccountPreferences ? initialView : savedMobileView);
   function changeMobileView(next: MobileViewMode) {
     if (next === 'list' && mobileView !== 'list') setListRange(mobileView);
     setMobileChoice(next);

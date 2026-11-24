@@ -95,7 +95,14 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-audit-context.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-controls.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-39, pré/pós-verificação e suítes SQL.'
+  # Replay the production security baseline before validating the account migration.
+  foreach ($name in '40_doctor_credential_writes.sql', '41_administrative_mfa.sql',
+    '42_attendance_confirmation.sql', '43_doctor_data_minimization.sql',
+    '45_resumable_organization_cleanup.sql', '46_secure_provisioning.sql', '47_staff_account.sql') {
+    Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir $name))
+  }
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'staff-account.verify.sql'))
+  Write-Output 'PASS: linha de base, migrations de produção até a 47 e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

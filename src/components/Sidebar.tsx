@@ -327,7 +327,7 @@ export default function Sidebar() {
                 <>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-semibold text-sidebar-text">{currentUser.name}</span>
-                    <span className="block truncate text-[10px] text-sidebar-text-muted">Conta e perfil</span>
+                    <span className="block truncate text-[10px] text-sidebar-text-muted">Minha conta</span>
                   </span>
                   <ChevronDown className={`h-3.5 w-3.5 text-sidebar-text-muted transition-transform duration-150 ${profileMenuOpen ? 'rotate-180' : ''}`} />
                 </>
@@ -341,7 +341,7 @@ export default function Sidebar() {
                   <p className="mt-0.5 truncate text-[11px] text-text-muted">{currentUser.email}</p>
                 </div>
                 <Link role="menuitem" href="/perfil" onNavigate={closeMenus} className="mt-1 flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-text-secondary transition hover:bg-state-hover hover:text-text-primary">
-                  <UserRound className="h-4 w-4" /> Meu perfil
+                  <UserRound className="h-4 w-4" /> Minha conta
                 </Link>
                 <button role="menuitem" type="button" onClick={logout} disabled={logoutPending} className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger transition hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
                   {logoutPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} {logoutPending ? 'Saindo…' : 'Sair da conta'}

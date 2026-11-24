@@ -12,6 +12,7 @@ import { useStore } from '@/store/useStore';
 import DashboardSearch from './DashboardSearch';
 import NotificationInbox from './NotificationInbox';
 import UserAvatar from './UserAvatar';
+import { useResolvedTheme } from './account/useResolvedTheme';
 
 const actions = 'grid size-10 shrink-0 cursor-pointer place-items-center rounded-full text-text-secondary transition-colors hover:bg-state-hover hover:text-primary';
 const navigation = [
@@ -31,7 +32,9 @@ export default function Header() {
   const [referenceTime] = useState(Date.now);
   const profileMenu = useRef<HTMLDivElement>(null);
   const profileTrigger = useRef<HTMLButtonElement>(null);
-  const { activeOrganizationId, organizations, setActiveOrganizationId, theme, setTheme, currentUser, isSimulating, stopSimulation, doctors, documents, shifts } = useStore();
+  const { activeOrganizationId, organizations, setActiveOrganizationId, setTheme, currentUser, isSimulating, stopSimulation, doctors, documents, shifts } = useStore();
+  const theme = useResolvedTheme();
+  const showDocumentAlerts = useStore(state => state.accountPreferences.documentAlerts);
 
   const activeOrg = organizations.find(organization => organization.id === activeOrganizationId);
   const canSwitch = currentUser.type === 'saas_admin' && organizations.length > 1;
@@ -39,14 +42,14 @@ export default function Header() {
   const canSeeDocuments = canViewPermission(currentUser, 'documentos');
   const documentAlerts = useMemo(() => {
     const governance = getDocumentGovernance(activeOrg);
-    if (!canSeeDocuments || !activeOrg || !governance.internalNotifications) return 0;
+    if (!canSeeDocuments || !activeOrg || !governance.internalNotifications || !showDocumentAlerts) return 0;
     return doctorsWithDocumentIssues(
       doctors.filter(doctor => doctor.organizationId === activeOrganizationId),
       documents.filter(document => document.organizationId === activeOrganizationId),
       shifts.filter(shift => shift.organizationId === activeOrganizationId),
       referenceTime, activeOrg.settings.requiredDocuments, Math.max(...governance.expiryAlertDays),
     ).length;
-  }, [activeOrg, activeOrganizationId, canSeeDocuments, doctors, documents, referenceTime, shifts]);
+  }, [activeOrg, activeOrganizationId, canSeeDocuments, doctors, documents, referenceTime, shifts, showDocumentAlerts]);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -139,7 +142,7 @@ export default function Header() {
                   </div>
                 </div>
                 <Link href="/perfil" onClick={() => setProfileOpen(false)} className="mt-1 flex min-h-11 items-center gap-2.5 rounded-xl px-3 text-sm text-text-secondary transition-colors hover:bg-state-hover hover:text-text-primary">
-                  <UserRound size={16} aria-hidden="true" /> Meu perfil
+                  <UserRound size={16} aria-hidden="true" /> Minha conta
                 </Link>
                 <button type="button" onClick={logout} disabled={logoutPending} className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 text-sm text-danger transition-colors hover:bg-danger/10 disabled:cursor-wait disabled:opacity-60">
                   {logoutPending ? <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" /> : <LogOut size={16} aria-hidden="true" />} {logoutPending ? 'Saindo…' : 'Sair da conta'}

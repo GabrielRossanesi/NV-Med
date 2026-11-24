@@ -6,6 +6,8 @@ import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission, canPerformAction } from '@/lib/permissions';
 import type { DoctorBanking } from '@/lib/doctorBanking';
 import { notify } from '@/lib/notifications';
+import { defaultAccountPreferences, type AccountPreferences } from '@/lib/account';
+import { createClient } from '@/lib/supabase/client';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
@@ -48,12 +50,18 @@ interface NVMedState {
   deleteUser: (id: string, confirmation: string) => Promise<boolean>;
   setUserTemporaryPassword: (id: string, password: string) => Promise<boolean>;
   startSimulation: (orgId: string) => void; stopSimulation: () => void;
-  theme: 'light' | 'dark'; setTheme: (theme: 'light' | 'dark') => void;
+  theme: AccountPreferences['theme']; setTheme: (theme: AccountPreferences['theme']) => void;
   sidebarCollapsed: boolean; setSidebarCollapsed: (collapsed: boolean) => void;
+  accountPreferences: AccountPreferences;
+  accountPreferencesStatus: 'loading' | 'ready' | 'error';
+  hasSavedAccountPreferences: boolean;
+  loadAccountPreferences: () => Promise<void>;
+  saveAccountPreferences: (changes: Partial<AccountPreferences>, quiet?: boolean) => Promise<boolean>;
   updateProfile: (form: FormData) => Promise<boolean>;
 }
 
 export const useStore = create<NVMedState>()(persist((set, get) => {
+  let preferenceWrites = Promise.resolve<boolean>(true);
   async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', inlineError = false, withinDialog }: SaveFeedback = {}) {
     if (get().saving) return false;
     set({ saving: true, error: null });
@@ -84,9 +92,60 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
     saving: false, error: null, theme: 'light', sidebarCollapsed: true,
-    setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null }),
-    setSidebarCollapsed: sidebarCollapsed => set({ sidebarCollapsed }),
-    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null }),
+    accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false,
+    async loadAccountPreferences() {
+      const owner = get().currentUser.id;
+      if (!owner) return;
+      set({ accountPreferencesStatus: 'loading' });
+      try {
+        const result = await createClient()?.rpc('nv_account_preferences');
+        if (!result || result.error) throw new Error();
+        if (get().currentUser.id !== owner) return;
+        const accountPreferences: AccountPreferences = result.data
+          ?? { ...defaultAccountPreferences, theme: get().theme, sidebarCollapsed: get().sidebarCollapsed };
+        set({ accountPreferences, theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed,
+          accountPreferencesStatus: 'ready', hasSavedAccountPreferences: Boolean(result.data) });
+      } catch {
+        if (get().currentUser.id === owner) set({ accountPreferencesStatus: 'error' });
+      }
+    },
+    saveAccountPreferences(changes, quiet = false) {
+      const owner = get().currentUser.id;
+      const write = async () => {
+        if (!owner || get().currentUser.id !== owner) return false;
+        const finish = quiet ? undefined : notify.saving();
+        try {
+          const baseline = get().accountPreferences;
+          const initialAppearance = get().hasSavedAccountPreferences ? {}
+            : { theme: baseline.theme, sidebarCollapsed: baseline.sidebarCollapsed };
+          const result = await createClient()?.rpc('nv_save_account_preferences', { changes: { ...initialAppearance, ...changes } });
+          if (!result || result.error || !result.data) throw new Error();
+          if (get().currentUser.id !== owner) return false;
+          const accountPreferences: AccountPreferences = result.data;
+          set({ accountPreferences, hasSavedAccountPreferences: true,
+            theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed });
+          if (!quiet) notify.success('Preferências salvas.');
+          return true;
+        } catch {
+          if (get().currentUser.id === owner) notify.error('Não foi possível sincronizar as preferências.');
+          return false;
+        } finally { finish?.(); }
+      };
+      preferenceWrites = preferenceWrites.then(write);
+      return preferenceWrites;
+    },
+    setTheme: theme => {
+      set({ theme });
+      if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ theme }, true);
+    },
+    setSidebarCollapsed: sidebarCollapsed => {
+      set({ sidebarCollapsed });
+      if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ sidebarCollapsed }, true);
+    },
+    clearFeedback: () => set({ error: null }),
+    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
+      theme: defaultAccountPreferences.theme, sidebarCollapsed: defaultAccountPreferences.sidebarCollapsed,
+      accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
     addDoctor: (input, banking) => commit(async () => {
@@ -228,14 +287,14 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }, { inlineError: true }),
     deleteUser: (id, confirmation) => commit(async () => { const res = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível excluir o usuário.'); set({ users: get().users.filter(user => user.id !== id) }); }),
     setUserTemporaryPassword: (id, password) => commit(async () => { const res = await fetch('/api/admin/users/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar a senha.'); }, { success: false }),
-    updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }),
+    updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); if (get().currentUser.id === result.user.id) set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }, { success: 'Perfil atualizado.', inlineError: true }),
     startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
     stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),
   };
 }, {
   name: 'nv-med-preferences',
   skipHydration: true,
-  partialize: state => ({ theme: state.theme, activeOrganizationId: state.activeOrganizationId }),
+  partialize: state => ({ activeOrganizationId: state.activeOrganizationId }),
   merge: (saved, current) => ({
     ...current,
     theme: (saved as { theme?: string })?.theme === 'dark' ? 'dark' : 'light',

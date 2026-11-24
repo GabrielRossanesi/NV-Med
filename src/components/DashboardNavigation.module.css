@@ -10,6 +10,24 @@
   --navigation-easing: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.workspace[data-density='compact'] :global(.nv-content) {
+  padding-block: .75rem;
+}
+
+.workspace[data-density='compact'] :global(.nv-content) :global(.nv-label) {
+  gap: .25rem;
+}
+
+@media (min-width: 768px) {
+  .workspace[data-density='compact'] :global(.nv-content) {
+    padding-block: 1rem;
+  }
+
+  .workspace[data-density='compact'] :global(.nv-content) :is(th, td) {
+    padding-block: .5rem;
+  }
+}
+
 .sidebar[data-collapsed='true'],
 .workspace[data-collapsed='true'] {
   --navigation-width: 72px;

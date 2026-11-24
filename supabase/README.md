@@ -1,5 +1,9 @@
 # Banco de dados do NV Med
 
+## Minha conta
+
+A migration `47_staff_account.sql` requer a linha de base da segurança em produção (40–43 e 45–46). Ela acrescenta preferências e atividade pessoais à equipe interna, protege o último TOTP verificado e integra a categoria de candidaturas à central de avisos. Aplique com a versão correspondente da aplicação. Consulte [Minha conta](../docs/minha-conta.md) para os pré-requisitos de Auth, a homologação e os limites operacionais.
+
 `39_schedule_audit_context.sql` reutiliza o histórico e o estágio privados da 38 para correlação transacional, contexto histórico de unidades e importações privilegiadas. Aplique após a 38. [Guia dos complementos](../docs/complementos-controle-auditoria-escalas.md)
 
 Filtros e controle administrativo das escalas: aplicar `38_schedule_controls_and_audit.sql` após a 37 e antes da interface correspondente. Reforça a autorização usada por RLS/RPCs e amplia o histórico existente, sem modificar escalas reais nem reagendar o Cron. [Guia de filtros, bloqueio e auditoria](../docs/filtros-bloqueio-e-auditoria-escalas.md)
