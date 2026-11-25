@@ -95,6 +95,13 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-audit-context.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-controls.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
+  # Replay the production security baseline before validating the account migration.
+  foreach ($name in '40_doctor_credential_writes.sql', '41_administrative_mfa.sql',
+    '42_attendance_confirmation.sql', '43_doctor_data_minimization.sql',
+    '45_resumable_organization_cleanup.sql', '46_secure_provisioning.sql', '47_staff_account.sql') {
+    Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir $name))
+  }
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'staff-account.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-evolution.preflight.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '48_shift_approval.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval.verify.sql'))
@@ -105,7 +112,7 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '51_finance_overview_and_exports.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-overview.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval-concurrency.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-39 e 48-51, pré/pós-verificação e suítes SQL.'
+  Write-Output 'PASS: linha de base de produção e migrations 48–51.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

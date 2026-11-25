@@ -45,6 +45,7 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
   async function saveStatus() {
     if (!statusEditor || !confirmed || !guard.check()) return;
     setBusy(true); setActionError('');
+    const finishSaving = notify.saving();
     try {
       const saved = await guard.run(async () => {
         await masterRuleStatus(statusEditor.rule.id, statusEditor.state, statusEditor.rule.revision, decision, true);
@@ -55,11 +56,12 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
       if (saved) notify.success('Status da recorrência atualizado.');
     }
     catch (failure) { setActionError(failure instanceof Error ? failure.message : 'Não foi possível alterar a recorrência.'); }
-    finally { setBusy(false); }
+    finally { finishSaving(); setBusy(false); }
   }
   async function publish(id: string, enabled: boolean) {
     if (!guard.check()) return;
     setBusy(true); setActionError('');
+    const finishSaving = notify.saving();
     try {
       await guard.run(async () => {
         await publishMasterCoverage(id, enabled);
@@ -68,7 +70,7 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
       await changed();
     }
     catch (failure) { setActionError(failure instanceof Error ? failure.message : 'Não foi possível atualizar a oferta.'); }
-    finally { setBusy(false); }
+    finally { finishSaving(); setBusy(false); }
   }
   if (error) return <div role="alert" className="rounded-xl border border-danger/25 p-5 text-sm text-danger">{error}</div>;
   if (!data) return <p role="status" className="py-10 text-sm text-text-muted">Carregando recorrências…</p>;

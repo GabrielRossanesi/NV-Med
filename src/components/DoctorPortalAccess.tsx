@@ -69,9 +69,9 @@ export default function DoctorPortalAccess({ doctorId, organizationId, revision,
     {!access && !loading && <button className="nv-button-secondary" onClick={() => { setError(''); setLoading(true); setReload(v => v + 1); }}>Tentar novamente</button>}
     {access && <>
       <dl className="grid gap-4 text-sm sm:grid-cols-3">
-        <div className="min-w-0"><dt className="text-text-muted">E-mail de acesso</dt><dd className="mt-1 break-all font-medium">{access.email || 'Não informado'}</dd></div>
+        {access.can_manage && <div className="min-w-0"><dt className="text-text-muted">E-mail de acesso</dt><dd className="mt-1 break-all font-medium">{access.email || 'Não informado'}</dd></div>}
         <div><dt className="text-text-muted">Status da conta</dt><dd className={'nv-badge mt-1 ' + (access.status === 'active' ? 'bg-success/10 text-success' : access.status === 'blocked' ? 'bg-danger/10 text-danger' : 'bg-surface-muted text-text-secondary')}>{statuses[access.status]}</dd></div>
-        <div><dt className="text-text-muted">Último acesso</dt><dd className="mt-1">{access.last_sign_in_at ? new Date(access.last_sign_in_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Nenhum acesso registrado'}</dd></div>
+        {access.can_manage && <div><dt className="text-text-muted">Último acesso</dt><dd className="mt-1">{access.last_sign_in_at ? new Date(access.last_sign_in_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Nenhum acesso registrado'}</dd></div>}
       </dl>
       <div className="flex flex-wrap gap-2 border-t border-border pt-4">
         {access.can_manage && <>
@@ -80,7 +80,7 @@ export default function DoctorPortalAccess({ doctorId, organizationId, revision,
           {access.status === 'active' && <button className="nv-button-secondary" disabled={busy} onClick={() => open('reset')}><KeyRound size={16}/>{actions.reset}</button>}
           {access.linked && <button className="nv-button-secondary" disabled={busy} onClick={() => open(access.auth_blocked ? 'unblock' : 'block')}><LockKeyhole size={16}/>{access.auth_blocked ? actions.unblock : actions.block}</button>}
         </>}
-        <button className="nv-button-secondary" onClick={() => void copy()} disabled={!access.email}><Copy size={16}/>Copiar dados de acesso</button>
+        {access.can_manage && <button className="nv-button-secondary" onClick={() => void copy()} disabled={!access.email}><Copy size={16}/>Copiar dados de acesso</button>}
       </div>
       {!access.can_manage && <p className="text-xs text-text-muted">A gestão deste acesso exige permissão específica.</p>}
       {access.record_inactive && <p className="text-xs text-warning">O cadastro médico está inativo. Reative o cadastro para permitir o uso do portal; desbloquear a conta não altera essa situação.</p>}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
+import { administrativeMfaMessage, getAdministrativeMfaSession, getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mapUserFromDb } from '@/services/supabaseService';
 import { SAAS_ROLES, TENANT_ROLES, sanitizeAdditionalPermissions } from '@/lib/permissions';
@@ -18,7 +18,10 @@ async function authorize(request: NextRequest) {
   if (!origin || (origin !== request.nextUrl.origin && origin !== localOrigin)) return failure('Origem inválida.', 403);
   const client = await createClient();
   if (!client) return failure('Conexão indisponível.', 503);
-  return await getAuthorizedUser(client) || failure('Entre novamente para gerenciar acessos.', 401);
+  const actor = await getAuthorizedUser(client);
+  if (!actor) return failure('Entre novamente para gerenciar acessos.', 401);
+  const mfaSession = await getAdministrativeMfaSession(client);
+  return mfaSession ? { actor, mfaSession } : failure(administrativeMfaMessage, 403);
 }
 
 function databaseFailure(error: { code: string; message: string }) {
@@ -39,8 +42,9 @@ export async function POST(request: NextRequest) { return save(request, false); 
 export async function PATCH(request: NextRequest) { return save(request, true); }
 
 export async function DELETE(request: NextRequest) {
-  const actor = await authorize(request);
-  if (actor instanceof NextResponse) return actor;
+  const authorization = await authorize(request);
+  if (authorization instanceof NextResponse) return authorization;
+  const { actor, mfaSession } = authorization;
   const admin = createAdminClient();
   if (!admin) return failure('A administração de acessos não está configurada.', 503);
   try {
@@ -57,7 +61,7 @@ export async function DELETE(request: NextRequest) {
       return failure('Digite o e-mail exato do usuário para confirmar.', 400);
     }
     const { error: disableError } = await admin.rpc('nv_manage_user', {
-      actor_auth: actor.id, target: target.id, new_auth: null, reason: 'Exclusão administrativa',
+      actor_auth: actor.id, actor_session: mfaSession, target: target.id, new_auth: null, reason: 'Exclusão administrativa',
       changes: { ...target, revision: target.updated_at, status: 'inactive' },
     });
     if (disableError) return databaseFailure(disableError);
@@ -75,8 +79,9 @@ export async function DELETE(request: NextRequest) {
 }
 
 async function save(request: NextRequest, updating: boolean) {
-  const actor = await authorize(request);
-  if (actor instanceof NextResponse) return actor;
+  const authorization = await authorize(request);
+  if (authorization instanceof NextResponse) return authorization;
+  const { actor, mfaSession } = authorization;
   const admin = createAdminClient();
   if (!admin) return failure('A criação de acessos ainda não foi configurada.', 503);
   try {
@@ -96,7 +101,7 @@ async function save(request: NextRequest, updating: boolean) {
       additional_permissions: sanitizeAdditionalPermissions(input.additionalPermissions, type),
       delegated_permissions: Array.isArray(input.delegatedPermissions) ? input.delegatedPermissions : [],
     };
-    const args = { actor_auth: actor.id, target: updating ? input.id : null, new_auth: null as string | null,
+    const args = { actor_auth: actor.id, actor_session: mfaSession, target: updating ? input.id : null, new_auth: null as string | null,
       changes, reason: typeof input.reason === 'string' ? input.reason.trim().slice(0, 500) : null };
     if (updating) {
       const { data, error } = await admin.rpc('nv_manage_user', args).single();

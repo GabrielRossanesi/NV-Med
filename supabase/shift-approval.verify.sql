@@ -65,7 +65,8 @@ END $$;
 RESET ROLE;
 SELECT set_config('request.jwt.claims','{}',true);
 DO $$ BEGIN
- IF public.nv_auto_approve_expired_shifts() <> 1 OR public.nv_auto_approve_expired_shifts() <> 0 THEN
+ IF nv_master_private.auto_approve_expired_shifts('approval-org') <> 1
+   OR nv_master_private.auto_approve_expired_shifts('approval-org') <> 0 THEN
    RAISE EXCEPTION 'FAIL automatic approval or rerun';
  END IF;
  IF EXISTS(SELECT FROM public.shifts WHERE id IN ('approval-cancelled','approval-open','approval-future') AND approval_source <> 'pending') THEN

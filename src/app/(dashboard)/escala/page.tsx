@@ -139,11 +139,15 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const [listRange, setListRange] = useState<'week' | 'day' | 'month'>(params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
   const [scheduleMode, setScheduleMode] = useState<'general' | 'master'>(params.get('mode') === 'master' ? 'master' : 'general');
   const [masterEditRequest, setMasterEditRequest] = useState<MasterEditRequest | null>(null);
-  const [desktopView, setDesktopView] = useState<ViewMode>(requestedShiftId ? 'list' : params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week');
+  const preferredView = store.accountPreferences.scheduleView === 'list' ? 'list' : 'week';
+  const explicitView = params.get('view');
+  const initialView: MobileViewMode = requestedShiftId || explicitView === 'list' ? 'list'
+    : explicitView === 'week' || explicitView === 'month' || explicitView === 'day' ? explicitView : preferredView;
+  const [desktopView, setDesktopView] = useState<ViewMode>(initialView);
   const mobile = useSyncExternalStore(subscribeMobile, () => window.matchMedia('(max-width: 767px)').matches, () => false);
   const savedMobileView = useSyncExternalStore(() => () => {}, readMobileView, () => 'week' as const);
   const [mobileChoice, setMobileChoice] = useState<MobileViewMode>();
-  const mobileView = mobileChoice ?? (requestedShiftId ? 'list' : savedMobileView);
+  const mobileView = mobileChoice ?? (requestedShiftId || explicitView || store.hasSavedAccountPreferences ? initialView : savedMobileView);
   function changeMobileView(next: MobileViewMode) {
     if (next === 'list' && mobileView !== 'list') setListRange(mobileView);
     setMobileChoice(next);
@@ -855,7 +859,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
           <p>{rateQuery.error || 'Consultando valores padrão…'}</p>
           {rateQuery.error && <button type="button" className="text-primary underline" onClick={rateQuery.reload}>Tentar novamente</button>}
         </div>)}
-      {formError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{formError}</p>}{store.saving && <p role="status" className="flex items-center gap-2 text-xs text-text-muted"><LoaderCircle size={14} className="animate-spin"/>Confirmando o plantão…</p>}</form></Dialog>}
+      {formError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{formError}</p>}</form></Dialog>}
     {sectorEditorOpen && form && formUnit && <SectorEditorDialog scheduleContext unit={formUnit} organizationName={activeOrganization?.name || ''} specialties={formSpecialties}
       initialSpecialty={formSpecialties.includes(form.specialty || '') ? form.specialty : undefined}
       initialPeriod={{ kind: coverageKind, startTime: form.startTime, endTime: form.endTime, requiredDoctors: 1 }}

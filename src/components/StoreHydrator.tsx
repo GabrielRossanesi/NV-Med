@@ -4,11 +4,12 @@ import { LoaderCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
 import { createClient } from '@/lib/supabase/client';
+import { useResolvedTheme } from '@/components/account/useResolvedTheme';
 
 export default function StoreHydrator({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
-  const theme = useStore(s => s.theme);
+  const theme = useResolvedTheme();
   useEffect(() => {
     let active = true;
     const client = createClient();
@@ -17,7 +18,11 @@ export default function StoreHydrator({ children }: { children: React.ReactNode 
         await useStore.persist.rehydrate();
         localStorage.removeItem('nv-med-storage');
         const data = await fetchInitialDataFromSupabase();
-        if (active) { useStore.getState().syncWithCloud(data); setReady(true); }
+        if (active) {
+          useStore.getState().syncWithCloud(data);
+          await useStore.getState().loadAccountPreferences();
+          if (active) setReady(true);
+        }
       } catch (e) { if (active) { useStore.getState().clearSession(); setError(e instanceof Error ? e.message : 'Falha ao carregar dados.'); } }
     }
     void load();

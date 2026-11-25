@@ -7,6 +7,7 @@ import { canPerformAction, canViewPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
 import UserAvatar from './UserAvatar';
 import { useLocationHash } from './useLocationHash';
+import { useResolvedTheme } from './account/useResolvedTheme';
 
 type Item = { name: string; shortName: string; href: string; icon: LucideIcon };
 
@@ -20,7 +21,7 @@ export default function MobileStaffNavigation({ items, activeHref, pathname, onL
 }) {
   const currentUser = useStore(state => state.currentUser);
   const isSimulating = useStore(state => state.isSimulating);
-  const theme = useStore(state => state.theme);
+  const theme = useResolvedTheme();
   const setTheme = useStore(state => state.setTheme);
   const hash = useLocationHash();
   const [open, setOpen] = useState(false);
@@ -97,7 +98,7 @@ export default function MobileStaffNavigation({ items, activeHref, pathname, onL
       {extra.length > 0 && <nav aria-label="Outras páginas">{extra.map(item => renderLink(item, true))}</nav>}
       <div className={extra.length ? 'mt-1 border-t border-border pt-1' : undefined}>
         <Link href="/perfil" aria-current={current === '/perfil' ? 'page' : undefined} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium hover:bg-state-hover">
-          <UserAvatar name={currentUser.name} src={currentUser.avatar} className="size-6"/> Meu perfil
+          <UserAvatar name={currentUser.name} src={currentUser.avatar} className="size-6"/> Minha conta
         </Link>
         <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium hover:bg-state-hover">
           {theme === 'dark' ? <Sun size={18} aria-hidden="true"/> : <Moon size={18} aria-hidden="true"/>}

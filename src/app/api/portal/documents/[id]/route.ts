@@ -37,9 +37,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!file_path || !isMedicalDocumentPath(file_path, organization_id, doctor_id)) return failure('Arquivo indisponível.', 404);
   const admin = createAdminClient();
   if (!admin) return failure('Armazenamento indisponível.', 503);
+  const scan = await admin.rpc('nv_document_delivery_status', { object_name: file_path });
+  if (scan.error) return failure('Verificação de segurança indisponível.', 503);
+  if (scan.data === 'missing') return failure('Arquivo indisponível.', 404);
+  if (scan.data === 'blocked') return failure('Arquivo bloqueado pela verificação de segurança. Envie uma nova versão.', 423);
+  if (scan.data !== 'clean' && scan.data !== 'not_configured') {
+    return failure('O arquivo aguarda verificação de segurança. Tente novamente mais tarde.', 423);
+  }
   const preview = request.nextUrl.searchParams.get('preview') === '1';
   const { data, error } = await admin.storage.from(bucket).createSignedUrl(file_path, 60, {
-    download: !preview || medicalDocumentPreviewKind(file_path) === 'download',
+    download: !preview || request.nextUrl.searchParams.get('download') === '1' || medicalDocumentPreviewKind(file_path) === 'download',
   });
   if (error) return failure('Arquivo indisponível.', 404);
   if (preview) return NextResponse.json({ url: data.signedUrl }, { headers: noCache });
@@ -73,6 +80,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!kind) return failure('Envie um arquivo PDF, JPEG ou PNG válido.', 415);
   const path = [access.document.organization_id, access.document.doctor_id, crypto.randomUUID() + '.' + kind].join('/');
   if (!isMedicalDocumentPath(path, access.document.organization_id, access.document.doctor_id)) return failure('Pasta indisponível.', 404);
+  const scan = await admin.rpc('nv_document_delivery_status', { object_name: path });
+  if (scan.error || (scan.data !== 'not_configured' && scan.data !== 'missing')) {
+    return failure('Não foi possível preparar o envio do documento.', 503);
+  }
   const storage = admin.storage.from(bucket);
   const { error: uploadError } = await storage.upload(path, file, { upsert: false, contentType: file.type, cacheControl: '0' });
   if (uploadError) return failure('Não foi possível armazenar o arquivo.', 502);
@@ -86,5 +97,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!error) await storage.remove([path]);
     return failure('Não foi possível confirmar o envio do documento.', 409);
   }
-  return NextResponse.json({ saved: true }, { status: 201, headers: noCache });
+  return NextResponse.json({ saved: true, scanning: scan.data === 'missing' }, { status: 201, headers: noCache });
 }

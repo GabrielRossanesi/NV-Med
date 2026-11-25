@@ -18,7 +18,9 @@ export default function Dialog({ title, children, onClose, size = 'md', footer, 
       if (!dialog || !viewport || viewport.scale !== 1) return;
       dialog.style.setProperty('--nv-dialog-viewport', `${viewport.height}px`);
       dialog.style.top = `${viewport.offsetTop}px`;
-      dialog.style.bottom = `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`;
+      const hiddenBottom = `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`;
+      dialog.style.bottom = hiddenBottom;
+      dialog.style.setProperty('--nv-toast-keyboard-offset', hiddenBottom);
     }
     dialog.showModal();
     const unregisterNotifications = registerNotificationDialog(titleId);

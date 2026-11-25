@@ -20,6 +20,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { withPromiseTimeout } from '@/lib/requestTimeout';
 import { authFlowUrl } from '@/lib/appOrigin';
+import { accountHomeOptions } from '@/lib/account';
 
 const scheduleRows = [
   { time: '07:00', label: 'Clínica médica', meta: 'Equipe completa', status: 'confirmado' },
@@ -63,10 +64,22 @@ export default function LoginPage() {
       if (signInError) throw new Error('Não foi possível entrar. Confira seu e-mail e senha.');
       const search = new URLSearchParams(window.location.search);
       const organization = search.get('empresa');
-      if (signedIn.user?.app_metadata?.must_change_password === true) { window.location.assign('/definir-senha?required=1'); return; }
-      const { data: staff, error: profileError } = await client.from('user_accounts').select('id').eq('auth_user_id', signedIn.user!.id).maybeSingle();
+      if (signedIn.user?.app_metadata?.must_change_password === true) {
+        window.location.assign(new URL('/definir-senha?required=1', window.location.origin));
+        return;
+      }
+      const { data: staff, error: profileError } = await client.from('user_accounts')
+        .select('type, role, additional_permissions').eq('auth_user_id', signedIn.user!.id).eq('status', 'active').maybeSingle();
       if (profileError) throw new Error('Não foi possível carregar seu perfil. Tente entrar novamente.');
-      window.location.assign(organization ? '/portal?empresa=' + encodeURIComponent(organization) : search.has('portal') || !staff ? '/portal' : '/escala');
+      if (organization || search.has('portal') || !staff) {
+        window.location.assign(organization ? '/portal?empresa=' + encodeURIComponent(organization) : '/portal');
+        return;
+      }
+      const options = accountHomeOptions({ type: staff.type, role: staff.role, additionalPermissions: staff.additional_permissions });
+      const { data: preferences } = await client.rpc('nv_account_preferences');
+      const target = options.find(option => option.value === preferences?.homePage)
+        ?? options.find(option => option.value === '/escala') ?? options[0];
+      window.location.assign(target?.value || '/perfil');
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Falha de conexão. Tente novamente.');
       setBusy(false);

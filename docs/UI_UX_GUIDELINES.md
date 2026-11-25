@@ -32,6 +32,7 @@
 - Use títulos curtos e inclua uma descrição quando ela explicar o resultado ou orientar a recuperação. Mantenha validações e falhas de formulário perto da ação e preserve o que foi digitado. Mantenha confirmações, avisos operacionais e resumos que precisem ficar na tela.
 - Evite Toasts ao navegar, filtrar ou abrir uma área. Evite repetir a mesma mensagem como Toast e como aviso inline. Use `persistent` para erros que exigem leitura ou ação antes de continuar.
 - Use `withinDialog` para confirmações exibidas em um diálogo que permanece aberto. Por padrão, erros globais usam o diálogo ativo e confirmações usam a página.
+- Posicione os Toasts no canto inferior direito em desktop e acima da navegação inferior no mobile. Use `notify.saving()` enquanto uma gravação estiver em andamento e encerre o Toast no `finally`.
 
 ## Identidade visual e auditoria
 

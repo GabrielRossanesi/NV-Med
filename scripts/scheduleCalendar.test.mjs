@@ -308,6 +308,8 @@ test('weekly rows preserve multiple sectors and their assigned doctors', () => {
 
 let routeParams = new URLSearchParams();
 const pageStore = {
+  accountPreferences: { scheduleView: 'calendar' },
+  hasSavedAccountPreferences: false,
   activeOrganizationId: 'org', currentUser: { id: 'viewer', type: 'tenant_user', role: 'Financeiro', email: 'viewer@example.test' },
   organizations: [{ id: 'org', name: 'Empresa de teste', settings: { requiredDocuments: [] } }],
   units: [activeUnit], sectors: [sector], documents: [], shifts: assigned,
@@ -345,6 +347,21 @@ test('a valid selected scope renders the actual calendar and keeps operational i
     assert.ok(html.includes('Pendências e cobertura'));
     const grid = html.match(/<table[\s\S]*?<\/table>/)?.[0];
     assert.ok(!grid.includes('Confirmação pendente'));
+  }
+});
+
+test('the personal schedule view is used unless the link requests a specific calendar view', () => {
+  const query = `unitId=unit&sectorId=sector&date=${day}`;
+  pageStore.accountPreferences = { scheduleView: 'list' };
+  pageStore.hasSavedAccountPreferences = true;
+  try {
+    const list = renderPage(query);
+    assert.ok(list.includes('id="plantao"'));
+    assert.ok(!list.includes('<table'));
+    assert.ok(renderPage(query + '&view=month').includes('<table'));
+  } finally {
+    pageStore.accountPreferences = { scheduleView: 'calendar' };
+    pageStore.hasSavedAccountPreferences = false;
   }
 });
 
