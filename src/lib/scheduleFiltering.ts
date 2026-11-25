@@ -1,5 +1,6 @@
 import { shiftInterval, type CoveragePeriodSummary } from './scheduling.ts';
 import { isCriticalCoverage, type DoctorScheduleWarning, type ScheduleCoverageFilter } from './scheduleCalendar.ts';
+import { coverageDate } from './fractionalCoverage.ts';
 import type { CoveragePeriodKind, EmploymentType, Sector, Shift } from '../types/index.ts';
 
 export type ScheduleFilters = {
@@ -13,7 +14,7 @@ export type ScheduleFilterContext = {
 };
 export function isAvailableScheduleVacancy(shift: Shift, context: ScheduleFilterContext) {
   return !shift.doctorId && shift.status === 'open' && shift.paymentStatus !== 'paid'
-    && shiftInterval(shift).start > context.now && context.availableVacancyIds.has(shift.id);
+    && shiftInterval(shift).start > context.now && (Boolean(shift.coveragePost) || context.availableVacancyIds.has(shift.id));
 }
 export function scheduleHasFilters(filters: ScheduleFilters) {
   return filters.statusFilter !== 'all' || filters.coverageFilter !== 'all' || Boolean(filters.employment || filters.doctorId || filters.periodKind || filters.specialty)
@@ -36,7 +37,7 @@ export function scheduleShiftMatches(shift: Shift, sector: Sector, period: Cover
     case 'conflict': return context.conflicts.has(shift.id);
     case 'deficit': return period.deficit > 0;
     case 'complete': return period.required > 0 && period.deficit === 0;
-    case 'critical': return isCriticalCoverage(period, shift.date, context.conflicts, context.warnings, context.now);
+    case 'critical': return isCriticalCoverage(period, coverageDate(shift), context.conflicts, context.warnings, context.now);
     default: return true;
   }
 }

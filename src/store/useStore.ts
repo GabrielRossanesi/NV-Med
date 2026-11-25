@@ -31,6 +31,8 @@ interface NVMedState {
   addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>) => Promise<boolean>;
   addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[], feedback?: SaveFeedback) => Promise<boolean>;
   updateShift: (shift: ShiftWrite) => Promise<boolean>;
+  publishCoverage: (shift: Shift, enabled: boolean) => Promise<boolean>;
+  cancelCoverage: (shift: Shift) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
   updateShiftFinancials: (...input: Parameters<typeof cloud.updateShiftFinancialsInSupabase>) => Promise<boolean>;
   updateShiftAgreement: (...input: Parameters<typeof cloud.editShiftAgreement>) => Promise<boolean>;
@@ -172,17 +174,42 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     updateSector: (sector, finance) => commit(async () => { await cloud.saveSectorToSupabase(sector, false, finance); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }, { success: 'Setor atualizado.', inlineError: true }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
     addShift: input => commit(async () => {
-      const saved = await cloud.saveShiftToSupabase({ ...input, id: input.cashPayment?.id || crypto.randomUUID(), organizationId: orgId() });
-      set({ shifts: [...get().shifts, saved] });
+      const shift = { ...input, id: input.cashPayment?.id || crypto.randomUUID(), organizationId: orgId() };
+      const saved = input.coveragePlan ? await cloud.saveFractionalShiftToSupabase(shift) : [await cloud.saveShiftToSupabase(shift)];
+      const savedIds = new Set(saved.map(item => item.id));
+      set({ shifts: [...get().shifts.filter(item => !savedIds.has(item.id)), ...saved] });
     }, { success: 'Plantão cadastrado.', inlineError: true }),
     addShifts: (inputs, feedback) => commit(async () => {
       const saved = await cloud.saveShiftsToSupabase(inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })));
       set({ shifts: [...get().shifts, ...saved] });
     }, { success: 'Plantões cadastrados.', inlineError: true, ...feedback }),
     updateShift: shift => commit(async () => {
+      if (shift.coveragePlan || shift.coveragePost) {
+        const saved = await cloud.saveFractionalShiftToSupabase(shift);
+        const id = shift.coveragePost?.id || shift.id;
+        set({ shifts: [...get().shifts.filter(item => item.id !== shift.id && item.coveragePost?.id !== id), ...saved] });
+        return;
+      }
       const saved = await cloud.saveShiftToSupabase(shift);
       set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
     }, { success: 'Plantão atualizado.', inlineError: true }),
+    publishCoverage: (shift, enabled) => commit(async () => {
+      if (!shift.coveragePost || shift.organizationId !== orgId() || !canEditPermission(get().currentUser, 'escala')) {
+        throw new Error('Seu acesso não permite publicar esta vaga.');
+      }
+      await cloud.publishCoverageVacancy(shift.id, enabled);
+      set({ shifts: get().shifts.map(item => item.id === shift.id && item.coveragePost ? {
+        ...item, coveragePost: { ...item.coveragePost, published: enabled },
+      } : item) });
+    }, { success: enabled ? 'Vaga publicada no Portal Médico.' : 'Vaga retirada do Portal Médico.', inlineError: true, withinDialog: true }),
+    cancelCoverage: shift => commit(async () => {
+      const post = shift.coveragePost;
+      if (!post || shift.organizationId !== orgId() || !canPerformAction(get().currentUser, 'escala', 'delete')) {
+        throw new Error('Seu acesso não permite cancelar este posto.');
+      }
+      const saved = await cloud.cancelCoveragePost(post);
+      set({ shifts: [...get().shifts.filter(item => item.coveragePost?.id !== post.id), ...saved] });
+    }, { success: 'Posto cancelado.', inlineError: true }),
     updateShiftPayment: (id, status) => commit(async () => {
       const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
@@ -223,8 +250,13 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       let saved: Shift[];
       try { saved = await cloud.saveShiftsToSupabase(updated); }
       catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
+      const postIds = [...new Set(saved.flatMap(item => item.coveragePost ? [item.coveragePost.id] : []))];
+      if (postIds.length) {
+        const siblings = await cloud.fetchCoverageShifts(organizationId, postIds);
+        saved = [...saved.filter(item => !item.coveragePost), ...siblings];
+      }
       const byId = new Map(saved.map(shift => [shift.id, shift]));
-      set({ shifts: get().shifts.map(shift => byId.get(shift.id) || shift) });
+      set({ shifts: [...get().shifts.filter(shift => !byId.has(shift.id)), ...saved] });
     }, { success: 'Plantões liberados.', inlineError: true }),
     uploadDocument: (doctorId, type, file) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());

@@ -11,12 +11,14 @@ import { portalError } from '@/lib/doctorPortal';
 import { notify } from '@/lib/notifications';
 import PresencePanel from '@/components/schedule/PresencePanel';
 import { useLocationHash } from '@/components/useLocationHash';
+import { coverageDuration } from '@/lib/fractionalCoverage';
 
 type Status = 'open' | 'exchange' | 'confirmed' | 'cancelled' | 'completed' | 'pending';
 type ApplicationStatus = 'pending' | 'selected' | 'not_selected' | 'cancelled';
 type Shift = {
   employment?: EmploymentType;
   approval_source?: ShiftApproval; approval_revision?: number;
+  duration_minutes?: number;
   id: string; date: string; start_time: string; end_time: string; organization: string; unit: string;
   sector: string; specialty?: string; status: Status; notes?: string; assigned_to_me: boolean;
   upcoming: boolean; application?: ApplicationStatus;
@@ -98,7 +100,8 @@ function ShiftDetail({ shift, onClose, onSaved }: { shift: Shift; onClose: () =>
   return <Dialog title={shift.assigned_to_me ? 'Gerenciar plantão' : 'Detalhes do plantão'} onClose={onClose}>
     <div className="space-y-4">
       <div><p className="text-sm text-text-muted">{displayDate(shift.date)}</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums">{shift.start_time}–{shift.end_time}</p></div>
+        <p className="mt-1 text-2xl font-bold tabular-nums">{shift.start_time}–{shift.end_time}</p>
+        {shift.duration_minutes != null && <p className="mt-1 text-sm text-text-secondary">{coverageDuration(shift.duration_minutes)}</p>}</div>
       <StatusLabel status={shift.status}/>
       {shift.approval_source && shift.approval_source !== 'pending' && <span className="ml-2 nv-badge bg-surface-muted text-text-secondary">
         {shiftApprovalLabels[shift.approval_source]}

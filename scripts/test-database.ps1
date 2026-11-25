@@ -113,7 +113,9 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '52_shift_approval_activation_cutoff.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval-concurrency.verify.sql'))
-  Write-Output 'PASS: linha de base de produção e migrations 48–52.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '53_fractional_coverage.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'fractional-coverage.verify.sql'))
+  Write-Output 'PASS: linha de base de produção e migrations 48–53.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

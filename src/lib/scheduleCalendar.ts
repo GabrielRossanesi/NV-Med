@@ -12,6 +12,8 @@ export function selectedScheduleSector(unitId: string, sectorId: string, units: 
 
 export type ScheduleAllocation = {
   id: string;
+  shiftId?: string;
+  sectorId?: string;
   name: string;
   vacant: boolean;
   vacancyState?: 'available' | 'unpublished' | 'planned';
@@ -19,16 +21,21 @@ export type ScheduleAllocation = {
   kind: CoveragePeriodSummary['period']['kind'];
   startTime: string;
   endTime: string;
+  date?: string;
 };
 
 // Both calendar views use the existing coverage summary; administrative state stays in the inspector.
 export function scheduleAllocations(period: CoveragePeriodSummary, doctors: Map<string, Pick<Doctor, 'name'>>, availableVacancyIds: ReadonlySet<string> = new Set()): ScheduleAllocation[] {
   const time = { kind: period.period.kind, startTime: period.period.startTime, endTime: period.period.endTime };
   return [
-    ...period.assigned.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
-      id: shift.id, name: doctors.get(shift.doctorId || '')?.name || 'Médico escalado', vacant: false })),
-    ...period.vacancies.map(shift => ({ ...time, startTime: shift.startTime, endTime: shift.endTime,
-      id: shift.id, name: availableVacancyIds.has(shift.id) ? 'Vaga aberta' : 'Posto sem médico', vacant: true, vacancyState: availableVacancyIds.has(shift.id) ? 'available' as const : 'unpublished' as const })),
+    ...period.assigned.map(shift => ({ ...time, date: shift.date, startTime: shift.startTime, endTime: shift.endTime,
+      id: shift.id, shiftId: shift.id, name: doctors.get(shift.doctorId || '')?.name || 'Médico escalado', vacant: false })),
+    ...period.vacancies.map(shift => {
+      const available = shift.coveragePost || availableVacancyIds.has(shift.id);
+      return { ...time, date: shift.date, startTime: shift.startTime, endTime: shift.endTime,
+        id: shift.id, shiftId: shift.id, name: shift.coveragePost ? 'Vaga descoberta' : available ? 'Vaga aberta' : 'Posto sem médico',
+        vacant: true, vacancyState: available ? 'available' as const : 'unpublished' as const };
+    }),
     ...Array.from({ length: period.uncreated }, (_, index) => ({ ...time,
       id: `uncreated-${time.kind}-${index}`, name: 'Posto previsto por criar', vacant: true, vacancyState: 'planned' as const })),
   ].sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.id.localeCompare(b.id));

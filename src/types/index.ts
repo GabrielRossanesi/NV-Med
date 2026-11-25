@@ -190,6 +190,7 @@ export type SectorFinanceDefaults = {
 };
 
 export interface ShiftPaymentAgreement {
+  hourly_rate_cents?: number;
   mode: 'default' | 'manual' | 'override';
   rate: (ShiftRateScope & Pick<ShiftRate, 'id' | 'amount_cents'>) | null;
   override_reason: string | null;
@@ -214,7 +215,30 @@ export interface ShiftAgreementSelection {
 
 export type ShiftApproval = 'pending' | 'doctor' | 'administrative' | 'automatic' | 'legacy';
 
+export interface CoveragePlan {
+  date: string;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+}
+
+export interface ShiftCoveragePost extends CoveragePlan {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  timeZone: string;
+  revision: number;
+  segmentStartsAt: string;
+  segmentEndsAt: string;
+  segmentDate: string;
+  segmentStartTime: string;
+  segmentEndTime: string;
+  published: boolean;
+  cancelled?: boolean;
+}
+
 export interface Shift {
+  coveragePost?: ShiftCoveragePost;
   approvalSource?: ShiftApproval;
   approvalRevision?: number;
   approvalEndedAt?: string;
@@ -246,7 +270,8 @@ export interface Shift {
   organizationId: string;
 }
 
-export type ShiftWrite = Shift & { agreement?: ShiftAgreementSelection; retroReason?: string; cashPayment?: import('../lib/shiftCashPayment').ShiftCashPayment };
+export type ShiftWrite = Shift & { coveragePlan?: CoveragePlan; coverageHourlyRateCents?: number;
+  agreement?: ShiftAgreementSelection; retroReason?: string; cashPayment?: import('../lib/shiftCashPayment').ShiftCashPayment };
 
 export type AdditionalPermissions = Record<string, 'view' | 'edit' | 'allow' | 'deny'>;
 

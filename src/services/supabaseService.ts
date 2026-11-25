@@ -137,6 +137,7 @@ interface DbDocumentAudit {
 }
 
 interface DbShift {
+  coverage_post?: Shift['coveragePost'] | null;
   approval_source?: Shift['approvalSource'];
   approval_revision?: number;
   approval_ended_at?: string;
@@ -307,6 +308,7 @@ function mapDocumentAuditFromDb(row: DbDocumentAudit): DocumentAuditEntry {
 
 function mapShiftFromDb(row: DbShift): Shift {
   return {
+    coveragePost: row.coverage_post || undefined,
     approvalSource: row.approval_source ?? undefined,
     approvalRevision: row.approval_revision,
     approvalEndedAt: row.approval_ended_at,
@@ -548,10 +550,8 @@ export async function saveShiftToSupabase(shift: ShiftWrite) {
   return saved;
 }
 
-export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
-  const supabase = createClient();
-  if (!supabase) throw new Error('Conexão não configurada.');
-  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string; cash_payment?: ShiftWrite['cashPayment'] } => ({
+function operationalShiftRecord(shift: ShiftWrite): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string; cash_payment?: ShiftWrite['cashPayment'] } {
+  return {
     id: shift.id,
     coverage_mode: shift.coverageMode || 'regular',
     coverage_reason: shift.coverageMode === 'adhoc' ? shift.coverageReason?.trim() : null,
@@ -576,7 +576,54 @@ export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
     type: shift.type,
     status: shift.status,
     notes: shift.notes
-  }));
+  };
+}
+
+export async function saveFractionalShiftToSupabase(shift: ShiftWrite) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const plan = shift.coveragePlan;
+  const { data, error } = await withAbortTimeout(
+    async signal => await supabase.rpc('nv_save_fractional_coverage', {
+      record: { ...operationalShiftRecord(shift), hourly_rate_cents: shift.coverageHourlyRateCents,
+        expected_hourly_agreement_at: shift.paymentAgreement?.changed_at },
+      planned: plan ? { date: plan.date, start_time: plan.startTime, end_time: plan.endTime, capacity: plan.capacity } : null,
+      expected_revision: shift.coveragePost?.revision ?? null,
+    }).abortSignal(signal),
+    { message: 'O servidor demorou para confirmar a cobertura. Confira a escala antes de tentar novamente.' },
+  );
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function fetchCoverageShifts(organizationId: string, postIds: string[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase.from('nv_staff_shifts').select('*').eq('organization_id', organizationId)
+    .in('coverage_post->>id', postIds);
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function publishCoverageVacancy(shiftId: string, enabled: boolean) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { error } = await supabase.rpc('nv_master_publish_coverage', { target: shiftId, enabled });
+  if (error) throw new Error(error.message);
+}
+
+export async function cancelCoveragePost(post: NonNullable<Shift['coveragePost']>) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase.rpc('nv_cancel_fractional_coverage', { target: post.id, expected_revision: post.revision });
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const payload = shifts.map(operationalShiftRecord);
   const { data, error } = await withAbortTimeout(
     async signal => await supabase.rpc('nv_save_operational_shifts', { records: payload }).abortSignal(signal),
     { message: 'O servidor demorou para confirmar os postos. Verifique sua conexão e tente novamente.' }

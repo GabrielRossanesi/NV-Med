@@ -7,6 +7,9 @@ export const scheduleAuditLabels: Record<string, string> = {
   absence_created: 'Registrou ausência', absence_edited: 'Alterou ausência', absence_cancelled: 'Cancelou ausência',
   coverage_published: 'Abriu candidaturas', coverage_pending: 'Retirou oferta de candidaturas', generation_scheduled: 'Executou geração diária', generation_failed: 'Falha na geração diária',
   occurrence_generated: 'Gerou ocorrência', occurrence_manual: 'Ajustou ocorrência', occurrence_retired: 'Liberou ocorrência futura', coverage_changed: 'Alterou cobertura',
+  coverage_post_created: 'Criou posto fracionado', coverage_plan_changed: 'Alterou período previsto',
+  coverage_post_cancelled: 'Cancelou posto fracionado',
+  coverage_gap_created: 'Gerou vaga descoberta', coverage_gap_retired: 'Encerrou vaga descoberta',
 };
 export const scheduleOriginLabels: Record<string, string> = { doctor: 'Portal Médico', administrative: 'Administrativo', automatic: 'Prazo expirado', manual: 'Manual', cron: 'Cron da Escala Master', master: 'Escala Master', approval: 'Aprovação de candidatura ou troca', portal: 'Portal Médico', import: 'Importação', database: 'Processo do banco' };
 export interface ScheduleAuditEntry {

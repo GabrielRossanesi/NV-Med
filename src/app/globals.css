@@ -96,6 +96,10 @@
   
   --accent: #5D538F;
   --success: #23754F;
+  --schedule-day-bg: #E5F3E9;
+  --schedule-day-text: #20543C;
+  --schedule-night-bg: #21513F;
+  --schedule-night-text: #F0FAF4;
   --warning: #8C550F;
   --danger: #AB394C;
   --info: #345A9B;
@@ -170,6 +174,10 @@
   
   --accent: #C2B6F6;
   --success: #83D5A7;
+  --schedule-day-bg: #BDE5CB;
+  --schedule-day-text: #153C2C;
+  --schedule-night-bg: #214D3D;
+  --schedule-night-text: #F0FAF4;
   --warning: #F5C377;
   --danger: #FDA2AC;
   --info: #A8C2FC;
@@ -597,6 +605,34 @@ body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-bor
 }
 
 @layer components {
+  .nv-schedule-entry {
+    background: var(--schedule-entry-bg, var(--surface-muted));
+    color: var(--schedule-entry-text, var(--text-secondary));
+    border-inline-start: 2px solid var(--schedule-entry-border, var(--border));
+  }
+  .nv-schedule-entry:hover {
+    background: color-mix(in srgb, var(--schedule-entry-bg, var(--surface-muted)), currentColor 9%);
+  }
+  .nv-schedule-entry[data-schedule-tone="day"] {
+    --schedule-entry-bg: var(--schedule-day-bg);
+    --schedule-entry-text: var(--schedule-day-text);
+    --schedule-entry-border: var(--success);
+  }
+  .nv-schedule-entry[data-schedule-tone="night"] {
+    --schedule-entry-bg: var(--schedule-night-bg);
+    --schedule-entry-text: var(--schedule-night-text);
+    --schedule-entry-border: var(--success);
+  }
+  .nv-schedule-entry[data-schedule-tone="available"] {
+    --schedule-entry-bg: color-mix(in srgb, var(--card-bg), var(--danger) 8%);
+    --schedule-entry-text: var(--danger);
+    --schedule-entry-border: var(--danger);
+  }
+  .nv-schedule-entry[data-schedule-tone="planned"] {
+    --schedule-entry-bg: color-mix(in srgb, var(--surface-muted), transparent 65%);
+    --schedule-entry-text: var(--text-muted);
+  }
+
   .nv-page-title {
     color: var(--text-primary);
     font-size: clamp(1.625rem, 1.35rem + 1vw, 2.125rem);

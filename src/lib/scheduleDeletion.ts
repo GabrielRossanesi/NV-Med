@@ -1,5 +1,6 @@
 import { coverageKindForShift, sectorCoveragePeriods } from './scheduling.ts';
 import type { CoveragePeriodKind, Sector, Shift } from '@/types';
+import { coverageDate } from './fractionalCoverage.ts';
 
 export type ScheduleDeletionScope = 'shift' | 'turn' | 'period' | 'doctor';
 
@@ -23,7 +24,7 @@ export function getScheduleDeletionTargets(
 ): Shift[] {
   if (!organizationId) return [];
   if (selection.scope === 'shift') {
-    return shifts.filter(shift => shift.organizationId === organizationId && shift.id === selection.shiftId);
+    return shifts.filter(shift => shift.organizationId === organizationId && shift.id === selection.shiftId && !shift.coveragePost);
   }
   if (!selection.from || !selection.to || selection.from > selection.to) return [];
   if (selection.scope === 'turn' && (!selection.sectorId || !selection.kind || selection.from !== selection.to)) return [];
@@ -31,7 +32,9 @@ export function getScheduleDeletionTargets(
 
   const sectorById = new Map(sectors.map(sector => [sector.id, sector]));
   return shifts.filter(shift => {
-    if (shift.organizationId !== organizationId || shift.date < selection.from || shift.date > selection.to) return false;
+    const day = coverageDate(shift);
+    if (shift.organizationId !== organizationId || day < selection.from || day > selection.to) return false;
+    if (shift.coveragePost && selection.scope !== 'doctor') return false;
     if (selection.unitId && shift.unitId !== selection.unitId) return false;
     if (selection.sectorId && shift.sectorId !== selection.sectorId) return false;
     if (selection.sectorIds && !selection.sectorIds.includes(shift.sectorId || '')) return false;

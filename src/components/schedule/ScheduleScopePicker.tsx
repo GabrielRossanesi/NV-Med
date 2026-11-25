@@ -7,9 +7,10 @@ import type { Sector, Unit } from '@/types';
 const fieldClass = 'nv-input h-11 appearance-none pe-9 leading-5';
 const chevronClass = 'pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-text-muted';
 
-export default function ScheduleScopePicker({ units, sectors, unitId, sectorId, selection, onSelectUnit, onSelectSector, onSelectSectors }: {
+export default function ScheduleScopePicker({ units, sectors, unitId, sectorId, selection, onSelectUnit, onSelectSector, onSelectSectors, compact = false }: {
   units: Unit[]; sectors: Sector[]; unitId: string; sectorId?: string; selection?: SectorSelection;
   onSelectUnit: (id: string) => void; onSelectSector?: (id: string) => void; onSelectSectors?: (value: SectorSelection) => void;
+  compact?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
@@ -23,7 +24,7 @@ export default function ScheduleScopePicker({ units, sectors, unitId, sectorId, 
   const selected = scheduleSectors(unitId, value, units, sectors);
   const expanded = open && Boolean(unit);
   const selectionLabel = value === 'all' && unit ? 'Todos os setores'
-    : selected.length === 1 ? '1 setor selecionado'
+    : selected.length === 1 ? selected[0].name
     : selected.length ? `${selected.length} setores selecionados` : 'Selecione os setores';
 
   useEffect(() => {
@@ -36,9 +37,9 @@ export default function ScheduleScopePicker({ units, sectors, unitId, sectorId, 
   }, [expanded]);
 
   function change(next: SectorSelection) { onSelectSectors?.(next); if (onSelectSector) onSelectSector(next === 'all' ? '' : next[0] || ''); }
-  return <section aria-label="Seleção da escala" className="space-y-5">
-    <div className="grid items-start gap-3 rounded-xl border border-border bg-card-bg p-4 sm:grid-cols-2">
-      <div className="min-w-0 space-y-2">
+  return <section aria-label="Seleção da escala" className={compact ? 'w-full min-w-0 sm:max-w-2xl sm:flex-[1_1_23rem]' : 'space-y-5'}>
+    <div className={compact ? 'grid items-start gap-2 min-[360px]:grid-cols-2' : 'grid items-start gap-3 rounded-xl border border-border bg-card-bg p-4 sm:grid-cols-2'}>
+      <div className={compact ? 'min-w-0 space-y-1' : 'min-w-0 space-y-2'}>
         <label htmlFor={`${id}-unit`} className="nv-label">Unidade</label>
         <div className="relative">
           <select id={`${id}-unit`} required className={fieldClass} value={unit ? unitId : ''} onChange={event => {
@@ -52,7 +53,7 @@ export default function ScheduleScopePicker({ units, sectors, unitId, sectorId, 
           <ChevronDown size={16} aria-hidden="true" className={chevronClass}/>
         </div>
       </div>
-      <div ref={sectorField} className="min-w-0 space-y-2" onKeyDown={event => {
+      <div ref={sectorField} className={compact ? 'min-w-0 space-y-1' : 'min-w-0 space-y-2'} onKeyDown={event => {
         if (event.key !== 'Escape' || !expanded) return;
         event.preventDefault();
         event.stopPropagation();
@@ -65,6 +66,7 @@ export default function ScheduleScopePicker({ units, sectors, unitId, sectorId, 
         <div className="relative">
           <button ref={sectorButton} type="button" disabled={!unit} aria-expanded={expanded}
             aria-labelledby={`${id}-sectors-label ${id}-sectors-value`} aria-controls={`${id}-sectors-options`}
+            title={selectionLabel}
             className={`${fieldClass} block cursor-pointer bg-input-bg text-left disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => setOpen(current => !current)}>
             <span id={`${id}-sectors-value`} className="block truncate">{selectionLabel}</span>

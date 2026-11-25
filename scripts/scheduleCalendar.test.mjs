@@ -150,12 +150,36 @@ test('monthly multi-sector view shows each assignment once with its sector capti
   assert.ok(html.includes(sector.name));
 });
 
-test('shared calendar cards open the inspector while editing actions remain permission-controlled', () => {
+test('the day inspector keeps editing actions permission-controlled', () => {
   const shifts = [base, { ...base, id: 'vacancy', doctorId: undefined, status: 'open' }];
   const focus = { day, sectorId: sector.id, kind: 'day', nonce: 1 };
   assert.ok(!render({ shifts, focus }).includes('>Preencher vaga</button>'));
   assert.ok(render({ shifts, focus, canEditSchedule: true }).includes('>Preencher vaga</button>'));
   assert.ok(render({ shifts, focus, canCreateSchedule: true }).includes('>Criar</button>'));
+});
+
+test('record buttons distinguish shifts on the same day and keep the day action separate', () => {
+  const dualSector = { ...sector, coveragePeriods: [
+    { kind: 'day', startTime: '07:00', endTime: '19:00', requiredDoctors: 2 },
+    { kind: 'night', startTime: '19:00', endTime: '07:00', requiredDoctors: 2 },
+  ] };
+  const night = { ...base, id: 'night', startTime: '19:00', endTime: '07:00' };
+  const vacancy = { ...base, id: 'vacancy', doctorId: undefined, status: 'open' };
+  const privatePost = { ...night, id: 'private', doctorId: undefined, status: 'open' };
+  const shifts = [base, night, vacancy, privatePost];
+  const entries = summarizeSectorCoverage(dualSector, shifts).periods.flatMap(period =>
+    scheduleAllocations(period, new Map(doctors.map(doctor => [doctor.id, doctor])), props.availableVacancyIds));
+  assert.deepEqual(new Set(entries.map(entry => entry.shiftId)), new Set(shifts.map(shift => shift.id)));
+  for (const view of ['day', 'week', 'month']) {
+    const html = table({ view, shifts, sectors: [dualSector] });
+    assert.equal(count(html, doctors[0].name), 2);
+    assert.match(html, /<button[^>]+data-schedule-tone="day"/);
+    assert.match(html, /<button[^>]+data-schedule-tone="night"/);
+    assert.match(html, /<button[^>]+data-schedule-tone="available"/);
+    assert.match(html, /<button[^>]+data-schedule-tone="unpublished"/);
+    assert.match(html, /<button[^>]+aria-label="Ver plantões de/);
+    assert.doesNotMatch(html, /<button\b(?:(?!<\/button>).)*<button\b/);
+  }
 });
 
 test('overnight conflicts and exchange remain in the inspector while allocation stays clean', () => {
@@ -345,6 +369,8 @@ test('a valid selected scope renders the actual calendar and keeps operational i
     assert.ok(html.includes(doctors[0].name));
     assert.ok(!html.includes('Selecione a unidade e o setor para visualizar a escala.'));
     assert.ok(html.includes('Pendências e cobertura'));
+    assert.ok(html.indexOf('</table>') < html.indexOf('Filtros avançados'));
+    assert.ok(html.indexOf('Filtros avançados') < html.indexOf('Pendências e cobertura'));
     const grid = html.match(/<table[\s\S]*?<\/table>/)?.[0];
     assert.ok(!grid.includes('Confirmação pendente'));
   }

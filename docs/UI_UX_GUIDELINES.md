@@ -20,6 +20,15 @@
 - Reutilize o componente `Dialog`. Dê título acessível ao diálogo, mantenha a ação principal ao alcance em formulários longos e permita rolar os campos quando o teclado reduzir a área visível. Ao fechar, devolva o foco ao controle de origem quando ele ainda estiver disponível.
 - Preserve os valores digitados após erros. Mostre feedback próximo do campo ou da ação que o usuário deve corrigir. Para preenchimento assistido, mantenha uma entrada manual e descarte respostas atrasadas de consultas substituídas.
 
+## Visualização das escalas
+
+- No calendário mensal, mantenha unidade, setores, modo de visualização e navegação de período antes da grade. Posicione filtros avançados e o resumo de cobertura abaixo, recolhidos por padrão. Mostre perto da grade quando houver filtros ativos, ofereça uma ação para limpá-los e dê acesso direto aos alertas críticos.
+- Abra a ficha pelo identificador do plantão, da vaga ou do posto já criado. Reserve o botão do dia para consultar o conjunto de plantões. Postos previstos que ainda não foram criados levam aos detalhes do turno.
+- Use os tokens de escala para distinguir plantões diurnos em verde claro e noturnos em verde escuro. Mantenha as vagas abertas em vermelho e os postos sem médico em tom neutro. Identifique o período com sol ou lua e um nome acessível. No mês, limite nomes a duas linhas com tooltip para o nome completo e mantenha o horário visível.
+- Na ficha, mostre médico ou situação do posto, data e horário no resumo de Dados operacionais. Inicie os detalhes recolhidos, coloque o histórico no cabeçalho conforme a permissão e mantenha as ações de salvar e cancelar no rodapé. Preserve a posição da agenda e devolva o foco ao plantão após fechar a ficha.
+- Em cobertura fracionada, mantenha a largura de cada trecho proporcional aos minutos e acrescente uma lista acessível para segmentos estreitos. Use os mesmos tons da escala e mostre pendências de aprovação separadamente das horas descobertas. Exiba a prévia da divisão antes de salvar qualquer mudança de horário, capacidade ou médico.
+- Mostre a vaga descoberta na Escala Geral assim que for gerada. Indique a publicação no Portal Médico na ficha, junto à ação disponível para o perfil.
+
 ## Responsividade e acessibilidade
 
 - Confira pelo menos 1440, 390 e 360 px nas alterações de layout. Verifique conteúdo longo, filtros, menus, diálogos, rolagem, foco e campos com a área visível reduzida pelo teclado.

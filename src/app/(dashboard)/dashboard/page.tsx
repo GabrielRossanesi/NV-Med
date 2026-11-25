@@ -6,10 +6,11 @@ import { ArrowRight, ArrowUpRight, Building2, CalendarDays, CalendarCheck, Chevr
 import OperationalIndicators, { useOperationalCounts } from '@/components/OperationalIndicators';
 import UserAvatar from '@/components/UserAvatar';
 import { coverageDays, coverageWeeks, dashboardAgenda, dashboardPayments, dashboardRange, dashboardShiftMatches, doctorsWithDocumentIssues, moveDashboardMonth, shiftScheduleHref, type DashboardPeriod } from '@/lib/dashboardOverview';
+import { coverageDate, coverageDuration, coverageGroups, summarizeRegisteredCoverage } from '@/lib/fractionalCoverage';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
 import { saoPauloDate } from '@/lib/financeState';
 import { canViewPermission } from '@/lib/permissions';
-import { employmentLabels, localDate } from '@/lib/scheduling';
+import { employmentLabels, localDate, shiftInterval } from '@/lib/scheduling';
 import { useStore } from '@/store/useStore';
 import type { Doctor, EmploymentType, Sector, Shift, Unit } from '@/types';
 
@@ -102,29 +103,37 @@ function CoveragePanel({ today, sectors, shifts, unitById, doctorById, filters }
 }) {
   const [range, setRange] = useState<DashboardPeriod>('week');
   const [month, setMonth] = useState(today.slice(0, 7));
-  const [groupBy, setGroupBy] = useState<'unit' | 'specialty'>('unit');
+  const [groupBy, setGroupBy] = useState<'unit' | 'sector' | 'specialty'>('unit');
   const [showAll, setShowAll] = useState(false);
+  const [referenceTime] = useState(Date.now);
   const { start, end, length } = dashboardRange(today, range, month);
-  const periodShifts = shifts.filter(shift => shift.status !== 'cancelled' && shift.date >= start && shift.date <= end);
+  const periodShifts = shifts.filter(shift => shift.status !== 'cancelled' && coverageDate(shift) >= start && coverageDate(shift) <= end);
+  const registered = summarizeRegisteredCoverage(periodShifts);
+  const hourCoverage = registered.plannedMinutes ? Math.round(100 * registered.coveredMinutes / registered.plannedMinutes) : 0;
   const visibleDays = coverageDays(start, sectors, periodShifts, length, Boolean(filters.specialty || filters.employment));
   const columns = range === 'month' ? coverageWeeks(visibleDays) : visibleDays.map(day => ({ ...day, end: day.day }));
   const required = visibleDays.reduce((sum, day) => sum + day.required, 0);
   const deficit = visibleDays.reduce((sum, day) => sum + day.deficit, 0);
-  const open = periodShifts.filter(shift => !shift.doctorId).length;
+  const vacancies = periodShifts.filter(shift => !shift.doctorId).map(shiftInterval);
+  const upcomingVacancies = vacancies.filter(vacancy => vacancy.start > referenceTime).length;
+  const historicalGaps = vacancies.filter(vacancy => vacancy.end <= referenceTime).length;
   const confirmed = periodShifts.filter(shift => shift.status === 'confirmed' && shift.doctorId).length;
   const percent = required ? Math.round((required - deficit) / required * 100) : null;
   const peak = Math.max(1, ...columns.map(day => day.required));
-  const distribution = new Map<string, { name: string; count: number; open: number }>();
-  for (const shift of periodShifts) {
+  const distribution = new Map<string, { name: string; posts: Shift[][] }>();
+  for (const post of coverageGroups(periodShifts).values()) {
+    const shift = post[0];
     const specialty = shift.specialty || doctorById.get(shift.doctorId || '')?.specialty || 'Sem especialidade';
-    const key = groupBy === 'unit' ? shift.unitId : specialty;
-    const name = groupBy === 'unit' ? unitById.get(key)?.name || 'Unidade sem cadastro' : specialty;
-    const group = distribution.get(key) || { name, count: 0, open: 0 };
-    group.count++;
-    if (!shift.doctorId) group.open++;
+    const key = groupBy === 'unit' ? shift.unitId : groupBy === 'sector' ? shift.sectorId || '' : specialty;
+    const name = groupBy === 'unit' ? unitById.get(key)?.name || 'Unidade sem cadastro'
+      : groupBy === 'sector' ? sectors.find(sector => sector.id === key)?.name || 'Sem setor' : specialty;
+    const group = distribution.get(key) || { name, posts: [] };
+    group.posts.push(post);
     distribution.set(key, group);
   }
-  const groups = [...distribution.entries()].sort(([, a], [, b]) => b.open - a.open || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+  const groups = [...distribution.entries()].map(([key, group]) => ({
+    key, name: group.name, count: group.posts.length, coverage: summarizeRegisteredCoverage(group.posts.flat()),
+  })).sort((a, b) => b.coverage.uncoveredMinutes - a.coverage.uncoveredMinutes || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
   const visibleGroups = showAll ? groups : groups.slice(0, 4);
 
   return <section id="cobertura" aria-labelledby="coverage-title" className="nv-panel self-start rounded-[1.375rem] p-4 sm:p-6">
@@ -165,17 +174,31 @@ function CoveragePanel({ today, sectors, shifts, unitById, doctorById, filters }
 
     <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-border py-3">
       <div><dt className="text-xs text-text-muted">Plantões confirmados</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-primary">{confirmed}</dd></div>
-      <div><dt className="text-xs text-text-muted">Vagas abertas na escala</dt><dd className={`mt-1 text-lg font-semibold tabular-nums ${open ? 'text-warning' : 'text-text-primary'}`}>{open}</dd></div>
+      <div><dt className="text-xs text-text-muted">Intervalos vagos</dt><dd className={`mt-1 text-lg font-semibold tabular-nums ${vacancies.length ? 'text-warning' : 'text-text-primary'}`}>{vacancies.length}</dd></div>
+      <div><dt className="text-xs text-text-muted">Vagas futuras</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{upcomingVacancies}</dd></div>
+      <div><dt className="text-xs text-text-muted">Intervalos encerrados sem cobertura</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{historicalGaps}</dd></div>
     </dl>
+    {registered.plannedMinutes > 0 && <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+      {[
+        ['Horas previstas cadastradas', coverageDuration(registered.plannedMinutes)],
+        ['Horas cobertas', coverageDuration(registered.coveredMinutes)],
+        ['Horas descobertas', coverageDuration(registered.uncoveredMinutes)],
+        ['Cobertura das horas', `${hourCoverage}%`],
+        ['Postos integrais', registered.complete],
+        ['Postos parciais', registered.partial],
+        ['Postos sem cobertura', registered.empty],
+      ].map(([label, value]) => <div key={label}><dt className="text-xs text-text-muted">{label}</dt><dd className="mt-0.5 font-semibold tabular-nums">{value}</dd></div>)}
+    </dl>}
 
     <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-sm font-semibold">Plantões cadastrados</h3>
-      <SegmentedControl label="Agrupar plantões" value={groupBy} onChange={value => { setGroupBy(value); setShowAll(false); }} options={[{ value: 'unit', label: 'Unidade' }, { value: 'specialty', label: 'Especialidade' }]} />
+      <h3 className="text-sm font-semibold">Postos cadastrados</h3>
+      <SegmentedControl label="Agrupar postos" value={groupBy} onChange={value => { setGroupBy(value); setShowAll(false); }} options={[{ value: 'unit', label: 'Unidade' }, { value: 'sector', label: 'Setor' }, { value: 'specialty', label: 'Especialidade' }]} />
     </div>
     {groups.length ? <ul className="mt-2 divide-y divide-border">
-      {visibleGroups.map(([key, item]) => <li key={key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2.5 text-sm">
+      {visibleGroups.map(item => <li key={item.key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2.5 text-sm">
         <span className="min-w-0 wrap-anywhere font-medium text-text-secondary">{item.name}</span>
-        <span className="text-xs tabular-nums text-text-muted">{item.count} {item.count === 1 ? 'plantão' : 'plantões'}{item.open > 0 && <span className="ml-2 font-semibold text-warning">· {item.open} {item.open === 1 ? 'vaga' : 'vagas'}</span>}</span>
+        <span className="text-xs tabular-nums text-text-muted">{item.count} {item.count === 1 ? 'posto' : 'postos'}
+          {item.coverage.plannedMinutes > 0 && <span className="ml-2 font-semibold">{Math.round(100 * item.coverage.coveredMinutes / item.coverage.plannedMinutes)}% das horas</span>}</span>
       </li>)}
     </ul> : <p className="mt-2 text-sm text-text-muted">Nenhum plantão cadastrado neste período.</p>}
     {groups.length > 4 && <button type="button" className="mt-2 min-h-9 text-sm font-semibold text-primary hover:underline" onClick={() => setShowAll(value => !value)}>{showAll ? 'Mostrar menos' : `Mostrar mais ${groups.length - 4}`}</button>}
