@@ -5,20 +5,18 @@ import Link from 'next/link';
 import { ArrowUpRight, Building2, CalendarDays, Layers3, Search, Stethoscope } from 'lucide-react';
 import { canViewPermission } from '@/lib/permissions';
 import { shiftScheduleHref } from '@/lib/dashboardOverview';
+import { doctorNameSearchKey } from '@/lib/doctorName';
 import { useStore } from '@/store/useStore';
 import Dialog from './Dialog';
-
-function normalize(value: string) {
-  return value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{Diacritic}/gu, '');
-}
 
 export default function DashboardSearch({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const { currentUser, activeOrganizationId: org, doctors, units, shifts, sectors } = useStore();
-  const terms = normalize(query.trim()).split(/\s+/);
-  const ready = query.trim().length >= 2;
+  const search = doctorNameSearchKey(query);
+  const terms = search.split(' ');
+  const ready = search.length >= 2;
   const matches = (name: string, detail: string) => {
-    const searchable = normalize(`${name} ${detail}`);
+    const searchable = doctorNameSearchKey(`${name} ${detail}`);
     return terms.every(term => searchable.includes(term));
   };
   const companyDoctors = doctors.filter(item => item.organizationId === org);

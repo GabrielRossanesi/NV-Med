@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client';
 import { withAbortTimeout } from '@/lib/requestTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 import type { DoctorBanking } from '@/lib/doctorBanking';
+import { doctorNameInvalidError, doctorNameNumberError } from '@/lib/doctorName';
 import {
   Organization,
   Doctor,
@@ -449,6 +450,7 @@ export async function createDoctorInSupabase(doctor: Doctor, banking?: DoctorBan
   };
 
   const { error } = await supabase.rpc('nv_create_doctor_with_banking', { profile: payload, banking: banking || null });
+  if (error?.code === '22023' && [doctorNameNumberError, doctorNameInvalidError].includes(error.message)) throw new Error(error.message);
   if (error) throw new Error('Não foi possível cadastrar o médico. Confira os dados e as permissões.');
 }
 

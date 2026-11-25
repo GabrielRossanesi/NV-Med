@@ -5,11 +5,13 @@ import type { Doctor } from '@/types';
 import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { crmStates } from '@/lib/documentRequirements';
 import DoctorAddressFields from './DoctorAddressFields';
+import DoctorNameField from './DoctorNameField';
+import { doctorNameFromForm } from '@/lib/doctorName';
 
-export function doctorProfileFromForm(form: FormData) {
+export function doctorProfileFromForm(form: FormData, originalName?: string) {
   const value = (key: string) => String(form.get(key) ?? '').trim();
   return {
-    name: value('name'), crm: value('crm'), crmUf: value('crmUf'), rqe: value('rqe'), cpf: value('cpf'),
+    name: doctorNameFromForm(form, originalName), crm: value('crm'), crmUf: value('crmUf'), rqe: value('rqe'), cpf: value('cpf'),
     phone: value('phone'), email: value('email').toLowerCase(), specialty: value('specialty'), address: value('address'),
     status: value('status') as Doctor['status'], contractModel: value('contractModel') as Doctor['contractModel'],
     contractSigned: form.has('contractSigned'), linkedUnits: [] as string[],
@@ -25,14 +27,14 @@ function ProfileGroup({ title, children }: { title: string; children: ReactNode 
   </div>;
 }
 
-export default function DoctorProfileFields({ initial = {}, specialties, editing = false, own = false, personal = true, birthDate, professionalDetails }: {
+export default function DoctorProfileFields({ initial = {}, specialties, editing = false, own = false, personal = true, birthDate, professionalDetails, canPreserveCapitalization = false }: {
   initial?: Partial<Doctor>; specialties: string[]; editing?: boolean; own?: boolean;
-  personal?: boolean; birthDate?: string; professionalDetails?: ReactNode;
+  personal?: boolean; birthDate?: string; professionalDetails?: ReactNode; canPreserveCapitalization?: boolean;
 }) {
   const options = Array.from(new Set([initial.specialty, ...specialties].filter((s): s is string => Boolean(s))));
   return <div className="space-y-5 [&>div+div]:border-t [&>div+div]:border-border [&>div+div]:pt-4">
     <ProfileGroup title="Identificação pessoal">
-      <label className="nv-label sm:col-span-2">Nome completo<input name="name" className="nv-input" defaultValue={initial.name} required maxLength={150} autoComplete="name"/></label>
+      <DoctorNameField initial={initial.name} preserve={initial.nameCapitalizationOverride} allowOverride={canPreserveCapitalization} wide/>
       {personal && <label className="nv-label">CPF<input name="cpf" className="nv-input" defaultValue={initial.cpf} readOnly={own} required={!editing} maxLength={14} inputMode="numeric"/></label>}
       {birthDate !== undefined && <label className="nv-label">Nascimento<input className="nv-input" name="birth" type="date" defaultValue={birthDate}/></label>}
     </ProfileGroup>

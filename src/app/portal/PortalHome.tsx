@@ -18,6 +18,8 @@ import DoctorBankingFields from '@/components/DoctorBankingFields';
 import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileEditor from '@/components/DoctorProfileEditor';
+import DoctorNameField from '@/components/DoctorNameField';
+import { doctorNameFromForm } from '@/lib/doctorName';
 import { notify } from '@/lib/notifications';
 import { openDocument } from '@/services/supabaseService';
 
@@ -93,9 +95,10 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
     setBusy(true);
     setError('');
     try {
+      const name = doctorNameFromForm(fields);
       const banking = bankingFromForm(fields);
       const result = await createClient()?.rpc('nv_submit_enrollment', {
-        org: organization, full_name: fields.get('name'), registration: fields.get('crm'), uf: fields.get('uf'),
+        org: organization, full_name: name, registration: fields.get('crm'), uf: fields.get('uf'),
         tax_id: digits(String(fields.get('cpf'))), birth: fields.get('birth'), phone_number: digits(String(fields.get('phone'))),
         pix: banking.pix_key, specialties: fields.getAll('specialties'), banking,
       });
@@ -111,7 +114,7 @@ function EnrollmentForm({ email, organization, catalog, previous, onSaved }: { e
   return <form onSubmit={save} className="space-y-5 nv-panel p-5 sm:p-7">
     <h2 className="nv-section-title">{previous ? 'Corrigir cadastro' : 'Credenciamento'} · {catalog.name}</h2>
     <div className="grid gap-4 sm:grid-cols-2">
-      <label className="nv-label">Nome completo<input className="nv-input" name="name" autoComplete="name" defaultValue={previous?.name} required maxLength={150}/></label>
+      <DoctorNameField initial={previous?.name}/>
       <label className="nv-label">E-mail verificado<input className="nv-input" type="email" value={email} readOnly/></label>
       <label className="nv-label">CRM<input className="nv-input" name="crm" inputMode="numeric" pattern="[0-9]{1,12}" defaultValue={previous?.crm} required/></label>
       <label className="nv-label">UF do CRM<select className="nv-input" name="uf" defaultValue={previous?.uf || ''} required><option value="">Selecione</option>{crmStates.map(uf => <option key={uf}>{uf}</option>)}</select></label>

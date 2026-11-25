@@ -45,6 +45,7 @@ export type DoctorStatus = 'active' | 'pending' | 'inactive';
 export type DoctorContractModel = 'scp' | 'pj' | 'pf';
 
 export interface Doctor {
+  nameCapitalizationOverride?: boolean;
   id: string;
   name: string;
   crm: string;

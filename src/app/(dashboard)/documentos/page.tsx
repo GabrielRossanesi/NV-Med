@@ -1,5 +1,7 @@
 'use client';
 
+import { matchesDoctorSearch } from '@/lib/doctorName';
+
 import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -56,7 +58,7 @@ function DocumentCenter({ searchParams }: { searchParams: URLSearchParams }) {
 
   const filteredDoctors = orgDoctors
     .filter(doctor => !doctorId || doctor.id === doctorId)
-    .filter(doctor => !search || `${doctor.name} ${doctor.crm} ${doctor.rqe || ''} ${doctor.specialty}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(doctor => matchesDoctorSearch(doctor, search))
     .filter(doctor => doctorHasOperationalUnit(orgShifts, doctor.id, unitId))
     .filter(doctor => !specialty || doctor.specialty === specialty)
     .filter(doctor => matchesCompliance(doctor.id))
