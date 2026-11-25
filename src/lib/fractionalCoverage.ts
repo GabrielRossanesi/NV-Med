@@ -51,6 +51,33 @@ export function coverageDuration(minutes: number) {
   return hours ? `${hours}h${remainder ? String(remainder).padStart(2, '0') : ''}` : `${remainder} min`;
 }
 
+export function fractionalWritePlan(
+  draft: Pick<Shift, 'date' | 'startTime' | 'endTime' | 'doctorId' | 'status'>,
+  planned: CoveragePlan | undefined,
+  advanced: CoveragePlan | null,
+  linked: boolean,
+) {
+  if (advanced) return advanced;
+  if (linked || !planned || !draft.doctorId || draft.status === 'cancelled') return undefined;
+  if (draft.date !== planned.date || draft.startTime !== planned.startTime || draft.endTime !== planned.endTime
+    || planned.startTime === planned.endTime) return planned;
+  return undefined;
+}
+
+export function coverageSaveMessage(prefix: string, saved: Shift[], previous: Shift[]) {
+  const priorIds = new Set(previous.map(shift => shift.id));
+  const gaps = saved.filter(shift => shift.coveragePost && shift.status === 'open' && !shift.doctorId && !priorIds.has(shift.id));
+  if (gaps.length === 1) {
+    const span = coverageSpan(gaps[0]);
+    if (!span) return prefix;
+    const minutes = coverageMinutes(span);
+    const label = minutes === 60 ? '1 hora' : minutes % 60 === 0 ? `${minutes / 60} horas` : coverageDuration(minutes);
+    return `${prefix} Uma vaga de ${label} foi gerada automaticamente.`;
+  }
+  if (gaps.length === 2) return `${prefix} Duas vagas descobertas foram geradas automaticamente.`;
+  return gaps.length > 2 ? `${prefix} ${gaps.length} vagas descobertas foram geradas automaticamente.` : prefix;
+}
+
 export function calculateFractionalCoverage(planned: CoverageSpan, capacity: number, allocations: CoverageSpan[]) {
   const boundaries = [...new Set([planned.start, planned.end, ...allocations.flatMap(span => [span.start, span.end])])].sort((a, b) => a - b);
   const valid = Number.isInteger(capacity) && capacity >= 1 && capacity <= 20 && planned.start < planned.end

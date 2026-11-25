@@ -1,10 +1,51 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateFractionalCoverage, coverageDate, coveragePlanInterval, coveragePositions } from '../src/lib/fractionalCoverage.ts';
+import { calculateFractionalCoverage, coverageDate, coveragePlanInterval, coveragePositions, coverageSaveMessage, fractionalWritePlan } from '../src/lib/fractionalCoverage.ts';
+import { scheduleAllocations } from '../src/lib/scheduleCalendar.ts';
 
 const minute = 60_000;
 const interval = (start, end) => ({ start: start * minute, end: end * minute });
 const planned = interval(0, 720);
+
+test('uses the original post automatically when an assigned interval changes', () => {
+  const original = { date: '2026-12-11', startTime: '07:00', endTime: '19:00', capacity: 1 };
+  const full = { ...original, doctorId: 'ana', status: 'pending' };
+  const partial = { ...full, startTime: '09:00' };
+  assert.equal(fractionalWritePlan(full, original, null, false), undefined);
+  assert.equal(fractionalWritePlan(partial, original, null, false), original);
+  assert.equal(fractionalWritePlan({ ...partial, doctorId: undefined }, original, null, false), undefined);
+  assert.equal(fractionalWritePlan(partial, original, null, true), undefined);
+  const advanced = { ...original, capacity: 2 };
+  assert.equal(fractionalWritePlan(partial, original, advanced, true), advanced);
+  const fullDay = { ...original, endTime: '07:00' };
+  assert.equal(fractionalWritePlan({ ...full, endTime: '07:00' }, fullDay, null, false), fullDay);
+});
+
+test('makes each uncovered interval clickable and ordered across midnight', () => {
+  const makeShift = (id, date, startTime, endTime, doctorId) => ({
+    id, date, doctorId, startTime, endTime, status: doctorId ? 'pending' : 'open',
+    coveragePost: {
+      id: 'overnight', segmentStartsAt: `${date}T${startTime}:00Z`, segmentEndsAt: `${date}T${endTime}:00Z`,
+    },
+  });
+  const firstGap = makeShift('gap-1', '2026-12-14', '19:00', '21:00');
+  const secondGap = makeShift('gap-2', '2026-12-15', '06:00', '07:00');
+  const doctor = { ...makeShift('assignment', '2026-12-14', '21:00', '06:00', 'ana'),
+    coveragePost: { id: 'overnight', segmentStartsAt: '2026-12-14T21:00:00Z', segmentEndsAt: '2026-12-15T06:00:00Z' } };
+  const entries = scheduleAllocations({
+    period: { kind: 'night', startTime: '19:00', endTime: '07:00' }, assigned: [doctor], vacancies: [secondGap, firstGap], uncreated: 0,
+  }, new Map([['ana', { name: 'Ana de Teste' }]]));
+  assert.deepEqual(entries.map(item => [item.shiftId, item.name, item.duration]), [
+    ['gap-1', 'Vaga aberta', '2h'], ['assignment', 'Ana de Teste', undefined], ['gap-2', 'Vaga aberta', '1h'],
+  ]);
+  assert.equal(entries[0].vacancyState, 'available');
+  assert.equal(coverageSaveMessage('Plantão atualizado.', [doctor, firstGap], [doctor]),
+    'Plantão atualizado. Uma vaga de 2 horas foi gerada automaticamente.');
+  assert.equal(coverageSaveMessage('Plantão atualizado.', [doctor, firstGap, secondGap], [doctor]),
+    'Plantão atualizado. Duas vagas descobertas foram geradas automaticamente.');
+  assert.equal(coverageSaveMessage('Plantão atualizado.', [doctor, firstGap, secondGap], [doctor, firstGap, secondGap]),
+    'Plantão atualizado.');
+});
 
 test('calculates full and partial coverage in minutes, with gaps at either boundary', () => {
   for (const [allocations, gaps, covered] of [

@@ -4,9 +4,11 @@ O posto previsto registra a demanda da unidade. Um posto guarda o período, o fu
 
 ## Cadastro e edição
 
-Na Escala Geral, abra uma ficha e marque **Fracionar cobertura**. Em um plantão existente, seus horários antes da conversão se tornam o período previsto. Para um novo posto, informe o período previsto e os horários do primeiro trecho. Use **Editar período previsto** para ajustar o período ou a capacidade de um posto cadastrado. A revisão precisa acomodar as demais alocações.
+Na Escala Geral, abra a ficha, selecione o médico e ajuste seu horário. O plantão existente mantém o intervalo previsto. Para um posto novo com setor, o período selecionado define os horários previstos. **Dados operacionais** reúne os ajustes autorizados de capacidade e de período. Os ajustes precisam acomodar as demais alocações.
 
-A ficha mostra a linha do tempo, as horas previstas, cobertas e descobertas e a quantidade de médicos. Cada trecho salvo abre sua ficha. Escolha um médico e ajuste o horário dentro da vaga para preencher uma parte. Para liberar um intervalo, remova o médico ou cancele a alocação conforme as permissões e confira a prévia antes de salvar. **Cancelar posto** encerra a demanda e os trechos ativos, preservando os registros.
+A prévia abre ao lado da ficha no desktop e abaixo dela em telas menores. Ela mostra o intervalo previsto, as horas cobertas e as lacunas, proporcionalmente à duração do posto. O botão **Cobertura** abre ou recolhe a prévia. Salvar a ficha registra a alocação e as vagas na mesma transação. Cancelar descarta a prévia.
+
+Cada trecho salvo abre sua própria ficha na Escala Geral. Escolha um médico e ajuste o horário dentro da vaga para preencher uma parte. Para liberar um intervalo, remova o médico ou cancele a alocação conforme as permissões e confira a prévia antes de salvar. **Cancelar posto** encerra a demanda e os trechos ativos, preservando os registros.
 
 Na Escala Master, marque **Definir período do posto** e informe a alocação do médico fixo e a capacidade prevista. A geração cria o posto e a alocação recorrente e deriva os intervalos descobertos. As ocorrências fracionadas já materializadas são preservadas nas revisões da recorrência. Ajustes pontuais são feitos na Escala Geral.
 

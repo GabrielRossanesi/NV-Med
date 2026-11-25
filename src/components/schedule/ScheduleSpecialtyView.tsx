@@ -20,11 +20,11 @@ export default function ScheduleSpecialtyView({ doctors, sectors, shifts, allShi
       const doctorCount = new Set(allocated.map(shift => shift.doctorId)).size;
       const conflicts = items.filter(shift => hasConflict(shift, allShifts)).length;
       return <div key={specialty} className="grid gap-3 p-4 lg:grid-cols-[220px_minmax(0,1fr)]"><div><h3 className="text-sm font-semibold text-text-primary">{specialty}</h3><p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-text-muted"><span>{doctorCount} médicos</span><span>{items.length} trechos</span><span className="inline-flex items-center gap-1"><Clock3 size={11}/>{hours(allocated.reduce((sum, shift) => sum + duration(shift), 0))}</span></p>{conflicts > 0 && <p className="mt-1 flex items-center gap-1 text-[11px] text-danger"><AlertTriangle size={12}/>{conflicts} conflito{conflicts === 1 ? '' : 's'}</p>}</div>
-        <div className="flex flex-wrap gap-2">{items.sort((a, b) => a.date.localeCompare(b.date)).map(shift => {
+        <div className="flex flex-wrap gap-2">{items.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)).map(shift => {
           const sector = sectorById.get(shift.sectorId || '');
           const kind = coverageKindForShift(shift, sector ? sectorCoveragePeriods(sector) : []);
           const Icon = kind === 'night' ? Moon : Sun;
-          const name = shift.doctorId ? doctorById.get(shift.doctorId)?.name || 'Médico escalado' : 'Vaga descoberta';
+          const name = shift.doctorId ? doctorById.get(shift.doctorId)?.name || 'Médico escalado' : 'Vaga aberta';
           return <button key={shift.id} type="button" onClick={() => onEdit(shift)} data-schedule-tone={shift.doctorId ? kind : 'available'}
             title={name} className="nv-schedule-entry min-h-11 rounded-lg px-3 py-1.5 text-left">
             <span className="block max-w-44 wrap-anywhere text-xs font-semibold">{name}</span>

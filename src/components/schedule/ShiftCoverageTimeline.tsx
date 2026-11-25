@@ -1,91 +1,101 @@
+import { X } from 'lucide-react';
 import { type CoverageSpan, calculateFractionalCoverage, coverageDuration, coverageMinutes, coverageSpan } from '@/lib/fractionalCoverage';
-import { shiftApprovalLabels } from '@/lib/shiftApproval';
-import type { Doctor, Shift } from '@/types';
+import type { CoveragePeriodKind, Doctor, Shift } from '@/types';
 
 interface TimelineSegment extends CoverageSpan {
   shift?: Shift;
   name: string;
+  vacant: boolean;
 }
 
-export default function ShiftCoverageTimeline({ planned, capacity, segments, doctors, timeZone, selectedId, onOpen, canAllocate = false, preview = false }: {
+export default function ShiftCoverageTimeline({ planned, capacity, segments, doctors, timeZone, kind, onClose, onOpen, preview }: {
   planned: CoverageSpan;
   capacity: number;
   segments: Shift[];
   doctors: Doctor[];
   timeZone: string;
-  selectedId: string;
+  kind: CoveragePeriodKind;
+  onClose: () => void;
   onOpen?: (shift: Shift) => void;
-  canAllocate?: boolean;
-  preview?: boolean;
+  preview: boolean;
 }) {
-  const current: TimelineSegment[] = segments.filter(item => item.status !== 'cancelled').flatMap(shift => {
-    const interval = coverageSpan(shift);
-    if (!interval) return [];
-    return [{
-      ...interval, shift,
-      name: shift.doctorId ? doctors.find(item => item.id === shift.doctorId)?.name || 'Médico escalado' : 'Vaga descoberta',
-    }];
+  const current: TimelineSegment[] = segments.flatMap(shift => {
+    const span = coverageSpan(shift);
+    if (!span || shift.status === 'cancelled') return [];
+    const vacant = !shift.doctorId;
+    return [{ ...span, shift, vacant, name: vacant ? 'Vaga aberta' : doctors.find(doctor => doctor.id === shift.doctorId)?.name || 'Médico escalado' }];
   });
-  const assigned = current.filter(item => item.shift?.doctorId);
+  const assigned = current.filter(segment => !segment.vacant);
   const totals = calculateFractionalCoverage(planned, capacity, assigned);
-  if (!totals) return <p role="status" className="nv-feedback text-danger">Confira os horários. Os intervalos precisam caber no posto e respeitar a capacidade.</p>;
-  const timeline: TimelineSegment[] = (preview ? [...assigned, ...totals.gaps.map(span => ({ ...span, name: 'Vaga descoberta' }))] : current)
-    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const savedGaps = current.filter(segment => segment.vacant);
+  const gaps: TimelineSegment[] = !preview ? savedGaps : (totals?.gaps || []).map(span => {
+    const saved = savedGaps.findIndex(item => item.start === span.start && item.end === span.end);
+    return saved === -1 ? { ...span, vacant: true, name: 'Vaga aberta' } : savedGaps.splice(saved, 1)[0];
+  });
+  const timeline = [...assigned, ...gaps].sort((a, b) => a.start - b.start || a.end - b.end);
   const laneEnds: number[] = [];
-  const doctorsAssigned = new Set(assigned.map(item => item.shift?.doctorId)).size;
-  const percent = Math.round(100 * totals.coveredMinutes / totals.plannedMinutes);
-  const state = totals.uncoveredMinutes === 0 ? 'Integralmente coberto' : totals.coveredMinutes ? 'Parcialmente coberto' : 'Sem cobertura';
   const duration = planned.end - planned.start;
   const time = new Intl.DateTimeFormat('pt-BR', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  const nightStart = time.format(planned.start);
-  const tone = (segment: TimelineSegment) => !segment.shift?.doctorId ? 'available' : nightStart >= '18:00' || nightStart < '06:00' ? 'night' : 'day';
-  const label = (segment: TimelineSegment) => {
-    const approval = segment.shift?.doctorId && segment.shift.approvalSource;
-    return [segment.name, `${time.format(segment.start)}–${time.format(segment.end)}`, coverageDuration(coverageMinutes(segment)),
-      approval && shiftApprovalLabels[approval]].filter(Boolean).join(' · ');
-  };
-  const vacancy = current.find(item => !item.shift?.doctorId);
-  const metrics = [
-    ['Previstas', coverageDuration(totals.plannedMinutes)], ['Cobertas', coverageDuration(totals.coveredMinutes)],
-    ['Descobertas', coverageDuration(totals.uncoveredMinutes)], ['Médicos', doctorsAssigned],
-  ];
+  const range = (span: CoverageSpan) => `${time.format(span.start)}–${time.format(span.end)}`;
+  const ticks = [...new Set([planned.start, planned.end, ...timeline.flatMap(item => [item.start, item.end])])].sort((a, b) => a - b);
+  const metrics = totals && [
+    ['Previstas', totals.plannedMinutes], ['Cobertas', totals.coveredMinutes], ['Descobertas', totals.uncoveredMinutes],
+  ] as const;
 
-  return <section className="space-y-2.5 rounded-xl border border-border p-3" aria-label={preview ? 'Prévia da cobertura' : 'Cobertura do posto'}>
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-sm font-semibold">{preview ? 'Prévia da cobertura' : 'Cobertura do posto'}</h3>
-      <p className={`text-xs font-medium ${totals.uncoveredMinutes ? 'text-danger' : 'text-success'}`}>{state} · {percent}%</p>
+  return <section id="shift-coverage-panel" className="min-w-0 space-y-4" aria-labelledby="shift-coverage-heading">
+    <div className="flex items-start justify-between gap-2">
+      <div>
+        <h3 id="shift-coverage-heading" className="text-base font-semibold">Cobertura do posto</h3>
+        <p className="mt-1 text-sm tabular-nums text-text-secondary">{range(planned)}</p>
+      </div>
+      <button type="button" aria-label="Recolher cobertura" onClick={onClose}
+        className="grid size-10 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-state-hover"><X size={17} aria-hidden="true"/></button>
     </div>
-    <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-      {metrics.map(([name, value]) => <div key={name}><dt className="text-text-muted">{name}</dt><dd className="mt-0.5 font-semibold tabular-nums">{value}</dd></div>)}
-    </dl>
-    <div className="grid gap-1 rounded-md bg-surface-muted/30 p-0.5" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
-      {timeline.map((segment, index) => {
-        let lane = laneEnds.findIndex(end => end <= segment.start);
-        if (lane < 0) lane = laneEnds.length;
-        laneEnds[lane] = segment.end;
-        const width = (segment.end - segment.start) / duration * 100;
-        const left = (segment.start - planned.start) / duration * 100;
-        const style = { gridArea: `${lane + 1} / 1`, width: `${width}%`, marginInlineStart: `${left}%` };
-        const className = 'nv-schedule-entry min-h-9 overflow-hidden rounded-sm px-1 text-left text-xs font-medium outline-offset-[-2px]';
-        return onOpen && segment.shift
-          ? <button key={segment.shift.id} type="button" onClick={() => onOpen(segment.shift!)} aria-label={label(segment)} title={label(segment)}
-            data-schedule-tone={tone(segment)} aria-current={segment.shift.id === selectedId ? 'true' : undefined}
-            className={`${className} ${segment.shift.id === selectedId ? 'ring-1 ring-inset ring-primary' : ''}`} style={style}>
-            {width >= 18 && <span className="block truncate">{segment.name}</span>}
-            {width >= 27 && <span className="block text-[11px] font-normal tabular-nums">{time.format(segment.start)}–{time.format(segment.end)}</span>}
-          </button>
-          : <div key={segment.shift?.id || index} data-schedule-tone={tone(segment)} title={label(segment)} aria-hidden="true"
-            className={`${className} flex items-center`} style={style}>{width >= 18 && <span className="truncate">{segment.name}</span>}</div>;
-      })}
-    </div>
-    <div className="flex justify-between text-xs tabular-nums text-text-muted"><span>{time.format(planned.start)}</span><span>{time.format(planned.end)}</span></div>
-    <details>
-      <summary className="cursor-pointer rounded text-xs font-semibold text-text-secondary">Intervalos e aprovações</summary>
-      <ul className="mt-1 space-y-1 text-xs">{timeline.map((segment, index) =>
-        <li key={segment.shift?.id || index}>{segment.shift && onOpen
-          ? <button type="button" className="min-h-9 rounded px-1 text-left hover:bg-state-hover" onClick={() => onOpen(segment.shift!)}>{label(segment)}</button>
-          : <span>{label(segment)}</span>}</li>)}</ul>
-    </details>
-    {canAllocate && vacancy?.shift && onOpen && <button type="button" className="nv-button-secondary min-h-9 text-xs" onClick={() => onOpen(vacancy.shift!)}>Adicionar alocação</button>}
+    {totals && metrics ? <>
+      <dl className="grid grid-cols-3 gap-2 border-y border-border py-3" aria-live="polite">
+        {metrics.map(([name, minutes]) => <div key={name}>
+          <dt className="text-xs text-text-muted">{name}</dt>
+          <dd className={`mt-1 text-base font-semibold tabular-nums ${name === 'Descobertas' && minutes ? 'text-danger' : ''}`}>{coverageDuration(minutes)}</dd>
+        </div>)}
+      </dl>
+      <div aria-hidden="true">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-y-1">
+          {timeline.map((segment, index) => {
+            let lane = laneEnds.findIndex(end => end <= segment.start);
+            if (lane < 0) lane = laneEnds.length;
+            laneEnds[lane] = segment.end;
+            const width = (segment.end - segment.start) / duration * 100;
+            const style = { gridArea: `${lane + 1} / 1`, width: `${width}%`, marginInlineStart: `${(segment.start - planned.start) / duration * 100}%` };
+            const showLabel = width >= (segment.vacant ? 15 : 27);
+            return <div key={segment.shift?.id || index} style={style} data-schedule-tone={segment.vacant ? 'available' : kind}
+              className="nv-coverage-segment nv-schedule-entry flex min-h-12 min-w-0 flex-col justify-center overflow-hidden rounded-sm text-xs font-medium">
+              {showLabel && <span className={`px-1 ${segment.vacant ? 'leading-3' : 'truncate'}`}>{segment.name}</span>}
+              {showLabel && <span className="truncate px-1 pt-0.5 font-normal tabular-nums">{segment.vacant ? coverageDuration(coverageMinutes(segment)) : range(segment)}</span>}
+            </div>;
+          })}
+        </div>
+        <div className="relative h-11 text-[11px] tabular-nums text-text-secondary">
+          {ticks.map((at, index) => <span key={at} className="absolute flex flex-col items-center"
+            style={{ left: `${(at - planned.start) / duration * 100}%`, transform: index === 0 ? undefined : index === ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)' }}>
+            <span className="h-1 w-px bg-border"/>
+            {(index === 0 || index === ticks.length - 1 || ticks.length <= 5) &&
+              <span className={index !== 0 && index !== ticks.length - 1 ? 'mt-3' : ''}>{time.format(at)}</span>}
+          </span>)}
+        </div>
+      </div>
+      <ul aria-label="Intervalos do posto" className="divide-y divide-border text-sm">
+        {timeline.map((segment, index) => {
+          const caption = <><span className={`min-w-0 break-words font-medium ${segment.vacant ? 'text-danger' : ''}`}>{segment.name}</span>
+            <span className="shrink-0 text-xs tabular-nums text-text-secondary">{range(segment)}{segment.vacant && ` · ${coverageDuration(coverageMinutes(segment))}`}</span></>;
+          return <li key={segment.shift?.id || index}>
+            {onOpen && segment.shift && segment.vacant ?
+              <button type="button" className="flex min-h-10 w-full flex-wrap items-center justify-between gap-x-2 rounded text-left hover:bg-state-hover"
+                onClick={() => onOpen(segment.shift!)}>{caption}</button>
+              : <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-2">{caption}</div>}
+          </li>;
+        })}
+      </ul>
+      {preview && !gaps.length && <p className="text-sm text-text-secondary">Nenhuma vaga será gerada.</p>}
+    </> : <p role="status" className="nv-feedback text-danger">Confira os horários e a capacidade do posto.</p>}
   </section>;
 }
