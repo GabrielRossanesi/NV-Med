@@ -36,6 +36,8 @@ INSERT INTO public.doctor_banking(doctor_id,organization_id,pix_key,pix_key_type
 INSERT INTO public.shifts(id,organization_id,doctor_id,unit_id,sector_id,specialty,date,start_time,end_time,type,status,employment_type)
 VALUES ('concurrent-approval','approval-org','approval-doctor','approval-unit','approval-sector','Cirurgia',current_date-2,'07:00','19:00',
  'onsite','pending','clt');
+INSERT INTO nv_master_private.shift_approval_schedule(activated_at)
+VALUES (statement_timestamp() - interval '3 days');
 COMMIT;
 
 SELECT public.dblink_connect('approval_competing_connection',format('host=127.0.0.1 port=%s dbname=%s user=%s',
