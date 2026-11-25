@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Dialog from '@/components/Dialog';
+import ConfirmationDialog from '@/components/ConfirmationDialog';
+import { useConfirmation } from '@/components/ConfirmationProvider';
+import { logoutCurrentSession } from '@/lib/auth/logout';
 
 export function useAccountLeaveGuard(enabled: boolean) {
+  const confirm = useConfirmation();
   const [leave, setLeave] = useState<(() => void) | null>(null);
   const confirmed = useRef(false);
   function confirmLeave() {
@@ -39,8 +42,12 @@ export function useAccountLeaveGuard(enabled: boolean) {
       setLeave(() => () => location.replace(destination));
     }
     function signOut(event: Event) {
-      if (!window.confirm('Sair da conta e descartar as alterações do perfil?')) event.preventDefault();
-      else confirmed.current = true;
+      if (confirmed.current) return;
+      event.preventDefault();
+      void confirm({ title: 'Sair e descartar alterações?', description: 'As alterações no perfil ainda não foram salvas.', tone: 'danger', confirmLabel: 'Descartar e sair', onConfirm: async () => {
+        confirmed.current = true;
+        await logoutCurrentSession();
+      } });
     }
     function signOutFailed() { confirmed.current = false; }
     window.addEventListener('beforeunload', unload);
@@ -56,16 +63,12 @@ export function useAccountLeaveGuard(enabled: boolean) {
       document.removeEventListener('click', openLink, true);
       confirmed.current = false;
     };
-  }, [enabled]);
+  }, [enabled, confirm]);
 
   return { leave, setLeave, confirmLeave };
 }
 
 export function AccountLeaveDialog({ saving, onCancel, onConfirm }: { saving: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return <Dialog title="Descartar alterações?" onClose={onCancel} footer={<div className="flex flex-wrap justify-end gap-2">
-    <button type="button" className="nv-button-secondary" onClick={onCancel} autoFocus>Continuar editando</button>
-    <button type="button" className="nv-button" onClick={onConfirm} disabled={saving}>Descartar alterações</button>
-  </div>}>
-    <p className="text-sm text-text-secondary">{saving ? 'Aguarde o salvamento antes de sair.' : 'As alterações no perfil ainda não foram salvas.'}</p>
-  </Dialog>;
+  return <ConfirmationDialog title="Descartar alterações?" tone="danger" busy={saving} confirmLabel="Descartar alterações" cancelLabel="Continuar editando"
+    onClose={onCancel} onConfirm={onConfirm} description={saving ? 'Aguarde o salvamento antes de sair.' : 'As alterações no perfil ainda não foram salvas.'}/>;
 }

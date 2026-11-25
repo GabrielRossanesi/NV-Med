@@ -1,5 +1,7 @@
 'use client';
 
+import { useConfirmation } from '@/components/ConfirmationProvider';
+
 import { useEffect, useState } from 'react';
 import { ArrowRightLeft, History, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -23,6 +25,7 @@ type HistoryItem = { id: number; at: string; previous?: string; next?: string; a
 
 function Decision({ item, organization, onSaved }: { item: Opportunity; organization: string; onSaved: () => void }) {
   const guard = useScheduleEdit();
+  const confirm = useConfirmation();
   const [employment, setEmployment] = useState<EmploymentType | ''>('');
   const [draft, setDraft] = useState(() => initialAgreementDraft());
   const currentUser = useStore(state => state.currentUser);
@@ -61,7 +64,7 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
       const agreement = employment === 'pj' ? buildRequiredPjAgreement(agreementDraft, reference) : null;
       const cents = agreement?.mode === 'default' ? reference?.amount_cents : agreement?.amount_cents;
       const payment = agreement && cents != null ? ` · ${formatShiftMoney(cents)} · ${paymentFrequencyLabels[agreement.frequency]}` : '';
-      if (!window.confirm(`Confirmar o médico selecionado? ${employmentLabel(employment)}${payment}`)) return;
+      if (!await confirm({ title: 'Aprovar médico selecionado?', description: `${employmentLabel(employment)}${payment}`, tone: 'success', confirmLabel: 'Aprovar candidato' })) return;
       setBusy(true);
       const result = await guard.run(async () => createClient()?.rpc('nv_select_shift_candidate', {
         target: item.id, candidate, employment, employer: fields.get('employer'), agreement,
@@ -78,7 +81,7 @@ function Decision({ item, organization, onSaved }: { item: Opportunity; organiza
   }
   async function cancel() {
     if (!guard.check()) return;
-    if (!window.confirm(item.kind === 'exchange' ? 'Encerrar a troca e manter o médico atual como responsável?' : 'Encerrar as candidaturas atuais e manter a vaga aberta?')) return;
+    if (!await confirm({ title: item.kind === 'exchange' ? 'Encerrar solicitação de troca?' : 'Encerrar candidaturas?', description: item.kind === 'exchange' ? 'O médico atual continuará responsável pelo plantão.' : 'A vaga continuará aberta.', tone: 'warning', confirmLabel: 'Encerrar solicitação' })) return;
     setBusy(true);
     setError('');
     try {

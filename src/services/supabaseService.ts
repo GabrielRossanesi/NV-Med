@@ -3,6 +3,7 @@ import { withAbortTimeout } from '@/lib/requestTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 import type { DoctorBanking } from '@/lib/doctorBanking';
 import { doctorNameInvalidError, doctorNameNumberError } from '@/lib/doctorName';
+import { doctorStatusError, logDoctorStatusError } from '@/lib/doctorStatus';
 import {
   Organization,
   Doctor,
@@ -463,6 +464,24 @@ export async function updateDoctorContractInSupabase(doctorId: string, changes: 
     contract_signed: changes.contractSigned,
   }).eq('id', doctorId).select('id').single();
   if (error) throw new Error('Não foi possível salvar o contrato do médico.');
+}
+
+export async function setDoctorStatusInSupabase(doctor: Doctor, status: DoctorStatus): Promise<Doctor> {
+  const client = createClient();
+  if (!client) throw new Error(doctorStatusError(null));
+  try {
+    const snapshot = await withAbortTimeout(signal => client.from('doctors').select('id,organization_id,updated_at')
+      .eq('id', doctor.id).eq('organization_id', doctor.organizationId).abortSignal(signal).single());
+    if (snapshot.error) throw snapshot.error;
+    const result = await withAbortTimeout(signal => client.rpc('nv_set_doctor_status', { target: doctor.id, new_status: status, revision: snapshot.data.updated_at }).abortSignal(signal));
+    if (result.error) throw result.error;
+    if (!result.data || result.data.id !== doctor.id || result.data.organization_id !== doctor.organizationId || result.data.status !== status) throw new Error('Invalid status acknowledgement');
+    return mapDoctorFromDb(result.data);
+  } catch (failure) {
+    const error = failure as { code?: string; message?: string; status?: number; name?: string };
+    logDoctorStatusError(error);
+    throw new Error(doctorStatusError(error));
+  }
 }
 
 export async function deleteDoctorFromSupabase(doctorId: string) {

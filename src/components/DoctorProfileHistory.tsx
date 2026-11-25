@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-type Entry = { id: number; actor_name: string; action: string; changed_fields: string[]; details: { previous_email?: string; email?: string }; created_at: string };
+type Entry = { id: number; actor_name: string; action: string; changed_fields: string[]; details: { previous_email?: string; email?: string; previous_status?: string; status?: string }; created_at: string };
+const statusLabels: Record<string, string> = { active: 'Ativo', pending: 'Pendente', inactive: 'Inativo' };
 const labels: Record<string, string> = {
   profile_updated: 'Perfil atualizado', account_linked: 'Conta vinculada ao cadastro', email_changed: 'E-mail de acesso alterado',
   access_blocked: 'Acesso bloqueado', access_unblocked: 'Acesso desbloqueado', credential_prepared: 'Cadastro preparado para credenciamento',
@@ -38,6 +39,7 @@ export default function DoctorProfileHistory({ doctorId, revision }: { doctorId:
       <p className="font-medium">{actionLabel(entry.action)}</p><p className="text-xs text-text-muted">{new Date(entry.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} · {entry.actor_name}</p>
       {entry.changed_fields.length > 0 && <p className="text-xs text-text-secondary">{entry.changed_fields.map(field => fields[field] || field).join(', ')}</p>}
       {entry.details.email && <p className="break-all text-xs text-text-secondary">{entry.details.previous_email} → {entry.details.email}</p>}
+      {entry.details.previous_status && entry.details.status && <p className="text-xs text-text-secondary">{statusLabels[entry.details.previous_status] || entry.details.previous_status} → {statusLabels[entry.details.status] || entry.details.status}</p>}
     </li>)}</ol>
   </section>;
 }

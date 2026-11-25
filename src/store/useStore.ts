@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, Sector, SectorFinanceDefaults, MedicalDocument, Shift, ShiftWrite, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
+import { Organization, Doctor, DoctorStatus, Unit, Sector, SectorFinanceDefaults, MedicalDocument, Shift, ShiftWrite, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission, canPerformAction } from '@/lib/permissions';
@@ -9,11 +9,12 @@ import { notify } from '@/lib/notifications';
 import { defaultAccountPreferences, type AccountPreferences } from '@/lib/account';
 import { createClient } from '@/lib/supabase/client';
 import { coverageSaveMessage } from '@/lib/fractionalCoverage';
+import { doctorStatusActions } from '@/lib/doctorStatus';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
-type SaveFeedback = { success?: string | false | (() => string); inlineError?: boolean; withinDialog?: boolean };
+type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean };
 
 interface NVMedState {
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
@@ -23,6 +24,7 @@ interface NVMedState {
   syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
   addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<boolean>;
+  setDoctorStatus: (id: string, status: DoctorStatus) => Promise<boolean>;
   updateDoctorContract: (id: string, changes: Partial<Pick<Doctor, 'contractModel' | 'contractSigned'>>) => Promise<boolean>;
   deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
@@ -65,13 +67,13 @@ interface NVMedState {
 
 export const useStore = create<NVMedState>()(persist((set, get) => {
   let preferenceWrites = Promise.resolve<boolean>(true);
-  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', inlineError = false, withinDialog }: SaveFeedback = {}) {
+  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', description, inlineError = false, withinDialog }: SaveFeedback = {}) {
     if (get().saving) return false;
     set({ saving: true, error: null });
     const finishSaving = notify.saving();
     try {
       await work();
-      if (success) notify.success(typeof success === 'function' ? success() : success, { withinDialog });
+      if (success) notify.success(typeof success === 'function' ? success() : success, { description, withinDialog });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível salvar. Tente novamente.';
@@ -163,6 +165,14 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       await cloud.updateDoctorContractInSupabase(id, changes);
       set(state => ({ doctors: state.doctors.map(doctor => doctor.id === id ? { ...doctor, ...changes } : doctor) }));
     }),
+    setDoctorStatus: (id, status) => commit(async () => {
+      const doctor = get().doctors.find(d => d.id === id && d.organizationId === orgId());
+      if (!doctor || !canPerformAction(get().currentUser, 'medicos', 'edit')) throw new Error('Você não possui permissão para alterar este cadastro.');
+      const actor = get().currentUser.id;
+      const updated = await cloud.setDoctorStatusInSupabase(doctor, status);
+      if (get().currentUser.id !== actor || get().activeOrganizationId !== doctor.organizationId) return;
+      set({ doctors: get().doctors.map(d => d.id === updated.id && d.organizationId === updated.organizationId ? updated : d) });
+    }, { success: doctorStatusActions[status].success, description: 'Plantões e documentos preservados.' }),
     deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
     addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit, true); set({ units: [...get().units, unit] }); }),
     updateUnit: (unit, feedback) => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }, feedback),

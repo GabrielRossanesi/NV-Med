@@ -1,5 +1,7 @@
 'use client';
 
+import { useConfirmation } from '@/components/ConfirmationProvider';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AccessGuard from '@/components/AccessGuard';
@@ -10,6 +12,7 @@ import { useStore } from '@/store/useStore';
 type Request = { id: string; kind: 'check_in' | 'check_out'; source?: 'manual' | 'gps'; date: string; time: string; at: string; unit: string; doctor: string; reason: string };
 
 function Queue({ organization }: { organization: string }) {
+  const confirm = useConfirmation();
   const [queue, setQueue] = useState<Request[] | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -29,7 +32,7 @@ function Queue({ organization }: { organization: string }) {
     const form = new FormData(event.currentTarget);
     const approve = form.get('decision') === 'approve';
     const { id } = item;
-    if (!window.confirm(approve ? 'Confirmar este registro de presença?' : 'Rejeitar este registro de presença?')) return;
+    if (!await confirm({ title: approve ? 'Confirmar registro de presença?' : 'Rejeitar registro de presença?', description: 'A decisão e a justificativa serão registradas no histórico.', tone: approve ? 'success' : 'danger', confirmLabel: approve ? 'Confirmar presença' : 'Rejeitar registro' })) return;
     setBusy(id);
     setError('');
     setNotice('');

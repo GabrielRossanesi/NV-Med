@@ -37,6 +37,32 @@
 
 ## Notificações de ações
 
+### Padrão permanente de confirmação e toast
+
+- Use `ConfirmationDialog` para confirmações controladas por um componente e `useConfirmation()` de `ConfirmationProvider` para decisões disparadas por ações. Ambos reutilizam `Dialog`; não implemente outro overlay, portal ou serviço de toast em uma página.
+- O modal de confirmação é compacto (`size="sm"`), com bordas arredondadas, ícone contextual sobre fundo circular suave, título destacado e descrição objetiva. Use texto que explique o efeito e os dados preservados quando isso mudar a decisão.
+- Sempre ofereça cancelamento secundário e confirmação com o verbo da ação: “Ativar cadastro”, “Excluir médico”, “Adicionar checklist”. A confirmação usa verde; ações destrutivas usam vermelho. O ícone pode usar sucesso, perigo, atenção ou informação conforme o contexto. Use os tokens semânticos existentes, que atendem aos temas claro e escuro.
+- Passe a gravação assíncrona em `onConfirm` e devolva seu resultado. O modal só fecha após sucesso; `false` mantém o modal disponível para correção ou nova tentativa. Durante a gravação, mantenha spinner, `aria-busy`, proteção contra clique duplicado e bloqueio de fechamento. Cancelar não deve chamar o backend nem gerar um toast.
+- Para confirmações com formulário ou análise extensa já existentes, use `Dialog variant="confirmation" confirmationTone="danger|success|warning|info"`. Preserve os campos, a validação e as regras de negócio. `DeleteConfirmDialog` mantém a confirmação por texto, usando o mesmo componente visual.
+- Os toasts continuam em `Notifications`, enviados exclusivamente por `notify`. Use ícone semântico, título curto, descrição breve quando houver recuperação a orientar e botão acessível de fechamento. O fundo circular do ícone, as cores e os estados usam os mesmos tokens dos modais.
+- Preserve as animações discretas: entrada de 160 ms, saída de 120 ms nas confirmações do provider e transições de 180 ms nos toasts. Respeite `prefers-reduced-motion`. Não acrescente saltos, escalas decorativas ou efeitos de brilho.
+- Mantenha foco visível, devolução do foco ao controle de origem, cancelamento por Escape quando o modal não estiver ocupado e ausência de rolagem horizontal em 1440, 390 e 360 px.
+- Não use `window.confirm`, `window.alert`, `window.prompt` nem suas formas globais para decisões ou feedback da aplicação. A regra ESLint `no-alert` impede sua reintrodução em `src`. A proteção `beforeunload` de alterações não salvas é a exceção: o navegador controla o aviso ao fechar ou recarregar a aba e não permite substituí-lo por um modal assíncrono. A navegação dentro da aplicação e o logout usam o modal próprio.
+- Mensagens de backend nunca entram diretamente em um toast. Mapeie erros técnicos para mensagens públicas conhecidas; registre somente metadados de diagnóstico sem dados médicos ou credenciais. Erros de status cadastral usam `doctorStatusError`.
+
+Exemplo de uso com gravação:
+
+```tsx
+const confirm = useConfirmation();
+await confirm({
+  title: 'Ativar cadastro do médico?',
+  description: 'Os plantões e documentos serão preservados. O acesso ao portal continua independente.',
+  confirmLabel: 'Ativar cadastro',
+  tone: 'success',
+  onConfirm: () => useStore.getState().setDoctorStatus(doctor.id, 'active'),
+});
+```
+
 - Use `notify` de `src/lib/notifications.ts` para confirmar ações relevantes depois que o servidor responder. Escolha sucesso para a conclusão, informação para um próximo estado, atenção para um cuidado necessário e erro para uma falha sem feedback adequado na tela.
 - Use títulos curtos e inclua uma descrição quando ela explicar o resultado ou orientar a recuperação. Mantenha validações e falhas de formulário perto da ação e preserve o que foi digitado. Mantenha confirmações, avisos operacionais e resumos que precisem ficar na tela.
 - Evite Toasts ao navegar, filtrar ou abrir uma área. Evite repetir a mesma mensagem como Toast e como aviso inline. Use `persistent` para erros que exigem leitura ou ação antes de continuar.

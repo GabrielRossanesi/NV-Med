@@ -1169,7 +1169,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
         {formError && <p role="alert" className="nv-feedback text-danger">{formError}</p>}
       </form>
     </Dialog>}
-    {cancelCoverageOpen && openedShift?.coveragePost && <Dialog title="Cancelar posto previsto?" onClose={() => setCancelCoverageOpen(false)} closeDisabled={store.saving}
+    {cancelCoverageOpen && openedShift?.coveragePost && <Dialog variant="confirmation" confirmationTone="danger" title="Cancelar posto previsto?" onClose={() => setCancelCoverageOpen(false)} closeDisabled={store.saving}
       footer={<div className="flex flex-wrap justify-end gap-2">
         <button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setCancelCoverageOpen(false)}>Voltar</button>
         <button type="button" className="nv-button" disabled={store.saving || !canDeleteSchedule} onClick={() => void editGuard.run(async () => {

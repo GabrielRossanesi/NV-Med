@@ -17,9 +17,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import AccessGuard from '@/components/AccessGuard';
+import { useConfirmation } from '@/components/ConfirmationProvider';
 import { canPerformAction } from '@/lib/permissions';
 
 function UnitsPageContent() {
+  const confirm = useConfirmation();
   const {
     activeOrganizationId,
     currentUser,
@@ -127,9 +129,7 @@ function UnitsPageContent() {
 
   const handleDelete = (id: string) => {
     if (!canDelete) return;
-    if (confirm('Deseja excluir esta unidade? Vínculos em plantões e escalas associados serão removidos.')) {
-      deleteUnit(id);
-    }
+    void confirm({ title: 'Excluir unidade?', description: 'Vínculos em plantões e escalas associados serão removidos.', tone: 'danger', confirmLabel: 'Excluir unidade', onConfirm: () => deleteUnit(id) });
   };
 
   const getTypeLabel = (t: UnitType) => {

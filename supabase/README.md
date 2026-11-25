@@ -59,3 +59,7 @@ Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verific
 - Atribuições, candidaturas e substituições exigem credenciamento aprovado e as autorizações de empresa/unidade/especialidade, com política documental e conflitos validados no servidor. Profissionais legados precisam de aprovação estruturada antes de novas atribuições.
 - Mudanças ficam bloqueadas quando existem ocorrências futuras ou em andamento com outra especialidade. Históricos são preservados e as alterações do vínculo são auditadas.
 - Aplique após a migration 30, somente com autorização para o ambiente de destino. Execute `scripts/test-database.ps1` para validar os fluxos no laboratório local. O procedimento de vinculação dos setores legados está em [setores-especialidades](../docs/setores-especialidades.md).
+
+## Correção de status cadastral
+
+`53_doctor_status.sql` acrescenta a RPC exclusiva de status e auditoria anterior/novo. É independente de `53_fractional_coverage.sql`; preserve ambas e a migration 54 de nomes já existente. Não cria contas, convites ou alterações de cadastros em lote.

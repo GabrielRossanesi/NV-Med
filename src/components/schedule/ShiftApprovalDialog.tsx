@@ -39,7 +39,7 @@ export default function ShiftApprovalDialog({ shift, onClose, onSaved }: {
     }
   }
 
-  return <Dialog title="Aprovar pelo administrativo" onClose={onClose} closeDisabled={busy}>
+  return <Dialog variant="confirmation" confirmationTone="success" title="Aprovar pelo administrativo" onClose={onClose} closeDisabled={busy}>
     <form className="space-y-4" onSubmit={approve} aria-busy={busy}>
       <p className="text-sm text-text-secondary">Sua aprovação será registrada em nome do médico alocado.</p>
       <label className="nv-label">Justificativa

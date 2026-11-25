@@ -56,7 +56,7 @@ export default function ScheduleDeleteDialog({ initial, organizationId, shifts, 
     } finally { setSaving(false); }
   }
 
-  return <Dialog title={scopeLabels[selection.scope]} onClose={() => !saving && guard.transition(onClose)}>
+  return <Dialog variant="confirmation" confirmationTone="danger" title={scopeLabels[selection.scope]} onClose={() => !saving && guard.transition(onClose)}>
     <fieldset data-schedule-edit disabled={!guard.unlocked || saving} className="space-y-5">
       {initial.scope !== 'shift' && <label className="nv-label">Ação
         <select className="nv-input" value={selection.scope} onChange={event => { const scope = event.target.value as ScheduleDeletionScope; setSelection({ ...selection, scope, to: scope === 'turn' ? selection.from : selection.to }); setConfirmation(''); setError(''); }}>

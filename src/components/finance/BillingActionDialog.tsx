@@ -89,7 +89,7 @@ export default function BillingActionDialog({ action, catalog, organization, mon
   const issue = Boolean(invoice && !invoice.issued_on && can('billing_manage'));
   const title = { assess: 'Apurar plantão', consolidate: 'Consolidar faturamento', close: 'Fechar competência',
     reopen: 'Reabrir competência', invoice: 'Ficha do faturamento' }[action.kind];
-  return <Dialog title={title} onClose={() => { if (!busy) onClose(); }} closeDisabled={busy} size={invoice ? 'lg' : 'md'}>
+  return <Dialog variant={action.kind === 'close' || action.kind === 'reopen' || action.kind === 'consolidate' ? 'confirmation' : 'default'} confirmationTone={action.kind === 'close' ? 'warning' : 'success'} title={title} onClose={() => { if (!busy) onClose(); }} closeDisabled={busy} size={invoice ? 'lg' : 'md'}>
     <div className="space-y-5">
       {invoice && <>
         <dl className="grid grid-cols-2 gap-3 border-b border-border pb-4 text-sm sm:grid-cols-4">

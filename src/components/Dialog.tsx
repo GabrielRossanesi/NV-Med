@@ -1,13 +1,15 @@
 'use client';
 import { useEffect, useId, useRef } from 'react';
-import { X } from 'lucide-react';
+import { X, CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
 import { registerNotificationDialog } from '@/lib/notifications';
 import Notifications from './Notifications';
 
-const widthClasses = { md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' } as const;
+const widthClasses = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' } as const;
+const contextIcons = { success: CircleCheck, danger: CircleAlert, warning: TriangleAlert, info: Info };
 
-export default function Dialog({ title, children, onClose, size = 'md', footer, headerActions, aside, closeDisabled = false }: { title: string; children: React.ReactNode; onClose: () => void; size?: keyof typeof widthClasses; footer?: React.ReactNode; headerActions?: React.ReactNode; aside?: React.ReactNode; closeDisabled?: boolean }) {
+export default function Dialog({ title, children, onClose, size = 'md', footer, headerActions, aside, closeDisabled = false, closing = false, variant = 'default', icon, confirmationTone = 'info' }: { title: string; children: React.ReactNode; onClose: () => void; size?: keyof typeof widthClasses; footer?: React.ReactNode; headerActions?: React.ReactNode; aside?: React.ReactNode; closeDisabled?: boolean; closing?: boolean; variant?: 'default' | 'confirmation'; icon?: React.ReactNode; confirmationTone?: keyof typeof contextIcons }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const ContextIcon = contextIcons[confirmationTone];
   const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
@@ -38,10 +40,10 @@ export default function Dialog({ title, children, onClose, size = 'md', footer, 
     };
   }, [titleId]);
   return (
-    <dialog ref={ref} onCancel={event => { event.preventDefault(); if (!closeDisabled) onClose(); }} aria-labelledby={titleId} className={`nv-dialog m-auto max-h-[calc(var(--nv-dialog-viewport,100dvh)_-_1rem)] w-[calc(100%_-_1rem)] ${aside ? 'max-w-xl lg:max-w-5xl' : widthClasses[size]} overflow-hidden rounded-2xl border border-border p-0 sm:w-[calc(100%_-_2rem)]`}>
+    <dialog ref={ref} data-closing={closing || undefined} data-confirm-tone={variant === 'confirmation' ? confirmationTone : undefined} onCancel={event => { event.preventDefault(); if (!closeDisabled) onClose(); }} aria-labelledby={titleId} className={`nv-dialog ${variant === 'confirmation' ? 'nv-confirmation' : ''} m-auto max-h-[calc(var(--nv-dialog-viewport,100dvh)_-_1rem)] w-[calc(100%_-_1rem)] ${aside ? 'max-w-xl lg:max-w-5xl' : widthClasses[size]} overflow-hidden rounded-2xl border border-border p-0 sm:w-[calc(100%_-_2rem)]`}>
       <div className="flex max-h-[min(90dvh,calc(var(--nv-dialog-viewport,100dvh)_-_1rem))] flex-col">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-modal-bg py-2 pl-4 pr-2 sm:pl-6 sm:pr-3">
-          <h2 id={titleId} className="nv-section-title">{title}</h2>
+          <div className="flex min-w-0 items-center gap-3">{icon ?? (variant === 'confirmation' ? <span className={`nv-confirm-icon nv-confirm-${confirmationTone}`}><ContextIcon size={22} aria-hidden="true"/></span> : null)}<h2 id={titleId} className="nv-section-title">{title}</h2></div>
           <div className="flex shrink-0 items-center gap-1">
             {headerActions}
             <button type="button" aria-label="Fechar" onClick={onClose} disabled={closeDisabled} className="grid size-11 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-state-hover hover:text-text-primary disabled:opacity-50">

@@ -33,6 +33,8 @@ import DoctorProfileEditor from '@/components/DoctorProfileEditor';
 import DoctorPortalAccess from '@/components/DoctorPortalAccess';
 import DoctorProfileHistory from '@/components/DoctorProfileHistory';
 import DoctorMasterSchedule from '@/components/schedule/DoctorMasterSchedule';
+import { useConfirmation } from '@/components/ConfirmationProvider';
+import { doctorStatusActions } from '@/lib/doctorStatus';
 
 const registrationStatusLabels: Record<DoctorStatus, string> = {
   active: 'Ativo',
@@ -64,7 +66,8 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const [selectedFileNames, setSelectedFileNames] = useState<Record<string, File>>({});
   const [editing, setEditing] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [statusSaving, setStatusSaving] = useState(false);
+  const statusSaving = useStore(state => state.saving);
+  const confirm = useConfirmation();
   const profileKey = `${currentUser.id}/${activeOrganizationId}/${doctorId}`;
   const [personal, setPersonal] = useState<{ key: string; data: { cpf?: string; email?: string; phone?: string; address?: string } } | null>(null);
   const personalData = personal?.key === profileKey ? personal.data : null;
@@ -138,23 +141,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   // Handle status update of the doctor
   const handleDoctorStatusChange = async (newStatus: DoctorStatus) => {
     if (!canEdit || statusSaving || newStatus === doctor.status) return;
-    if (!window.confirm(`Confirmar alteração do cadastro para ${newStatus === 'active' ? 'ativo' : newStatus === 'pending' ? 'pendente' : 'inativo'}? Os plantões e documentos serão preservados.`)) return;
-    setStatusSaving(true);
-    try {
-      const client = createClient();
-      const snapshot = await client?.rpc('nv_doctor_profile', { target: doctorId });
-      if (!snapshot?.data?.profile) throw new Error('Não foi possível consultar o cadastro atual.');
-      const result = await client?.rpc('nv_update_doctor_profile', { target: doctorId, profile: { status: newStatus }, revision: snapshot.data.profile.updated_at });
-      if (!result || result.error) throw new Error(result?.error?.message || 'Não foi possível alterar o status.');
-      notify.success('Status do cadastro atualizado.');
-      await refreshProfile();
-    } catch (failure) {
-      notify.error('Não foi possível atualizar o status.', {
-        description: failure instanceof Error ? failure.message : undefined,
-        persistent: true,
-      });
-    }
-    finally { setStatusSaving(false); }
+    const action = doctorStatusActions[newStatus];
+    await confirm({ ...action, description: <><p>{action.description} Seus plantões, documentos e histórico serão preservados.</p><p className="mt-2">Esta ação não libera automaticamente o acesso ao Portal Médico.</p></>, onConfirm: async () => {
+      const saved = await useStore.getState().setDoctorStatus(doctorId, newStatus);
+      if (saved) setRevision(v => v + 1);
+      return saved;
+    } });
   };
 
   // Handle mock file selection
@@ -204,7 +196,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       inactive: 'bg-surface-muted text-text-secondary border-border'
     };
     const inactiveColors = 'bg-background text-text-muted border-border hover:bg-slate-100 dark:hover:bg-slate-900';
-    return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
+    return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
   };
 
   const operationalUnitIds = getDoctorOperationalUnitIds(docShifts, doctor.id);
