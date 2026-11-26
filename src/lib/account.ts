@@ -1,5 +1,6 @@
 import { canPerformAction, canViewPermission } from '@/lib/permissions';
 import type { UserAccount } from '@/types';
+import { defaultDoctorListing, type DoctorListingPreferences } from './doctorDirectory';
 
 export const accountHomePages = [
   { value: '/dashboard', label: 'Visão geral', permission: 'dashboard' },
@@ -16,6 +17,7 @@ export type AccountPreferences = {
   homePage: '' | (typeof accountHomePages)[number]['value'];
   documentAlerts: boolean;
   applicationAlerts: boolean;
+  doctorListing: DoctorListingPreferences;
 };
 
 export const defaultAccountPreferences: AccountPreferences = {
@@ -26,6 +28,7 @@ export const defaultAccountPreferences: AccountPreferences = {
   homePage: '',
   documentAlerts: true,
   applicationAlerts: true,
+  doctorListing: defaultDoctorListing,
 };
 
 export function accountHomeOptions(user: Pick<UserAccount, 'type' | 'role' | 'additionalPermissions'>) {

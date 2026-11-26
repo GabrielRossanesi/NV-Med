@@ -14,8 +14,8 @@ type Snapshot = {
   can_preserve_name_capitalization?: boolean;
   enrollment_status: string; requested_specialties: string[];
 };
-export default function DoctorProfileEditor({ doctorId, specialties = [], own = false, onClose, onSaved }: {
-  doctorId: string; specialties?: string[]; own?: boolean; onClose: () => void; onSaved: () => void;
+export default function DoctorProfileEditor({ doctorId, specialties = [], own = false, focusContract = false, onClose, onSaved }: {
+  doctorId: string; specialties?: string[]; own?: boolean; focusContract?: boolean; onClose: () => void; onSaved: () => void;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState('');
@@ -32,6 +32,11 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
     })();
     return () => { live = false; };
   }, [doctorId]);
+  useEffect(() => {
+    if (!snapshot || own || !focusContract) return;
+    const field = document.getElementById(formId)?.querySelector<HTMLElement>('[name="contractModel"]');
+    field?.focus(); field?.scrollIntoView({ block: 'nearest' });
+  }, [snapshot, own, focusContract, formId]);
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!snapshot?.can_edit || busy) return;

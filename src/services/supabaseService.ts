@@ -368,7 +368,7 @@ export function mapUserFromDb(row: DbUserAccount): UserAccount {
 // OPERAÇÕES DE LEITURA (BOOTSTRAP & REFRESH)
 // ==============================================================================
 
-export async function fetchInitialDataFromSupabase() {
+export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' = 'full') {
   const supabase = createClient();
   if (!supabase || !isSupabaseConfigured()) throw new Error('Conexão não configurada. Contate o administrador.');
   const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -397,10 +397,11 @@ export async function fetchInitialDataFromSupabase() {
   }
   const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
     rows<DbOrganization>('organizations'),
-    rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units'),
-    rows<DbUnit>('units'), rows<DbSector>('sectors'), rows<DbMedicalDocument>('medical_documents'), rows<DbShift>('nv_staff_shifts'),
-    rows<DbUserAccount>('user_accounts'),
-    fetchDocumentAuditLogsFromSupabase().catch(() => []),
+    scope === 'directory' ? [] : rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units'),
+    scope === 'directory' ? [] : rows<DbUnit>('units'), scope === 'directory' ? [] : rows<DbSector>('sectors'),
+    scope === 'directory' ? [] : rows<DbMedicalDocument>('medical_documents'), scope === 'directory' ? [] : rows<DbShift>('nv_staff_shifts'),
+    scope === 'directory' ? [] : rows<DbUserAccount>('user_accounts'),
+    scope === 'directory' ? [] : fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
     units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb), documentAudits };

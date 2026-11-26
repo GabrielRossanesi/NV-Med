@@ -6,11 +6,12 @@ import { createClient } from '@/lib/supabase/client';
 type Entry = { id: number; actor_name: string; action: string; changed_fields: string[]; details: { previous_email?: string; email?: string; previous_status?: string; status?: string }; created_at: string };
 const statusLabels: Record<string, string> = { active: 'Ativo', pending: 'Pendente', inactive: 'Inativo' };
 const labels: Record<string, string> = {
+  rqes_updated: 'RQEs atualizados', documents_requested: 'Documentos solicitados',
   profile_updated: 'Perfil atualizado', account_linked: 'Conta vinculada ao cadastro', email_changed: 'E-mail de acesso alterado',
   access_blocked: 'Acesso bloqueado', access_unblocked: 'Acesso desbloqueado', credential_prepared: 'Cadastro preparado para credenciamento',
   credential_approved: 'Credenciamento aprovado', credential_rejected: 'Credenciamento rejeitado', credential_correction_requested: 'Correções cadastrais solicitadas',
 };
-const fields: Record<string, string> = { name: 'Nome', phone: 'Telefone', email: 'E-mail', address: 'Endereço', crm: 'CRM', crm_uf: 'UF', cpf: 'CPF', rqe: 'RQE', specialty: 'Especialidade principal', status: 'Status', contract_model: 'Contratação', contract_signed: 'Contrato assinado', approved_specialties: 'Especialidades autorizadas', requested_specialties: 'Especialidades para análise', linked_units: 'Unidades autorizadas', birth_date: 'Nascimento' };
+const fields: Record<string, string> = { rqes: 'RQEs', name: 'Nome', phone: 'Telefone', email: 'E-mail', address: 'Endereço', crm: 'CRM', crm_uf: 'UF', cpf: 'CPF', rqe: 'RQE', specialty: 'Especialidade principal', status: 'Status', contract_model: 'Contratação', contract_signed: 'Contrato assinado', approved_specialties: 'Especialidades autorizadas', requested_specialties: 'Especialidades para análise', linked_units: 'Unidades autorizadas', birth_date: 'Nascimento' };
 function actionLabel(action: string) {
   if (labels[action]) return labels[action];
   const [verb, result] = action.split('_');

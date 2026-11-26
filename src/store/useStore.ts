@@ -18,6 +18,7 @@ type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
 type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean; progress?: boolean };
 
 interface NVMedState {
+  doctorDirectorySummary: { organizationId: string; documentIssues: number } | null;
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
   currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
   saving: boolean; error: string | null;
@@ -98,7 +99,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   }
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
-    saving: false, error: null, theme: 'light', sidebarCollapsed: true,
+    saving: false, error: null, theme: 'light', sidebarCollapsed: true, doctorDirectorySummary: null,
     accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false,
     async loadAccountPreferences() {
       const owner = get().currentUser.id;
@@ -109,7 +110,8 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         if (!result || result.error) throw new Error();
         if (get().currentUser.id !== owner) return;
         const accountPreferences: AccountPreferences = result.data
-          ?? { ...defaultAccountPreferences, theme: get().theme, sidebarCollapsed: get().sidebarCollapsed };
+          ? { ...defaultAccountPreferences, ...result.data }
+          : { ...defaultAccountPreferences, theme: get().theme, sidebarCollapsed: get().sidebarCollapsed };
         set({ accountPreferences, theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed,
           accountPreferencesStatus: 'ready', hasSavedAccountPreferences: Boolean(result.data) });
       } catch {
@@ -128,7 +130,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
           const result = await createClient()?.rpc('nv_save_account_preferences', { changes: { ...initialAppearance, ...changes } });
           if (!result || result.error || !result.data) throw new Error();
           if (get().currentUser.id !== owner) return false;
-          const accountPreferences: AccountPreferences = result.data;
+          const accountPreferences: AccountPreferences = { ...defaultAccountPreferences, ...result.data };
           set({ accountPreferences, hasSavedAccountPreferences: true,
             theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed });
           if (!quiet) notify.success('Preferências salvas.');
@@ -150,7 +152,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ sidebarCollapsed }, true);
     },
     clearFeedback: () => set({ error: null }),
-    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
+    clearSession: () => set({ ...emptyData, doctorDirectorySummary: null, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
       theme: defaultAccountPreferences.theme, sidebarCollapsed: defaultAccountPreferences.sidebarCollapsed,
       accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),

@@ -6,6 +6,8 @@ import { canViewPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
 import type { UserAccount } from '@/types';
 import { AccountLoading, AccountSection } from './AccountSection';
+import DoctorListingPreferenceFields from '@/components/doctors/DoctorListingPreferenceFields';
+import { defaultDoctorListing } from '@/lib/doctorDirectory';
 
 export default function AccountPreferencesPanel({ user }: { user: UserAccount }) {
   const preferences = useStore(state => state.accountPreferences);
@@ -76,6 +78,11 @@ export default function AccountPreferencesPanel({ user }: { user: UserAccount })
           </select>
         </label>}
       </div>
+    </AccountSection>}
+
+    {canViewPermission(user, 'medicos') && <AccountSection id="listagem-medicos" title="Listagem de médicos">
+      <DoctorListingPreferenceFields value={current.doctorListing || defaultDoctorListing} onChange={value => update('doctorListing', value)} disabled={saving} documents={canSeeDocuments} schedule={canSeeSchedule}/>
+      <button type="button" className="nv-button-secondary mt-3" disabled={saving} onClick={() => update('doctorListing', { ...defaultDoctorListing })}>Restaurar padrão da listagem</button>
     </AccountSection>}
 
     <AccountSection id="avisos" title="Notificações">

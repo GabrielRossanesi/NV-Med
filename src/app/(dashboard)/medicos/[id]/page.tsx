@@ -35,6 +35,9 @@ import DoctorProfileHistory from '@/components/DoctorProfileHistory';
 import DoctorMasterSchedule from '@/components/schedule/DoctorMasterSchedule';
 import { useConfirmation } from '@/components/ConfirmationProvider';
 import { doctorStatusActions } from '@/lib/doctorStatus';
+import { useSearchParams } from 'next/navigation';
+import DoctorRqePanel from '@/components/DoctorRqePanel';
+import { useLocationHash } from '@/components/useLocationHash';
 
 const registrationStatusLabels: Record<DoctorStatus, string> = {
   active: 'Ativo',
@@ -45,6 +48,9 @@ const registrationStatusLabels: Record<DoctorStatus, string> = {
 export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const doctorId = resolvedParams.id;
+  const searchParams = useSearchParams();
+  const requestedReturn = searchParams.get('returnTo') || '';
+  const returnTo = requestedReturn === '/medicos' || requestedReturn.startsWith('/medicos?') ? requestedReturn : '/medicos';
 
   const {
     activeOrganizationId,
@@ -59,11 +65,18 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   } = useStore();
 
   const doctor = doctors.find((d) => d.id === doctorId && d.organizationId === activeOrganizationId);
+  const loadedDoctorId = doctor?.id;
+  const locationHash = useLocationHash();
+  useEffect(() => {
+    if (!loadedDoctorId || !['#doctor-shifts', '#doctor-contract', '#doctor-access', '#doctor-history', '#doctor-rqes'].includes(locationHash)) return;
+    const frame = requestAnimationFrame(() => document.getElementById(locationHash.slice(1))?.scrollIntoView({ block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [loadedDoctorId, locationHash]);
   const orgUnits = units.filter((u) => u.organizationId === activeOrganizationId);
   const docShifts = shifts.filter((s) => s.doctorId === doctorId && s.organizationId === activeOrganizationId);
   const docDocs = documents.filter((d) => d.doctorId === doctorId && d.organizationId === activeOrganizationId);
 
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(['1', 'contract'].includes(searchParams.get('edit') || ''));
   const [revision, setRevision] = useState(0);
   const statusSaving = useStore(state => state.saving);
   const confirm = useConfirmation();
@@ -128,7 +141,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
           <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-4" />
           <h3 className="text-lg font-bold text-text-secondary">Médico não encontrado</h3>
           <p className="text-sm text-text-muted mt-1">O registro procurado não pertence a esta empresa ou foi apagado.</p>
-          <Link href="/medicos" className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
+          <Link href={returnTo} className="mt-4 inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold">
             <ArrowLeft className="h-4 w-4" />
             Voltar para listagem
           </Link>
@@ -192,7 +205,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       <div className="space-y-6 animate-in fade-in duration-300">
       {/* Back navigation */}
       <div>
-        <Link href="/medicos" className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
+        <Link href={returnTo} className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs font-semibold mb-2 cursor-pointer">
           <ArrowLeft className="h-4 w-4" />
           Voltar para listagem
         </Link>
@@ -213,7 +226,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
               {!portalRole && roleError && <span role="alert" className="text-danger">{roleError}</span>}
             </div>}
           </div>
-          
+
           {/* Quick status admin toggler */}
           <div className="flex flex-col items-stretch gap-3 sm:items-end">
           {canEdit && <button className="nv-button" onClick={() => setEditing(true)}><Pencil size={16}/>Editar perfil</button>}
@@ -238,7 +251,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
       {/* Main layout grids */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Left Columns (Profile + Units + Shifts) */}
         <div className="lg:col-span-1 space-y-6">
           {/* Profile details */}
@@ -259,7 +272,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
               <div className="flex items-start gap-2.5">
                 <FileCheck className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
-                  <span className="block text-[10px] text-text-muted uppercase font-bold">Contratação</span>
+                  <span id="doctor-contract" className="block scroll-mt-24 text-[10px] text-text-muted uppercase font-bold">Contratação</span>
                   <span>{doctorContractModelLabels[doctor.contractModel || 'pf']}</span>
                   <span className={`mt-0.5 block font-semibold ${doctor.contractSigned ? 'text-success' : 'text-warning'}`}>{doctor.contractSigned ? 'Contrato assinado' : 'Contrato pendente'}</span>
                 </div>
@@ -313,7 +326,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
           </div>
 
           {/* Doctor plantões */}
-          <div className="bg-card-bg rounded-xl border border-card-border p-5">
+          <div id="doctor-shifts" className="scroll-mt-24 bg-card-bg rounded-xl border border-card-border p-5">
             <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <Calendar className="h-4 w-4 text-primary" />
               Plantões Recentes
@@ -375,7 +388,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                         <FileText className="h-4 w-4 text-text-muted flex-shrink-0" />
                         <h4 className="font-semibold text-xs text-text-primary leading-snug">{doc.name}</h4>
                       </div>
-                      
+
                       {doc.filePath && <button className="text-primary text-xs underline" onClick={async () => { try { const url = await openDocument(doc.id); window.open(url, '_blank', 'noopener,noreferrer'); } catch (e) { notify.error('Não foi possível abrir o documento.', { description: e instanceof Error ? e.message : undefined }); } }}>Abrir documento</button>}
                       {doc.fileName && (
                         <div className="text-[10px] text-text-muted flex flex-col sm:flex-row sm:gap-4 gap-1 pl-6">
@@ -430,10 +443,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
       </div>
+      <DoctorRqePanel key={doctor.id + '-rqes'} doctorId={doctor.id} specialties={organizations.find(org => org.id === activeOrganizationId)?.settings.specialties || []} onChanged={() => void refreshProfile()}/>
       {canViewPermission(currentUser, 'escala') && <DoctorMasterSchedule key={`${activeOrganizationId}:${doctor.id}`} organization={activeOrganizationId} doctor={doctor} canManage={canPerformAction(currentUser, 'escala', 'edit') && canPerformAction(currentUser, 'escala', 'approve')} onChanged={async () => { useStore.getState().syncWithCloud(await fetchInitialDataFromSupabase()); }}/>}
-      <DoctorPortalAccess key={doctor.id + '-access'} doctorId={doctor.id} organizationId={doctor.organizationId} revision={revision} onChanged={() => void refreshProfile()}/>
-      <DoctorProfileHistory key={doctor.id + '-history'} doctorId={doctor.id} revision={revision}/>
+      <div id="doctor-access" className="scroll-mt-24"><DoctorPortalAccess key={doctor.id + '-access'} doctorId={doctor.id} organizationId={doctor.organizationId} revision={revision} onChanged={() => void refreshProfile()}/></div>
+      <div id="doctor-history" className="scroll-mt-24"><DoctorProfileHistory key={doctor.id + '-history'} doctorId={doctor.id} revision={revision}/></div>
       {editing && <DoctorProfileEditor doctorId={doctor.id} specialties={organizations.find(o => o.id === doctor.organizationId)?.settings.specialties || []}
+        focusContract={searchParams.get('edit') === 'contract'}
         onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void refreshProfile(); }}/>}
     </div>
     </AccessGuard>

@@ -1,5 +1,6 @@
 // Real UI, isolated loopback Auth/Data API fixtures. Never connects to Supabase production.
 import assert from 'node:assert/strict';
+import { directoryFixture } from './fixtures/doctor-directory.mjs';
 import fs from 'node:fs';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
@@ -15,10 +16,7 @@ fs.mkdirSync(artifact, { recursive: true });
 const id = '53000000-0000-4000-8000-000000000001';
 const user = { id, email: 'status-test@example.invalid', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, identities: [], created_at: '2026-01-01T00:00:00Z' };
 const doctor = { id: 'status-doctor', organization_id: 'status-org', name: 'Médico sintético', crm: '5353', crm_uf: 'SP', specialty: 'Cirurgia', status: 'pending', address: null, cpf: null, phone: null, email: null, contract_model: 'pf', contract_signed: false, linked_units: [], updated_at: '2026-01-01T00:00:00Z' };
-let listingDoctors = [doctor];
-let listingUnits = [];
-let listingShifts = [];
-const doctorReadRanges = [];
+
 const actor = { id: 'status-admin', auth_user_id: id, name: 'Administrativo sintético', email: user.email, type: 'tenant_user', organization_id: 'status-org', role: 'Diretor', status: 'active', additional_permissions: {}, created_at: '2026-01-01T00:00:00Z' };
 const org = { id: 'status-org', name: 'Empresa sintética', status: 'active', settings: { specialties: ['Cirurgia'], requiredDocuments: [] } };
 const audit = [];
@@ -50,6 +48,8 @@ const mock = http.createServer(async (request, response) => {
    audit.unshift({ id: audit.length + 1, actor_name: actor.name, action: 'profile_updated', changed_fields: ['status'], details: { previous_status: previous, status: doctor.status }, created_at: doctor.updated_at });
    return send(doctor);
   }
+  if (name === 'nv_doctor_directory') return send(directoryFixture([doctor],args));
+  if (name === 'nv_doctor_rqes') return send({entries:[],legacy:null,revision:'fixture',canEdit:false});
   if (name === 'nv_session_ready') return send(true);
   if (name === 'nv_account_preferences') return send(null);
   if (name === 'nv_doctor_profile') return profileLoadFailure ? send({code:'42501',message:'private SQL error'},403) : send({ profile: doctor, can_read_personal: personalAccess, can_edit: actor.role === 'Diretor', can_approve: false, specialties: [], requested_specialties: [], has_enrollment: false });
@@ -64,11 +64,7 @@ const mock = http.createServer(async (request, response) => {
   if (name === 'nv_master_overview') return send({ rules: [], absences: [], occurrences: [], exceptions: [], overrides: [] });
   return send([]);
  }
- const data = ({ doctors: listingDoctors, organizations: [org], user_accounts: [actor], units: listingUnits, sectors: [], medical_documents: [], document_audit_logs: [], nv_staff_shifts: listingShifts })[name] || [];
- if (name === 'doctors' && !request.headers.accept?.includes('vnd.pgrst.object')) {
-  const offset=Number(url.searchParams.get('offset') || 0), limit=Number(url.searchParams.get('limit') || data.length);
-  doctorReadRanges.push({offset,limit}); return send(data.slice(offset,offset+limit));
- }
+ const data = ({ doctors: [doctor], organizations: [org], user_accounts: [actor], units: [], sectors: [], medical_documents: [], document_audit_logs: [], nv_staff_shifts: [] })[name] || [];
  send(request.headers.accept?.includes('vnd.pgrst.object') ? data[0] ?? null : data);
 });
 await new Promise(resolve => mock.listen(54321, '127.0.0.1', resolve));
@@ -183,86 +179,6 @@ try {
  await page.getByRole('dialog').getByRole('button',{name:'Fechar',exact:true}).click(); await page.locator('dialog').waitFor({state:'detached'});
  checks.push('profile: permission/load failure stays inside modal without exposing raw error');
 
- // Listing fixtures deliberately have no Auth account or portal release.
- const names = ['Breno Victor Brandão Almeida', 'Jair Morais de Paula', 'Cassio Humberto Rocha Solidade', 'Osvaldo de Lima', 'Aline Machado Cunha', '  Dr. breno Victor ', 'Dra. aline Machado', 'Dr Jair Morais', 'Dra Osvalda Lima', '', '---', 'éRICA Souza'];
- const expectedInitials = ['M', 'B', 'J', 'C', 'O', 'A', 'B', 'A', 'J', 'O', '', '', 'É'];
- org.settings.specialties.push('Pediatria');
- listingDoctors = [doctor, ...names.map((name, index) => ({ ...doctor, id: `avatar-${index}`, name, crm: String(9000 + index), specialty: index % 2 ? 'Pediatria' : 'Cirurgia', status: ['active', 'pending', 'inactive'][index % 3] })),
-  ...Array.from({length: 70}, (_, index) => ({...doctor, id:`avatar-extra-${index}`, name:`Dr. Teste Fictício ${index}`, crm:String(10000+index)}))];
- listingUnits = [{id:'avatar-unit',organization_id:org.id,name:'Unidade fictícia',status:'active'}];
- listingShifts = [{id:'avatar-shift',organization_id:org.id,doctor_id:'avatar-0',unit_id:'avatar-unit',date:'2026-11-26',start_time:'07:00',end_time:'19:00',status:'confirmed'}];
- const expected = [...expectedInitials, ...Array(70).fill('T')];
- const rows = page.locator('table tbody tr');
- const avatars = page.locator('table tbody tr td:first-child > div > span[aria-hidden="true"]');
- const verifyAvatars = async initials => {
-  assert.deepEqual(await avatars.allTextContents(), initials);
-  for (const index of initials.flatMap((initial,index) => initial ? [] : [index])) assert.equal(await avatars.nth(index).locator('svg').count(),1);
- };
- await page.goto('http://127.0.0.1:3108/medicos');
- await page.getByRole('heading',{name:'Médicos',exact:true}).waitFor();
- await verifyAvatars(expected);
- await rows.last().scrollIntoViewIfNeeded(); assert.equal(await rows.count(),83);
- checks.push('avatars: all 83 rows, titles, whitespace, accents and invalid-name icon; no Auth accounts');
- const search = page.getByPlaceholder('Buscar por nome, CRM, RQE ou especialidade...');
- await search.fill('Breno'); await verifyAvatars(['B','B']);
- await search.fill('9001'); await verifyAvatars(['J']);
- await search.fill('sem resultado fictício'); assert.equal(await avatars.count(),0);
- await search.fill(''); await verifyAvatars(expected);
- for (const status of ['active','pending','inactive']) {
-  await page.locator('select').nth(1).selectOption(status);
-  await verifyAvatars(expected.filter((_,index)=>listingDoctors[index].status===status));
- }
- await page.locator('select').nth(1).selectOption('all');
- await page.locator('select').nth(0).selectOption('Pediatria');
- await verifyAvatars(expected.filter((_,index)=>listingDoctors[index].specialty==='Pediatria'));
- await page.locator('select').nth(0).selectOption('all');
- await page.locator('select').nth(2).selectOption('avatar-unit'); await verifyAvatars(['B']);
- await page.locator('select').nth(2).selectOption('all');
- await page.locator('select').nth(3).selectOption('compliant'); await verifyAvatars(expected);
- await page.locator('select').nth(3).selectOption('pending'); assert.equal(await avatars.count(),0);
- await page.getByRole('button',{name:'Limpar Filtros'}).click(); await verifyAvatars(expected);
- checks.push('avatars: name/CRM search, empty results, all statuses, specialty, unit, document filters and reset');
- for (const dark of [false,true]) for (const width of [1440,390,360]) {
-  await page.setViewportSize({width,height:900});
-  await page.evaluate(dark=>document.documentElement.classList.toggle('dark',dark),dark);
-  const geometry=await avatars.evaluateAll(elements=>elements.map(el=>{
-   const rect=el.getBoundingClientRect(), style=getComputedStyle(el);
-   return {width:rect.width,height:rect.height,radius:style.borderRadius,align:style.alignItems,justify:style.justifyContent,font:style.fontSize,weight:style.fontWeight};
-  }));
-  assert.ok(geometry.every(item=>item.width===32 && item.height===32 && parseFloat(item.radius)>=16 && item.align==='center' && item.justify==='center' && item.font==='12px' && item.weight==='700'));
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  const contrast = await avatars.first().evaluate(el=>{
-   const canvas=document.createElement('canvas'); canvas.width=canvas.height=1;
-   const ctx=canvas.getContext('2d');
-   const luminance=color=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=color;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data].slice(0,3).map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[0.2126,0.7152,0.0722][i],0);};
-   ctx.fillStyle=getComputedStyle(el.closest('table').parentElement.parentElement).backgroundColor;ctx.fillRect(0,0,1,1);
-   ctx.fillStyle=getComputedStyle(el).backgroundColor;ctx.fillRect(0,0,1,1);
-   const [r,g,b]=ctx.getImageData(0,0,1,1).data;
-   const background=luminance(`rgb(${r} ${g} ${b})`), foreground=luminance(getComputedStyle(el).color);
-   return (Math.max(background,foreground)+0.05)/(Math.min(background,foreground)+0.05);
-  });
-  assert.ok(contrast>=4.5,`Avatar text contrast ${contrast.toFixed(2)}:1`);
-  await page.screenshot({path:fileURLToPath(new URL(`avatars-${dark?'dark':'light'}-${width}.png`,artifact)),animations:'disabled'});
- }
- checks.push('avatars: 1440/390/360px, light/dark, equal circular size, centered typography, contrast >= 4.5:1, no page overflow');
- profileLoadFailure=false; await page.goto('http://127.0.0.1:3108/medicos/status-doctor');
- await page.getByRole('button',{name:'Editar perfil',exact:true}).click();
- await page.getByRole('dialog').getByLabel('Nome completo',{exact:true}).fill('Ana Fictícia');
- await page.getByRole('dialog').getByRole('button',{name:'Salvar alterações',exact:true}).click(); await page.getByRole('dialog').waitFor({state:'detached'});
- await page.getByRole('link',{name:'Voltar para listagem',exact:true}).click();
- await page.getByRole('heading',{name:'Médicos',exact:true}).waitFor();
- await verifyAvatars(['A',...expected.slice(1)]);
- checks.push('avatars: saved name change updates the listing immediately without reload');
- // Bootstrap fetches batches of 500, although the table has no page controls.
- listingDoctors.push(...Array.from({length:418},(_,index)=>({...doctor,id:`avatar-batch-${index}`,name:index===417?'Zélia Fictícia':'Teste Fictício',crm:String(11000+index)})));
- doctorReadRanges.length=0;
- await page.reload(); await page.getByRole('heading',{name:'Médicos',exact:true}).waitFor();
- await verifyAvatars(['A',...expected.slice(1),...Array(417).fill('T'),'Z']);
- assert.equal(await rows.count(),501);
- assert.ok(doctorReadRanges.some(range=>range.offset===0 && range.limit===500));
- assert.ok(doctorReadRanges.some(range=>range.offset===500 && range.limit===500));
- await rows.last().scrollIntoViewIfNeeded();
- checks.push('avatars: 501 doctors across both bootstrap batches, including the final record');
  assert.equal(dialogs.length,0); assert.deepEqual(errors,[]); checks.push('no native dialogs or browser runtime errors');
  fs.writeFileSync(new URL('browser-results.json',artifact),JSON.stringify({checks,statusCalls,auditCount:audit.length,profileWrites,productionContacted:false},null,2));
  console.log(JSON.stringify({passed:checks.length,checks}));

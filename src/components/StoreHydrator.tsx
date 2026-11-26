@@ -5,9 +5,12 @@ import { useStore } from '@/store/useStore';
 import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
 import { createClient } from '@/lib/supabase/client';
 import { useResolvedTheme } from '@/components/account/useResolvedTheme';
+import { usePathname } from 'next/navigation';
 
 export default function StoreHydrator({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
+  const pathname = usePathname();
+  const scope = pathname === '/medicos' ? 'directory' : 'full';
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [error, setError] = useState('');
   const theme = useResolvedTheme();
   useEffect(() => {
@@ -17,11 +20,11 @@ export default function StoreHydrator({ children }: { children: React.ReactNode 
       try {
         await useStore.persist.rehydrate();
         localStorage.removeItem('nv-med-storage');
-        const data = await fetchInitialDataFromSupabase();
+        const data = await fetchInitialDataFromSupabase(scope);
         if (active) {
           useStore.getState().syncWithCloud(data);
           await useStore.getState().loadAccountPreferences();
-          if (active) setReady(true);
+          if (active) setLoadedScope(scope);
         }
       } catch (e) { if (active) { useStore.getState().clearSession(); setError(e instanceof Error ? e.message : 'Falha ao carregar dados.'); } }
     }
@@ -30,12 +33,12 @@ export default function StoreHydrator({ children }: { children: React.ReactNode 
       if (event === 'SIGNED_OUT') { useStore.getState().clearSession(); window.location.replace('/login'); }
     });
     return () => { active = false; subscription?.data.subscription.unsubscribe(); };
-  }, []);
+  }, [scope]);
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     return () => document.documentElement.classList.remove('dark');
   }, [theme]);
   if (error) return <main className="min-h-screen flex items-center justify-center p-6"><div className="nv-panel max-w-md space-y-4 p-6"><h1 className="text-xl font-semibold">Não foi possível abrir o painel</h1><p role="alert" className="text-text-secondary">{error}</p><div className="flex flex-wrap gap-2"><button className="nv-button" onClick={() => window.location.reload()}>Tentar novamente</button><button className="nv-button-secondary" onClick={async () => { await createClient()?.auth.signOut(); window.location.replace('/login'); }}>Voltar ao login</button></div></div></main>;
-  if (!ready) return <div role="status" className="flex min-h-svh items-center justify-center gap-3 text-sm text-text-secondary"><LoaderCircle size={18} className="text-primary motion-safe:animate-spin" aria-hidden="true"/>Carregando seus dados…</div>;
+  if (loadedScope !== scope) return <div role="status" className="flex min-h-svh items-center justify-center gap-3 text-sm text-text-secondary"><LoaderCircle size={18} className="text-primary motion-safe:animate-spin" aria-hidden="true"/>Carregando seus dados…</div>;
   return <>{children}</>;
 }

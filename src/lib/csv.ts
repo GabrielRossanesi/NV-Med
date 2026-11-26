@@ -12,12 +12,16 @@ export function toCsv(headers: string[], rows: CsvValue[][]) {
 
 export function downloadCsv(filename: string, headers: string[], rows: CsvValue[][]) {
   const blob = new Blob([toCsv(headers, rows)], { type: 'text/csv;charset=utf-8' });
+  downloadBlob(filename.endsWith('.csv') ? filename : `${filename}.csv`, blob);
+}
+
+export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
+  anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
