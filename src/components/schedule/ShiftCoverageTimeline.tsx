@@ -41,7 +41,7 @@ function SegmentEditor({ selection, limits, timeZone, doctors, warning, restrict
   const [start, setStart] = useState(segmentStart);
   const [end, setEnd] = useState(segmentEnd);
   const [division, setDivision] = useState(coverageClock(segment.start + Math.floor(coverageMinutes(segment) / 2) * 60_000, timeZone));
-  const [doctorId, setDoctorId] = useState(segment.shift?.doctorId || '');
+  const [doctorId, setDoctorId] = useState(isSplit ? '' : segment.shift?.doctorId || '');
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<{ key: string; ids: string[]; firstAllowed: boolean; error?: string }>();
   const [retry, setRetry] = useState(0);

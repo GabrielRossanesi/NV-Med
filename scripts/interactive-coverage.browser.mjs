@@ -158,15 +158,33 @@ try {
   await capture('04-escala-geral');
 
   seed([part('primary','07:00','19:00','ana')],plan,'post',false);
+  await load(); await openRow();
+  await bar.getByRole('button',{name:/Ana Ribeiro, 07:00–19:00/}).click();
+  assert.equal(await panel.getByRole('combobox',{name:/^Médico responsável/}).inputValue(),'ana');
+  await button('Dividir plantão').click();
+  const secondDoctor = panel.getByRole('combobox',{name:/^Médico do segundo intervalo/});
+  await secondDoctor.locator('option[value="bruno"]').waitFor({state:'attached'});
+  assert.equal(await secondDoctor.inputValue(),'');
+  await button('Aplicar divisão').click();
+  await intervals.getByRole('button',{name:/Ana Ribeiro.*07:00–13:00/}).waitFor();
+  await intervals.getByRole('button',{name:/Vaga aberta.*13:00–19:00/}).waitFor();
+  assert.equal(writes.length,0);
+  await save();
+  assert.deepEqual(writes[0].records.map(row=>[row.start_time,row.end_time,row.doctor_id]),[['07:00','13:00','ana']]);
+  assert.equal(rows.filter(row=>row.status==='open' && row.start_time==='13:00' && row.end_time==='19:00' && row.doctor_id===null).length,1);
+  checks.push('divisão sem seleção mantém o médico no primeiro trecho e cria vaga no segundo');
+
+  seed([part('primary','07:00','19:00','ana')],plan,'post',false);
   await load(); await openRow(); await button('Adicionar médico').click();
   await panel.getByRole('heading',{name:'Dividir plantão',exact:true}).waitFor();
   assert.equal(await panel.getByLabel('Horário da divisão').inputValue(),'13:00');
+  assert.equal(await secondDoctor.inputValue(),'');
   await selectDoctor('Médico do segundo intervalo','bruno');
   await capture('05-divisao-rapida');
   await button('Aplicar divisão').click();
   await intervals.getByRole('button',{name:/Bruno Reis.*13:00–19:00/}).waitFor();
   await capture('06-dois-medicos'); await save();
-  assert.deepEqual(writes[0].records.map(r=>[r.start_time,r.end_time]),[['07:00','13:00'],['13:00','19:00']]);
+  assert.deepEqual(writes[0].records.map(r=>[r.start_time,r.end_time,r.doctor_id]),[['07:00','13:00','ana'],['13:00','19:00','bruno']]);
   checks.push('divisão de 12 horas e inclusão sem redução manual');
 
   seed([part('primary','07:00','10:00','ana'),part('vacancy','10:00','13:00')],{...plan,end_time:'13:00'});
