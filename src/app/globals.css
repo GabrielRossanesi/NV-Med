@@ -651,6 +651,9 @@ body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-bor
     --schedule-entry-text: var(--danger);
     --schedule-entry-border: var(--danger);
   }
+  .nv-coverage-segment[data-schedule-tone="available"] {
+    --schedule-entry-bg: color-mix(in srgb, var(--card-bg), var(--danger) 18%);
+  }
   .nv-schedule-entry[data-schedule-tone="planned"] {
     --schedule-entry-bg: color-mix(in srgb, var(--surface-muted), transparent 65%);
     --schedule-entry-text: var(--text-muted);

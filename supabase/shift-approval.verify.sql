@@ -41,6 +41,27 @@ DO $$ DECLARE item public.shifts; BEGIN
  END IF;
 END $$;
 
+-- Check the boundary with a nested rollback before the remaining scenarios.
+DO $$ DECLARE cutoff timestamptz; first_run integer; retry integer; BEGIN
+  IF public.nv_auto_approve_expired_shifts() <> 0 THEN
+    RAISE EXCEPTION 'FAIL approval before activation';
+  END IF;
+  SELECT public.nv_shift_ends(s) INTO cutoff FROM public.shifts s WHERE s.id='approval-admin-shift';
+  BEGIN
+    first_run := nv_master_private.auto_approve_expired_shifts('approval-org', cutoff);
+    retry := nv_master_private.auto_approve_expired_shifts('approval-org', cutoff);
+    IF first_run <> 1 OR retry <> 0 THEN
+      RAISE EXCEPTION 'FAIL cutoff or repeat affected % / % shifts', first_run, retry;
+    END IF;
+    IF EXISTS (SELECT FROM public.shifts WHERE id='approval-admin-shift' AND approval_source <> 'pending')
+      OR NOT EXISTS (SELECT FROM public.shifts WHERE id='approval-auto' AND approval_source = 'automatic') THEN
+      RAISE EXCEPTION 'FAIL cutoff must exclude its boundary and protect the old shift';
+    END IF;
+    RAISE SQLSTATE 'Z5201' USING MESSAGE = 'Restore synthetic data for the next scenarios.';
+  EXCEPTION WHEN SQLSTATE 'Z5201' THEN NULL;
+  END;
+END $$;
+
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"48000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 DO $$ BEGIN
@@ -65,7 +86,8 @@ END $$;
 RESET ROLE;
 SELECT set_config('request.jwt.claims','{}',true);
 DO $$ BEGIN
- IF public.nv_auto_approve_expired_shifts() <> 1 OR public.nv_auto_approve_expired_shifts() <> 0 THEN
+ IF nv_master_private.auto_approve_expired_shifts('approval-org') <> 1
+   OR nv_master_private.auto_approve_expired_shifts('approval-org') <> 0 THEN
    RAISE EXCEPTION 'FAIL automatic approval or rerun';
  END IF;
  IF EXISTS(SELECT FROM public.shifts WHERE id IN ('approval-cancelled','approval-open','approval-future') AND approval_source <> 'pending') THEN

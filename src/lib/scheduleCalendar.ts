@@ -1,4 +1,5 @@
 import { hasConflict, shiftInterval, type CoveragePeriodSummary } from './scheduling.ts';
+import { coverageDuration, coverageMinutes, coverageSpan } from './fractionalCoverage.ts';
 import type { Doctor, Sector, Shift, Unit } from '../types/index.ts';
 
 export type ScheduleCoverageFilter = 'all' | 'deficit' | 'open' | 'conflict' | 'pending' | 'complete' | 'critical';
@@ -22,23 +23,28 @@ export type ScheduleAllocation = {
   startTime: string;
   endTime: string;
   date?: string;
+  duration?: string;
 };
 
 // Both calendar views use the existing coverage summary; administrative state stays in the inspector.
 export function scheduleAllocations(period: CoveragePeriodSummary, doctors: Map<string, Pick<Doctor, 'name'>>, availableVacancyIds: ReadonlySet<string> = new Set()): ScheduleAllocation[] {
   const time = { kind: period.period.kind, startTime: period.period.startTime, endTime: period.period.endTime };
-  return [
+  const entries: ScheduleAllocation[] = [
     ...period.assigned.map(shift => ({ ...time, date: shift.date, startTime: shift.startTime, endTime: shift.endTime,
       id: shift.id, shiftId: shift.id, name: doctors.get(shift.doctorId || '')?.name || 'Médico escalado', vacant: false })),
     ...period.vacancies.map(shift => {
       const available = shift.coveragePost || availableVacancyIds.has(shift.id);
+      const span = coverageSpan(shift);
       return { ...time, date: shift.date, startTime: shift.startTime, endTime: shift.endTime,
-        id: shift.id, shiftId: shift.id, name: shift.coveragePost ? 'Vaga descoberta' : available ? 'Vaga aberta' : 'Posto sem médico',
+        id: shift.id, shiftId: shift.id, name: available ? 'Vaga aberta' : 'Posto sem médico',
+        ...(span && { duration: coverageDuration(coverageMinutes(span)) }),
         vacant: true, vacancyState: available ? 'available' as const : 'unpublished' as const };
     }),
     ...Array.from({ length: period.uncreated }, (_, index) => ({ ...time,
       id: `uncreated-${time.kind}-${index}`, name: 'Posto previsto por criar', vacant: true, vacancyState: 'planned' as const })),
-  ].sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.id.localeCompare(b.id));
+  ];
+  return entries.sort((a, b) => (a.date && b.date ? a.date.localeCompare(b.date) : 0)
+    || a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.id.localeCompare(b.id));
 }
 
 // Compare only assignments for the same doctor, including shifts in other units/days.

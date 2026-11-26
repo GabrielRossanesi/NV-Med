@@ -297,4 +297,3 @@ GRANT EXECUTE ON FUNCTION public.nv_account_preferences(), public.nv_save_accoun
 
 NOTIFY pgrst, 'reload schema';
 COMMIT;
-

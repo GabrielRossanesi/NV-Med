@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertTriangle, ArrowRightLeft, ChevronLeft, ChevronRight, Clock3, Copy, History, List, LoaderCircle, Moon, Plus, Repeat2, Sun, Trash2, UserRoundPlus, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, ChevronDown, ChevronLeft, ChevronRight, Clock3, Copy, History, List, LoaderCircle, Moon, Plus, Repeat2, Sun, Trash2, UserRoundPlus, Users } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
 import Dialog from '@/components/Dialog';
 import EmploymentBadge from '@/components/schedule/EmploymentBadge';
@@ -20,7 +20,7 @@ import { scheduleSectors, type SectorSelection } from '@/lib/scheduleScope';
 import ScheduleDoctorView from '@/components/schedule/ScheduleDoctorView';
 import ScheduleSpecialtyView from '@/components/schedule/ScheduleSpecialtyView';
 import SectorEditorDialog from '@/components/schedule/SectorEditorDialog';
-import { reconcileShiftDoctor, scopedSpecialties, selectShiftSector } from '@/lib/sectorSpecialties';
+import { scopedSpecialties, selectShiftSector } from '@/lib/sectorSpecialties';
 import { moveScheduleMonth } from '@/lib/scheduleMonth';
 import { isCriticalCoverage, scheduleConflictIds, type ScheduleCoverageFilter as CoverageFilter } from '@/lib/scheduleCalendar';
 import ScheduleDeleteDialog from '@/components/schedule/ScheduleDeleteDialog';
@@ -30,11 +30,12 @@ import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useSh
 import ShiftCashPaymentFields from '@/components/schedule/ShiftCashPaymentFields';
 import { readCashPayment } from '@/lib/shiftCashPayment';
 import ShiftApprovalDialog from '@/components/schedule/ShiftApprovalDialog';
-import { shiftEditRestriction } from '@/lib/shiftApproval';
+import { automaticShiftApprovalMessage, shiftApprovalLabels, shiftEditRestriction } from '@/lib/shiftApproval';
 import { notify } from '@/lib/notifications';
-import ShiftCoverageTimeline from '@/components/schedule/ShiftCoverageTimeline';
-import { coverageDate, coverageMinutes, coveragePlanInterval, coverageSpan } from '@/lib/fractionalCoverage';
-import ShiftRecordSummary, { shiftRecordStatusLabels as statusLabels } from '@/components/schedule/ShiftRecordSummary';
+import ShiftCoverageTimeline, { CoverageSplitEditor, type CoverageAssignment } from '@/components/schedule/ShiftCoverageTimeline';
+import { coverageAssignmentChanged, coverageDraftInterval, coverageSegmentChanged, coverageSegmentForm, editCoverageSegment, mergeCoverageDraft, type CoverageDraftSegment } from '@/lib/coverageDraft';
+import { calculateFractionalCoverage, coverageDate, coverageDuration, coverageMinutes, coveragePlanInterval, coverageSpan, fractionalWritePlan, type CoverageSpan } from '@/lib/fractionalCoverage';
+import { shiftRecordStatusLabels as statusLabels } from '@/components/schedule/ShiftRecordSummary';
 import { createClient } from '@/lib/supabase/client';
 import { fetchInitialDataFromSupabase, fetchShiftRates } from '@/services/supabaseService';
 import type { ScheduleDeletionScope, ScheduleDeletionSelection } from '@/lib/scheduleDeletion';
@@ -47,6 +48,18 @@ import type { CoveragePeriodKind, CoveragePlan, Doctor, EmploymentType, Sector, 
 
 type ViewMode = 'week' | 'day' | 'month' | 'doctor' | 'specialty' | 'list';
 type MobileViewMode = 'month' | 'week' | 'day' | 'list';
+type CoverageEditor = { key: string; initial: Shift; original?: Shift; vacancy?: CoverageSpan };
+type SegmentDraft = { editor: CoverageEditor; form: Shift; preview: Shift; hourlyRate: string; agreement: ReturnType<typeof initialAgreementDraft> };
+function ShiftFormSection({ title, children, sectionRef }: {
+  title: string; children: React.ReactNode; sectionRef?: React.Ref<HTMLDetailsElement>;
+}) {
+  return <details ref={sectionRef} className="group border-t border-border">
+    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded py-2 text-sm font-medium text-text-secondary hover:text-text-primary [&::-webkit-details-marker]:hidden">
+      {title}<ChevronDown size={15} className="shrink-0 group-open:rotate-180" aria-hidden="true"/>
+    </summary>
+    <div className="space-y-3 pb-4 pt-1">{children}</div>
+  </details>;
+}
 const mobileViewKey = 'nvmed:mobile-schedule-view';
 function subscribeMobile(callback: () => void) {
   const query = window.matchMedia('(max-width: 767px)');
@@ -87,10 +100,12 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
       const sector = sectors.find(value => value.id === item.sectorId);
       const unit = units.find(value => value.id === item.unitId);
       const status = item.exchangeRequested ? 'Troca solicitada' : statusLabels[item.status];
-      return <button key={item.id} type="button" onClick={() => onEdit(item)} className="flex min-h-16 w-full min-w-0 items-center gap-2.5 px-3 py-2.5 text-left hover:bg-state-hover">
+      const gap = !item.doctorId && item.status === 'open' && coverageSpan(item);
+      return <button key={item.id} type="button" onClick={() => onEdit(item)} data-schedule-tone={gap ? 'available' : undefined}
+        className={`flex min-h-16 w-full min-w-0 items-center gap-2.5 px-3 py-2.5 text-left hover:bg-state-hover ${gap ? 'nv-schedule-entry' : ''}`}>
         <span className="shrink-0 text-xs font-semibold tabular-nums">{item.startTime}–{item.endTime}</span>
         <span className="min-w-0 flex-1">
-          <span className="block break-words text-sm font-semibold">{doctor?.name || (item.doctorId ? 'Médico escalado' : availableVacancyIds.has(item.id) ? 'Vaga aberta' : 'Posto sem médico')}</span>
+          <span className="block break-words text-sm font-semibold">{doctor?.name || (item.doctorId ? 'Médico escalado' : gap || availableVacancyIds.has(item.id) ? 'Vaga aberta' : 'Posto sem médico')}{gap && ` · ${coverageDuration(coverageMinutes(gap))}`}</span>
           <span className="block break-words text-xs text-text-muted">{[unit?.name, sector?.name || item.sector, item.specialty].filter(Boolean).join(' · ')}</span>
           <span className="mt-0.5 inline-block"><EmploymentBadge employment={item.employmentType} provisional={!item.doctorId}/></span>
           {item.status !== 'open' && <span className="block text-xs font-medium text-primary">{status}</span>}
@@ -176,6 +191,21 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const view = mobile ? (requestedShiftId || statusFilter === 'cancelled' ? 'list' : mobileView) : desktopView;
   const [form, setForm] = useState<Shift | null>(null);
   const [coveragePlan, setCoveragePlan] = useState<CoveragePlan | null>(null);
+  const [coverageEdits, setCoverageEdits] = useState<Shift[]>([]);
+  const [coverageSession, setCoverageSession] = useState<{ anchor: Shift; plan: CoveragePlan; fingerprint: string }>();
+  const [coverageEditor, setCoverageEditor] = useState<CoverageEditor>();
+  const [segmentDrafts, setSegmentDrafts] = useState<Record<string, SegmentDraft>>({});
+  const [splitEditorOpen, setSplitEditorOpen] = useState(false);
+  const [checkingCoverage, setCheckingCoverage] = useState(false);
+  const [coverageRoot, setCoverageRoot] = useState<Shift>();
+  const [coveragePanelOpen, setCoveragePanelOpen] = useState(false);
+  const [previousGapPreview, setPreviousGapPreview] = useState(false);
+  const [requestRetroReason, setRequestRetroReason] = useState(false);
+  const coverageToggle = useRef<HTMLButtonElement>(null);
+  const coverageEditorHeading = useRef<HTMLHeadingElement>(null);
+  const operationalSection = useRef<HTMLDetailsElement>(null);
+  const financialSection = useRef<HTMLDetailsElement>(null);
+  const [draftShiftId, setDraftShiftId] = useState('');
   const [hourlyRate, setHourlyRate] = useState('');
   const criticalDetails = useRef<HTMLDetailsElement>(null);
   const [historyTarget, setHistoryTarget] = useState<{ shiftId?: string } | null>(null);
@@ -218,7 +248,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     return () => { active = false; };
   }, [orgId, opportunityRevision]);
   const eligibilityKey = form ? JSON.stringify({ id: form.id || '__draft__', organization_id: form.organizationId,
-    doctor_id: form.doctorId || null, unit_id: form.unitId, sector_id: form.sectorId || null, specialty: form.specialty || null, coverage_mode: form.coverageMode || 'regular',
+    unit_id: form.unitId, sector_id: form.sectorId || null, specialty: form.specialty || null, coverage_mode: form.coverageMode || 'regular',
     date: form.date, start_time: form.startTime, end_time: form.endTime }) : '';
   const unchangedAssignment = Boolean(form && openedShift && ['unitId','sectorId','specialty','date','startTime','endTime','doctorId'].every(
     key => form[key as keyof Shift] === openedShift[key as keyof Shift]));
@@ -235,20 +265,13 @@ function Schedule({ params }: { params: URLSearchParams }) {
         if (error) throw new Error('Não foi possível consultar os médicos elegíveis. Tente novamente.');
         const ids = (data || []) as string[];
         setEligibility({ key: eligibilityKey, ids });
-        if (!unchangedAssignment && candidate.doctor_id && !ids.includes(candidate.doctor_id)) {
-          setSectorNotice('Médico removido da seleção: não é elegível para o setor, unidade ou horário informado.');
-        }
-        if (!unchangedAssignment) setForm(current => {
-          if (!current) return current;
-          return reconcileShiftDoctor(current, ids);
-        });
       } catch (error) {
         if (live) setEligibility({ key: eligibilityKey, ids: [], error: error instanceof Error ? error.message : 'Falha na consulta.' });
       }
     };
     void load();
     return () => { live = false; };
-  }, [eligibilityKey, eligibilityRevision, unchangedAssignment, store.shifts]);
+  }, [eligibilityKey, eligibilityRevision, store.shifts]);
   const canSeeFinancial = canViewPermission(store.currentUser, 'financeiro');
   const canEditFinancial = canEditPermission(store.currentUser, 'financeiro');
   const canEditSchedule = editGuard.unlocked && canEditPermission(store.currentUser, 'escala');
@@ -258,7 +281,22 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const canCreateSector = canEditSchedule && canPerformAction(store.currentUser, 'unidades', 'create');
   const endedShift = Boolean(openedShift?.approvalEndedAt && Date.parse(openedShift.approvalEndedAt) <= referenceTime);
   const editRestriction = shiftEditRestriction(openedShift, endedShift, canPerformAction(store.currentUser, 'escala', 'edit_past'));
-  const canSaveShift = form?.id ? canEditSchedule && !editRestriction && !openedShift?.coveragePost?.cancelled : canCreateSchedule;
+  function segmentRestriction(shift?: Shift) {
+    if (!canEditPermission(store.currentUser, 'escala')) return 'Seu perfil não pode editar a cobertura.';
+    if (!editGuard.unlocked) return 'Desbloqueie o modo de edição para alterar este intervalo.';
+    if (!shift) return canCreateSchedule ? undefined : 'Seu perfil não pode criar alocações.';
+    shift = store.shifts.find(item => item.id === shift?.id) || shift;
+    if (shift.coveragePost?.cancelled || shift.status === 'cancelled') return 'Este intervalo foi cancelado.';
+    if (shift.coveragePost?.published && !shift.doctorId) return 'Retire a publicação da vaga na ficha ou selecione o médico nas candidaturas.';
+    if (shift.paymentStatus === 'paid' || shift.paidAt || shift.paidAmount != null) return 'Use o fluxo financeiro para ajustar este plantão com pagamento registrado.';
+    if (shift.status === 'completed') return 'Este plantão já foi concluído.';
+    if (shift.approvalEndedAt && Date.parse(shift.approvalEndedAt) <= referenceTime) {
+      return shiftEditRestriction(shift, true, canPerformAction(store.currentUser, 'escala', 'edit_past')) || 'Abra a ficha individual para justificar um ajuste retroativo.';
+    }
+  }
+  const contextualRestriction = coverageEditor && segmentRestriction(coverageEditor.original);
+  const canSaveShift = coverageEditor ? canEditSchedule && !contextualRestriction
+    : form?.id ? canEditSchedule && !editRestriction && !openedShift?.coveragePost?.cancelled : canCreateSchedule;
   const newPjAgreement = form?.employmentType === 'pj' && (!openedShift || openedShift.employmentType !== 'pj'
     || Boolean(form.doctorId && form.doctorId !== openedShift.doctorId));
   const showAgreementFields = canEditFinancial && canSaveShift && form?.employmentType === 'pj' && openedShift?.paymentStatus !== 'paid';
@@ -363,10 +401,20 @@ function Schedule({ params }: { params: URLSearchParams }) {
     const resolvedSector = shift ? sectors.find(item => item.id === shift.sectorId) : sector;
     const resolvedUnit = shift?.unitId || resolvedSector?.unitId || unitId || units[0]?.id || '';
     const periods = resolvedSector ? sectorCoveragePeriods(resolvedSector) : [];
-    const period = shift ? periods.find(item => item.startTime === shift.startTime && item.endTime === shift.endTime) || periods[0] : periods.find(item => item.kind === requestedKind) || periods[0];
-    setCoverageKind(period?.kind || 'day');
+    const period = periods.find(item => item.kind === (shift ? coverageKindForShift(shift, periods) : requestedKind)) || periods[0];
+    setCoverageKind(shift ? coverageKindForShift(shift, periods) : period?.kind || 'day');
     setOpenedShift(shift);
+    setCoverageRoot(shift);
+    setCoverageSession(undefined);
+    setCoverageEditor(undefined);
+    setSegmentDrafts({});
+    setSplitEditorOpen(false);
     setCoveragePlan(null);
+    setCoverageEdits([]);
+    setCoveragePanelOpen(Boolean(shift));
+    setPreviousGapPreview(false);
+    setRequestRetroReason(false);
+    setDraftShiftId(shift ? '' : crypto.randomUUID());
     setHourlyRate(shift?.paymentAgreement?.hourly_rate_cents != null ? formatShiftMoneyInput(shift.paymentAgreement.hourly_rate_cents) : '');
     setAgreementDraft(initialAgreementDraft(shift));
     setRetroReason('');
@@ -385,6 +433,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   function updateFormUnit(nextUnit: string) {
     if (!form) return;
     setSectorNotice('');
+    setCoveragePlan(null);
     const choices = specialtyChoices(nextUnit);
     setForm({ ...form, doctorId: undefined, status: 'open', unitId: nextUnit,
       sectorId: '', sector: '', specialty: choices.includes(form.specialty || '') ? form.specialty : choices.length === 1 ? choices[0] : '' });
@@ -393,7 +442,17 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (!form) return;
     const sector = sectors.find(item => item.id === nextSectorId && item.unitId === form.unitId);
     const next = selectShiftSector(form, sector);
-    setSectorNotice(form.doctorId ? 'A elegibilidade do médico será revalidada para o setor selecionado.' : '');
+    setCoveragePlan(null);
+    if (!form.id && sector) {
+      const periods = sectorCoveragePeriods(sector);
+      const period = periods.find(item => item.kind === coverageKind) || periods[0];
+      if (period) {
+        setCoverageKind(period.kind);
+        next.startTime = period.startTime;
+        next.endTime = period.endTime;
+      }
+    }
+    setSectorNotice('');
     setForm(next);
   }
 
@@ -418,19 +477,41 @@ function Schedule({ params }: { params: URLSearchParams }) {
     if (!form) return;
     const sector = sectors.find(item => item.id === form.sectorId);
     const period = sector && sectorCoveragePeriods(sector).find(item => item.kind === kind);
-    if (period) { setCoverageKind(kind); setForm({ ...form, startTime: period.startTime, endTime: period.endTime }); }
+    if (period) {
+      setCoverageKind(kind);
+      setCoveragePlan(null);
+      setForm({ ...form, startTime: period.startTime, endTime: period.endTime });
+    }
   }
   function updateDoctor(nextDoctorId: string) {
     if (!form) return;
     if ((form.doctorId || '') === nextDoctorId) return;
+    setFormError('');
     if (!nextDoctorId) {
-      setForm({ ...form, doctorId: undefined, employerName: '', status: 'open' });
+      if (coverageEditor?.initial.doctorId && !canDeleteSchedule) return;
+      setForm({ ...form, doctorId: undefined, employerName: coverageEditor ? form.employerName : '', status: 'open' });
+      return;
+    }
+    const startingAssignment = coverageEditor?.initial;
+    if (startingAssignment?.doctorId === nextDoctorId) {
+      const original = coverageEditor?.original;
+      setAgreementDraft(initialAgreementDraft(original));
+      setHourlyRate(original?.paymentAgreement?.hourly_rate_cents == null ? '' : formatShiftMoneyInput(original.paymentAgreement.hourly_rate_cents));
+      setForm({ ...form, doctorId: nextDoctorId, status: startingAssignment.status });
       return;
     }
     setAgreementDraft(initialAgreementDraft());
     setHourlyRate('');
-    setForm({ ...form, doctorId: nextDoctorId, employmentType: undefined, employerName: '',
+    setForm({ ...form, doctorId: nextDoctorId, employmentType: coverageEditor ? form.employmentType : undefined, employerName: coverageEditor ? form.employerName : '',
       status: statusAfterDoctorSelection(form.status, form.doctorId, nextDoctorId) });
+  }
+  function updateCoverageClock(field: 'startTime' | 'endTime', value: string) {
+    if (!form) return;
+    const next = { ...form, [field]: value };
+    const limits = coverageEditor?.vacancy || plannedInterval;
+    const interval = coverageEditor && limits && coverageDraftInterval(next.startTime, next.endTime, limits, coverageZone);
+    setForm(interval ? { ...next, date: interval.date } : next);
+    setFormError('');
   }
   function changeEmployment(employmentType: EmploymentType | undefined) {
     if (!form) return;
@@ -439,7 +520,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     setForm({ ...form, employmentType, employerName: '' });
   }
   async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!form || !canSaveShift || store.saving || cashBusy) return;
+    event.preventDefault(); if (!form || !(canSaveShift || hasCoverageChanges && canEditSchedule) || store.saving || cashBusy || checkingCoverage) return;
     if (!editGuard.check()) return;
     setFormError('');
     const sector = sectors.find(item => item.id === form.sectorId && item.unitId === form.unitId);
@@ -452,36 +533,63 @@ function Schedule({ params }: { params: URLSearchParams }) {
       return setFormError('Selecione uma especialidade válida para a unidade e o setor.');
     }
     if (form.coverageMode === 'adhoc' && (form.coverageReason?.trim().length || 0) < 3) return setFormError('Informe o motivo da cobertura avulsa com pelo menos 3 caracteres.');
+    if (coverageSession || coverageEdits.length) {
+      await saveCoverage();
+      return;
+    }
     if (form.doctorId && !unchangedAssignment && !eligibilityReady) return setFormError('Aguarde a consulta dos médicos elegíveis.');
     if (form.doctorId && !eligibleDoctors.some(doctor => doctor.id === form.doctorId)) return setFormError('Selecione um médico que atenda à especialidade escolhida.');
-    if (!coveragePlan && !form.coveragePost && form.startTime === form.endTime) return setFormError('Início e fim precisam ser diferentes.');
+    if (!writePlan && !existingPost && form.startTime === form.endTime) return setFormError('Início e fim precisam ser diferentes.');
     if (!form.employmentType && (!openedShift || openedShift.employmentType || (form.doctorId && form.doctorId !== openedShift.doctorId))) {
+      if (operationalSection.current) operationalSection.current.open = true;
       return setFormError('Confirme a modalidade de contratação do plantão.');
     }
     if (form.doctorId && form.employmentType === 'pj' && !form.employerName?.trim()) return setFormError('Informe a empresa PJ.');
     if (newPjAgreement && !canEditFinancial) return setFormError('A confirmação de um acordo PJ exige permissão financeira.');
     if (!form.id && recurrence !== 'once' && (!repeatUntil || repeatUntil < form.date)) return setFormError('Defina uma data final igual ou posterior ao primeiro plantão.');
-    if (coveragePlan || form.coveragePost) {
-      if (!plannedInterval || !draftInterval || draftInterval.start < plannedInterval.start || draftInterval.end > plannedInterval.end) {
-        return setFormError('Informe um intervalo válido dentro do posto previsto.');
+    if (writePlan || existingPost) {
+      if (writePlan && openedShift && !existingPost && (changedScope || openedShift.date !== form.date)) {
+        return setFormError('Salve a mudança de unidade, setor, especialidade ou data antes de ajustar a cobertura.');
       }
-      if (recurrence !== 'once' || vacancyCount > 1) return setFormError('Salve um posto fracionado por vez.');
+      if (!plannedInterval || !draftInterval || draftInterval.start < plannedInterval.start || draftInterval.end > plannedInterval.end) {
+        return setFormError('Informe um intervalo dentro do horário previsto do posto.');
+      }
+      if (!coverageTotals) return setFormError('Confira os horários e a capacidade simultânea do posto.');
+      if (recurrence !== 'once' || (!form.doctorId && vacancyCount > 1)) return setFormError('Use uma única data e um único posto para salvar esta cobertura.');
     }
-    const normalized: ShiftWrite = { ...form, coveragePlan: coveragePlan || undefined, coverageMode: form.coverageMode || 'regular', coverageReason: form.coverageMode === 'adhoc' ? form.coverageReason?.trim() : undefined, sector: sector?.name, sectorId: sector?.id, status: form.doctorId ? (form.status === 'open' ? 'pending' : form.status) : 'open', employmentType: form.employmentType, employerName: form.employerName?.trim() || undefined };
+    const normalized: ShiftWrite = { ...form, coveragePlan: writePlan, coverageMode: form.coverageMode || 'regular', coverageReason: form.coverageMode === 'adhoc' ? form.coverageReason?.trim() : undefined, sector: sector?.name, sectorId: sector?.id, status: form.doctorId ? (form.status === 'open' ? 'pending' : form.status) : 'open', employmentType: form.employmentType, employerName: form.employerName?.trim() || undefined };
     if (openedShift && endedShift) normalized.retroReason = retroReason.trim();
     if (hasHourlyRate) {
-      if (hourlyCents == null || hourlyCents > 9_999_999_999) return setFormError('Informe um valor por hora válido.');
+      if (hourlyCents == null || hourlyCents > 9_999_999_999) {
+        if (financialSection.current) financialSection.current.open = true;
+        return setFormError('Informe um valor por hora válido.');
+      }
       normalized.coverageHourlyRateCents = hourlyCents;
       normalized.paymentFrequency = effectiveDraft.frequency;
     } else if (showAgreementFields) {
       const changing = effectiveDraft.mode !== 'keep' || effectiveDraft.frequency !== (openedShift?.paymentFrequency || 'on_delivery');
-      if (changing && !rateQuery.ready) return setFormError('Aguarde a consulta dos valores padrão ou tente novamente.');
+      if (changing && !rateQuery.ready) {
+        if (financialSection.current) financialSection.current.open = true;
+        return setFormError('Aguarde a consulta dos valores padrão ou tente novamente.');
+      }
       try {
         normalized.agreement = newPjAgreement
           ? buildRequiredPjAgreement(effectiveDraft, formRate)
           : buildAgreementSelection(effectiveDraft, formRate, openedShift);
       }
-      catch (error) { return setFormError(error instanceof Error ? error.message : 'Confira o acordo financeiro.'); }
+      catch (error) {
+        if (financialSection.current) financialSection.current.open = true;
+        return setFormError(error instanceof Error ? error.message : 'Confira o acordo financeiro.');
+      }
+    }
+    if (openedShift && endedShift && retroReason.trim().length < 3) {
+      const changed = (['doctorId', 'date', 'startTime', 'endTime', 'unitId', 'sectorId', 'specialty', 'type',
+        'notes', 'employmentType', 'employerName', 'coverageMode', 'coverageReason'] as const)
+        .some(key => (normalized[key] || '') !== (openedShift[key] || ''));
+      if (changed || (normalized.status === 'cancelled') !== (openedShift.status === 'cancelled')) {
+        setRequestRetroReason(true);
+        return setFormError('Informe a justificativa para salvar a alteração retroativa.');
+      }
     }
     const dates = !form.id ? buildRecurringDates(form.date, repeatUntil, recurrence, customWeekdays) : [form.date];
     if (!dates.length) return setFormError('Selecione pelo menos um dia da semana dentro do período.');
@@ -514,9 +622,13 @@ function Schedule({ params }: { params: URLSearchParams }) {
         setRecurringPreview({ inputs, dates, countPerDate, cents: normalized.agreement?.mode === 'default' ? formRate?.amount_cents : normalized.agreement?.amount_cents });
         return;
       }
-      ok = Boolean(await editGuard.run(() => inputs.length > 1 ? store.addShifts(inputs) : store.addShift(inputs[0])));
+      ok = Boolean(await editGuard.run(() => inputs.length > 1 ? store.addShifts(inputs) : store.addShift(inputs[0], draftShiftId)));
     }
-    if (ok) setForm(null); else setFormError(useStore.getState().error || 'Não foi possível salvar o posto.');
+    if (ok) setForm(null); else {
+      const message = useStore.getState().error || 'Não foi possível salvar o posto.';
+      if (endedShift && message.startsWith('Informe uma justificativa')) setRequestRetroReason(true);
+      setFormError(message);
+    }
   }
   async function confirmRecurrence() {
     if (!recurringPreview || !canCreateSchedule || store.saving) return;
@@ -589,6 +701,8 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
 
   const eligibilityReady = Boolean(form && eligibility?.key === eligibilityKey && !eligibility.error);
+  const assignmentProblem = form?.doctorId && !unchangedAssignment && eligibilityReady && !eligibility?.ids.includes(form.doctorId)
+    ? 'O médico selecionado não está elegível para este setor, unidade ou horário. Revise a seleção.' : undefined;
   const eligibleDoctors = form ? doctors.filter(doctor => (eligibilityReady && eligibility?.ids.includes(doctor.id))
     || (unchangedAssignment && doctor.id === form.doctorId)) : [];
   const formSector = form ? sectors.find(item => item.id === form.sectorId) : undefined;
@@ -599,7 +713,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const formUnit = units.find(item => item.id === form?.unitId);
   const formSpecialties = form ? specialtyChoices(form.unitId) : [];
   const formSectors = form ? sectors.filter(item => item.unitId === form.unitId) : [];
-  const cashEligible = canEditFinancial && canSaveShift && form?.employmentType === 'pj'
+  const cashEligible = !coverageSession && canEditFinancial && canSaveShift && form?.employmentType === 'pj'
     && Boolean(form.doctorId) && form.status !== 'cancelled' && (form.id || recurrence === 'once')
     && effectiveDraft.frequency === 'on_delivery' && (openedShift?.paymentAmount == null
       || (openedShift.paidAmount || 0) < openedShift.paymentAmount);
@@ -610,30 +724,270 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const originalFormShift = form?.id ? shifts.find(item => item.id === form.id) : undefined;
   const formDoctorChanged = Boolean(originalFormShift?.doctorId && originalFormShift.doctorId !== form?.doctorId);
   const currentSegment = openedShift && shifts.find(shift => shift.id === openedShift.id);
-  const existingPost = openedShift?.coveragePost;
-  const plan = coveragePlan || existingPost;
-  const hasHourlyRate = Boolean(plan && showAgreementFields && form?.doctorId && hourlyRate.trim());
+  const existingPost = coverageRoot?.coveragePost;
+  const changedScope = Boolean(coverageRoot && form && (form.unitId !== coverageRoot.unitId
+    || form.sectorId !== coverageRoot.sectorId || form.specialty !== coverageRoot.specialty));
+  const configuredPeriod = formPeriods.find(period => period.kind === coverageKind);
+  const baseline = form && (existingPost || (
+    coverageRoot && !changedScope ? { date: coverageContextDate(), startTime: coverageRoot.startTime, endTime: coverageRoot.endTime, capacity: 1 }
+      : configuredPeriod && { date: form.date, startTime: configuredPeriod.startTime, endTime: configuredPeriod.endTime, capacity: 1 }
+  ));
+  function coverageContextDate() { return coverageSession?.plan.date || (coverageEdits.length ? coverageRoot?.date : form?.date) || date; }
+  const plan = coverageSession?.plan || coveragePlan || baseline || undefined;
+  const writePlan = form ? fractionalWritePlan(form, endedShift ? undefined : baseline || undefined, coveragePlan, Boolean(existingPost)) : undefined;
+  const hasHourlyRate = Boolean((writePlan || existingPost) && showAgreementFields && form?.doctorId && hourlyRate.trim());
   const hourlyCents = hasHourlyRate ? parseMoneyCents(hourlyRate) : null;
   const coverageZone = existingPost?.timeZone || formUnit?.timeZone || 'America/Sao_Paulo';
-  const plannedInterval = coveragePlan ? coveragePlanInterval(coveragePlan, coverageZone)
-    : existingPost ? { start: Date.parse(existingPost.startsAt), end: Date.parse(existingPost.endsAt) } : undefined;
+  const plannedInterval = existingPost && !coveragePlan ? { start: Date.parse(existingPost.startsAt), end: Date.parse(existingPost.endsAt) }
+    : plan && coveragePlanInterval(plan, coverageZone);
   const draftInterval = form && plan ? coveragePlanInterval(form, coverageZone) : undefined;
   const siblings = existingPost ? shifts.filter(shift => shift.coveragePost?.id === existingPost.id) : [];
   const originalSpan = openedShift && coverageSpan(openedShift);
-  const coveragePreview = Boolean(coveragePlan || form && existingPost && (form.doctorId !== openedShift?.doctorId || (form.status === 'cancelled') !== (openedShift?.status === 'cancelled')
+  const coveragePreview = Boolean(writePlan || form && existingPost && (form.doctorId !== openedShift?.doctorId || (form.status === 'cancelled') !== (openedShift?.status === 'cancelled')
     || draftInterval?.start !== originalSpan?.start || draftInterval?.end !== originalSpan?.end));
-  const draftSegments = coveragePreview && form && plan && plannedInterval ? [
+  const draftSegments = (coveragePreview || !existingPost) && form && plan && plannedInterval ? [
     ...siblings.filter(item => item.id !== form.id),
-    ...(form.doctorId && draftInterval ? [{ ...form, coveragePost: {
+    ...(form.doctorId && form.status !== 'cancelled' && draftInterval ? [{ ...form, coveragePost: {
       ...plan, id: existingPost?.id || '', revision: existingPost?.revision || 0, timeZone: coverageZone, published: false,
       startsAt: new Date(plannedInterval.start).toISOString(), endsAt: new Date(plannedInterval.end).toISOString(),
       segmentStartsAt: new Date(draftInterval.start).toISOString(), segmentEndsAt: new Date(draftInterval.end).toISOString(),
       segmentDate: form.date, segmentStartTime: form.startTime, segmentEndTime: form.endTime,
     } }] : []),
   ] : siblings;
-  const vacancyLabel = openedShift?.coveragePost ? 'Vaga descoberta' : openedShift && availableVacancies.ids.has(openedShift.id) ? 'Vaga aberta' : 'Posto sem médico';
-  const formTitle = form?.id
-    ? openedShift?.doctorId ? 'Ficha do plantão' : vacancyLabel === 'Posto sem médico' ? 'Ficha do posto' : 'Ficha da vaga'
+  const coverageTotals = plan && plannedInterval && calculateFractionalCoverage(plannedInterval, plan.capacity,
+    draftSegments.flatMap(segment => segment.doctorId && segment.status !== 'cancelled' ? coverageSpan(segment) || [] : []));
+  const hasGapPreview = Boolean(coveragePreview && coverageTotals && coverageTotals.uncoveredMinutes > 0);
+  if (previousGapPreview !== hasGapPreview) {
+    setPreviousGapPreview(hasGapPreview);
+    if (hasGapPreview) setCoveragePanelOpen(true);
+  }
+  const canViewCoverage = Boolean(plan && plannedInterval && !existingPost?.cancelled);
+  const anchorId = coverageSession?.anchor.id || form?.id || draftShiftId;
+  const activeId = form?.id || draftShiftId;
+  const panelAnchor = coverageSession?.anchor || (form && { ...form, id: anchorId });
+  const initialRoster = existingPost ? siblings : panelAnchor ? [panelAnchor] : [];
+  const otherDrafts = Object.values(segmentDrafts).filter(entry => entry.form.id !== activeId);
+  const otherRoster = mergeCoverageDraft(mergeCoverageDraft(initialRoster, coverageEdits), otherDrafts.map(entry => entry.preview));
+  const activeBounds = coverageEditor?.vacancy || plannedInterval;
+  const outsideActiveBounds = Boolean(coverageEditor && form && activeBounds
+    && (!draftInterval || draftInterval.start < activeBounds.start || draftInterval.end > activeBounds.end));
+  const candidate = form ? { ...form, id: activeId } : undefined;
+  const previewCandidate = coverageEditor && (!candidate?.doctorId && !coverageEditor.initial.doctorId || outsideActiveBounds
+    || candidate?.doctorId && !unchangedAssignment && (!eligibilityReady || assignmentProblem)) ? coverageEditor.initial : candidate;
+  const proposedRoster = previewCandidate ? mergeCoverageDraft(otherRoster, [previewCandidate]) : otherRoster;
+  const activeConflict = Boolean(coverageEditor && previewCandidate?.doctorId && candidate === previewCandidate
+    && coverageAssignmentChanged(coverageEditor.initial, candidate) && coverageConflicts([candidate], proposedRoster));
+  const proposedCoverage = plan && !activeConflict && editCoverageSegment(plan, coverageZone, proposedRoster);
+  const panelRoster = !proposedCoverage && coverageEditor ? mergeCoverageDraft(otherRoster, [coverageEditor.initial]) : proposedRoster;
+  const panelCoverage = plan && (proposedCoverage || editCoverageSegment(plan, coverageZone, panelRoster));
+  const activeCoverageProblem = outsideActiveBounds ? 'Informe um horário dentro do intervalo disponível.'
+    : activeConflict ? 'O médico já está escalado em parte desse intervalo.'
+    : coverageEditor && !proposedCoverage && candidate?.doctorId ? 'O horário excede a capacidade contratada do posto.' : undefined;
+  const panelCanEdit = canEditSchedule && !changedScope && !existingPost?.cancelled
+    && (Boolean(existingPost) || !coverageRoot?.approvalEndedAt || Date.parse(coverageRoot.approvalEndedAt) > referenceTime) && recurrence === 'once';
+  const panelCanAdd = panelCanEdit && canCreateSchedule;
+
+  function coverageRestriction(segment?: Shift) {
+    const original = segment && (siblings.find(item => item.id === segment.id) || (coverageRoot?.id === segment.id ? coverageRoot : undefined));
+    const restricted = segmentRestriction(original);
+    if (restricted) return restricted;
+    if (!panelCanEdit) return changedScope ? 'Salve a mudança de unidade, setor ou especialidade antes de editar a cobertura.'
+      : recurrence !== 'once' ? 'Selecione somente esta data para editar os intervalos do posto.' : 'O posto está encerrado ou cancelado.';
+    if (!coverageSession && !existingPost && coverageRoot && form?.date !== coverageRoot.date) return 'Salve a nova data antes de editar a cobertura.';
+  }
+
+  const ordinaryFingerprint = form ? JSON.stringify([form, coveragePlan, hourlyRate, agreementDraft, vacancyCount, recurrence, customWeekdays, repeatUntil]) : '';
+  const activeEntry: SegmentDraft | undefined = coverageEditor && candidate ? {
+    editor: coverageEditor, form: candidate, preview: proposedCoverage && previewCandidate ? previewCandidate : coverageEditor.initial,
+    hourlyRate, agreement: agreementDraft,
+  } : undefined;
+  const draftEntries = activeEntry ? [...otherDrafts, activeEntry] : otherDrafts;
+  const changedDrafts = draftEntries.filter(entry => coverageSegmentChanged(entry.editor.initial, entry.form)
+    || JSON.stringify(entry.agreement) !== JSON.stringify(initialAgreementDraft(entry.editor.original))
+    || entry.hourlyRate !== (entry.editor.original?.paymentAgreement?.hourly_rate_cents == null ? '' : formatShiftMoneyInput(entry.editor.original.paymentAgreement.hourly_rate_cents)));
+  const hasCoverageChanges = Boolean(coverageEdits.length || changedDrafts.length);
+
+  function selectCoverage(segment: CoverageDraftSegment, split = false) {
+    if (!form || !plan || store.saving || cashBusy || checkingCoverage) return;
+    if (cashRequest) { setFormError('Conclua ou desmarque o pagamento à vista antes de trocar de intervalo.'); return; }
+    if (existingPost && coveragePlan) { setFormError('Salve o ajuste do período ou da capacidade antes de editar os intervalos.'); return; }
+    const archived = segmentDrafts[segment.shift?.id || ''] || Object.values(segmentDrafts).find(item => item.editor.key === segment.key);
+    if (coverageEditor && (coverageEditor.key === segment.key || activeId === segment.shift?.id)) {
+      setSplitEditorOpen(split);
+      return;
+    }
+    const source = panelAnchor || form;
+    const peer = panelRoster.find(item => item.doctorId && item.employmentType);
+    const vacancyDefaults = { employmentType: source.employmentType || peer?.employmentType, employerName: source.employerName || peer?.employerName };
+    const firstEntry: SegmentDraft | undefined = !coverageSession && panelAnchor && openedShift ? {
+      editor: { key: panelAnchor.id, initial: openedShift.doctorId ? openedShift : {
+        ...openedShift, employmentType: openedShift.employmentType || peer?.employmentType, employerName: openedShift.employerName || peer?.employerName,
+      }, original: openedShift, vacancy: openedShift.doctorId ? undefined : coveragePlanInterval(openedShift, coverageZone) },
+      form: panelAnchor.doctorId ? panelAnchor : { ...panelAnchor, ...vacancyDefaults },
+      preview: panelAnchor.doctorId && !unchangedAssignment && (!eligibilityReady || assignmentProblem || !proposedCoverage)
+        ? openedShift : panelAnchor, hourlyRate, agreement: agreementDraft,
+    } : undefined;
+    const outgoing = activeEntry || firstEntry;
+    if (outgoing) setSegmentDrafts(previous => ({ ...previous, [outgoing.form.id]: outgoing }));
+    if (!coverageSession && panelAnchor) setCoverageSession({ anchor: coverageRoot || panelAnchor, plan, fingerprint: ordinaryFingerprint });
+    const selected = segment.shift?.id === activeId && outgoing ? outgoing : archived;
+    const original = segment.shift && (siblings.find(item => item.id === segment.shift?.id) || (coverageRoot?.id === segment.shift.id ? coverageRoot : undefined));
+    const initial = coverageSegmentForm(segment, { ...source, ...vacancyDefaults }, coverageZone, segment.shift?.id || crypto.randomUUID());
+    const editor = selected?.editor || { key: segment.key, initial, original, vacancy: !initial.doctorId ? { start: segment.start, end: segment.end } : undefined };
+    setCoverageEditor({ ...editor, key: segment.key });
+    setOpenedShift(editor.original);
+    setForm(selected?.form || initial);
+    setHourlyRate(selected?.hourlyRate ?? (editor.original?.paymentAgreement?.hourly_rate_cents == null ? '' : formatShiftMoneyInput(editor.original.paymentAgreement.hourly_rate_cents)));
+    setAgreementDraft(selected?.agreement || initialAgreementDraft(editor.original));
+    setRequestRetroReason(false);
+    setRetroReason('');
+    setSectorNotice('');
+    setFormError('');
+    setSplitEditorOpen(split);
+  }
+
+  const panelScope = JSON.stringify(form ? { organization_id: form.organizationId, unit_id: form.unitId, sector_id: form.sectorId || null,
+    specialty: form.specialty || null, coverage_mode: form.coverageMode || 'regular' } : {});
+  const panelEligible = useCallback(async ({ shift, interval }: CoverageAssignment) => {
+    const client = createClient();
+    if (!client) throw new Error('Conexão indisponível.');
+    const { data, error } = await client.rpc('nv_eligible_shift_doctors', { candidate: {
+      ...JSON.parse(panelScope), id: shift?.id || '__coverage__', date: interval.date, start_time: interval.startTime, end_time: interval.endTime,
+    } });
+    if (error) throw error;
+    return (data || []) as string[];
+  }, [panelScope]);
+
+  async function saveCoverage() {
+    if (!panelAnchor || !plan || !plannedInterval || changedScope || recurrence !== 'once' || (existingPost && coveragePlan)) {
+      return setFormError('Confira o período do posto e salve a cobertura de uma única data.');
+    }
+    if (cashRequest) return setFormError('Salve a cobertura antes de registrar o pagamento.');
+    if (checkingCoverage) return;
+    const records = new Map<string, ShiftWrite>(coverageEdits.map(item => [item.id, item]));
+    for (const entry of changedDrafts) {
+      const { initial, original, vacancy } = entry.editor;
+      const value = entry.form;
+      if (!value.doctorId && !initial.doctorId && !original?.doctorId && value.status !== 'cancelled') continue;
+      const restriction = segmentRestriction(original);
+      if (restriction) return setFormError(restriction);
+      const span = coveragePlanInterval(value, coverageZone);
+      const limits = vacancy || plannedInterval;
+      if (!span || span.start < limits.start || span.end > limits.end) return setFormError('Confira os horários dos intervalos editados.');
+      const item: ShiftWrite = { ...value, employerName: value.employerName?.trim() || undefined };
+      if (!item.doctorId && initial.doctorId) {
+        if (!canDeleteSchedule) return setFormError('Seu perfil não pode remover alocações.');
+        if (original) records.set(item.id, { ...original, status: 'cancelled' });
+        else records.delete(item.id);
+        continue;
+      }
+      if (item.doctorId && !item.employmentType) return setFormError('Confirme a modalidade de contratação do intervalo editado.');
+      if (item.doctorId && item.employmentType === 'pj' && !item.employerName) return setFormError('Informe a empresa PJ do intervalo editado.');
+      if (item.doctorId && item.status !== 'cancelled' && item.employmentType === 'pj') {
+        if ((!original || coverageAssignmentChanged(original, item)) && !canEditFinancial) {
+          return setFormError('A confirmação de um acordo PJ exige permissão financeira.');
+        }
+        const initialHourly = original?.paymentAgreement?.hourly_rate_cents;
+        if (entry.hourlyRate.trim() && entry.hourlyRate !== (initialHourly == null ? '' : formatShiftMoneyInput(initialHourly))) {
+          const hourly = parseMoneyCents(entry.hourlyRate);
+          if (hourly == null || hourly > 9_999_999_999) return setFormError('Informe um valor por hora válido.');
+          item.coverageHourlyRateCents = hourly;
+          item.paymentFrequency = entry.agreement.frequency;
+        } else if (JSON.stringify(entry.agreement) !== JSON.stringify(initialAgreementDraft(original))) {
+          if (!rateQuery.ready) return setFormError('Aguarde a consulta dos valores padrão.');
+          const rate = chooseShiftRate(rateQuery.rates, item, formSector, doctors.find(doctor => doctor.id === item.doctorId)?.specialty);
+          try {
+            const needsAgreement = !original || original.employmentType !== 'pj' || original.doctorId !== item.doctorId;
+            item.agreement = needsAgreement ? buildRequiredPjAgreement(entry.agreement, rate) : buildAgreementSelection(entry.agreement, rate, original);
+          } catch (error) { return setFormError(error instanceof Error ? error.message : 'Confira o acordo financeiro.'); }
+        }
+      }
+      records.set(item.id, item);
+    }
+    const findOriginal = (id: string) => siblings.find(item => item.id === id) || (coverageRoot?.id === id ? coverageRoot : undefined);
+    const edits = [...records.values()].sort((left, right) => Number(Boolean(findOriginal(right.id)?.doctorId)) - Number(Boolean(findOriginal(left.id)?.doctorId)));
+    if (!edits.length) return;
+    const finalRoster = mergeCoverageDraft(initialRoster, edits);
+    if (!editCoverageSegment(plan, coverageZone, finalRoster)) return setFormError('O horário excede a capacidade contratada do posto.');
+    if (coverageConflicts(edits, finalRoster)) return setFormError('O médico já está escalado em parte desse intervalo.');
+    setCheckingCoverage(true);
+    try {
+      await editGuard.run(async () => {
+        const changedAssignments = edits.filter(item => item.status !== 'cancelled' && item.doctorId && coverageAssignmentChanged(findOriginal(item.id), item));
+        const eligible = await Promise.all(changedAssignments.map(item => panelEligible({ shift: item, interval: item })));
+        if (changedAssignments.some((item, index) => !eligible[index].includes(item.doctorId!))) {
+          return setFormError('Um médico selecionado não está elegível para o intervalo. Revise os horários e as alocações.');
+        }
+        if (await store.saveCoverageDraft(panelAnchor, plan, edits)) setForm(null);
+        else setFormError(useStore.getState().error || 'Não foi possível salvar a cobertura.');
+      });
+    } catch { setFormError('Não foi possível revalidar os médicos elegíveis. Tente novamente.'); }
+    finally { setCheckingCoverage(false); }
+  }
+
+  function coverageConflicts(changes: Shift[], roster: Shift[]) {
+    const postIds = new Set(roster.map(item => item.id));
+    const conflicts = [...store.shifts.filter(item => !postIds.has(item.id)), ...roster];
+    return changes.some(item => {
+      if (!item.doctorId || item.status === 'cancelled') return false;
+      const span = coveragePlanInterval(item, coverageZone);
+      return span && conflicts.some(other => {
+        if (other.id === item.id || other.doctorId !== item.doctorId || other.status === 'cancelled') return false;
+        const zone = other.coveragePost?.timeZone || store.units.find(unit => unit.id === other.unitId)?.timeZone || coverageZone;
+        const interval = coveragePlanInterval(other, zone);
+        return interval && span.start < interval.end && interval.start < span.end;
+      });
+    });
+  }
+
+  function applyCoverage(assignments: CoverageAssignment[], remove?: Shift) {
+    if (!form || !plan || !panelCanEdit) return 'Seu perfil não pode alterar a cobertura.';
+    const peer = panelRoster.find(item => item.doctorId && item.employmentType);
+    const template = { organizationId: form.organizationId, unitId: form.unitId, sectorId: form.sectorId, sector: form.sector,
+      specialty: form.specialty, type: form.type, coverageMode: form.coverageMode || 'regular', coverageReason: form.coverageReason,
+      employmentType: form.employmentType || peer?.employmentType, employerName: form.employerName || peer?.employerName };
+    const changes: Shift[] = [];
+    if (remove) {
+      const problem = coverageRestriction(remove);
+      if (problem) return problem;
+      if (!canDeleteSchedule) return 'Seu perfil não pode remover alocações.';
+      changes.push(!openedShift && remove.id === anchorId ? { ...remove, doctorId: undefined, status: 'open' } : { ...remove, status: 'cancelled' });
+    }
+    for (const { shift, doctorId, interval } of assignments) {
+      const problem = coverageRestriction(shift);
+      if (problem) return problem;
+      const original = shift || (!openedShift && !form.doctorId && !changes.length ? panelAnchor || undefined : undefined);
+      const item: Shift = { ...template, ...original, ...interval, id: original?.id || crypto.randomUUID(), doctorId,
+        employmentType: original?.employmentType || template.employmentType, employerName: original?.employerName || template.employerName,
+        status: statusAfterDoctorSelection(original?.status || 'open', original?.doctorId, doctorId || '') };
+      if (doctorId && (!item.employmentType || item.employmentType === 'pj' && !item.employerName?.trim())) {
+        if (operationalSection.current) operationalSection.current.open = true;
+        return item.employmentType ? 'Informe a empresa PJ em Dados operacionais.' : 'Confirme a modalidade de contratação em Dados operacionais.';
+      }
+      if (doctorId && item.employmentType === 'pj' && !canEditFinancial && coverageAssignmentChanged(original, item)) {
+        return 'A confirmação de um acordo PJ exige permissão financeira.';
+      }
+      changes.push(item);
+    }
+    const next = mergeCoverageDraft(panelRoster, changes);
+    if (!editCoverageSegment(plan, coverageZone, next)) return 'O horário excede a capacidade contratada do posto.';
+    if (coverageConflicts(changes, next)) {
+      return 'O médico já está escalado em parte desse intervalo.';
+    }
+    const selected = changes.find(item => item.id === activeId);
+    if (selected) setForm({ ...selected, id: form.id });
+    setCoverageEdits(mergeCoverageDraft(coverageEdits, changes).filter(item => item.status !== 'cancelled'
+      || item.id === openedShift?.id || siblings.some(saved => saved.id === item.id)));
+    setFormError('');
+    setSectorNotice('');
+    setSplitEditorOpen(false);
+  }
+  const formKind = form && (form.id ? coverageKindForShift(coverageRoot || form, formPeriods) : coverageKind);
+  const plannedClocks = plan && `${plan.startTime}–${plan.endTime}`;
+  const canSetCapacity = !coverageSession && canSaveShift && (!endedShift || Boolean(existingPost));
+  const showFinancialSection = canSeeFinancial && Boolean(cashEligible || showAgreementFields || openedShift);
+  const formTitle = coverageRoot
+    ? coverageRoot.doctorId ? 'Ficha do plantão' : coverageRoot.coveragePost || availableVacancies.ids.has(coverageRoot.id) ? 'Ficha da vaga' : 'Ficha do posto'
     : form?.coverageMode === 'adhoc' ? 'Novo plantão avulso' : form?.doctorId ? 'Novo plantão' : 'Nova vaga';
 
   async function refreshMasterShifts() {
@@ -655,7 +1009,11 @@ function Schedule({ params }: { params: URLSearchParams }) {
   }
 
   useScheduleDraft('week-copy', weekPreview ? JSON.stringify(weekPreview.clones.map(shift => shift.id)) : null, store.saving, () => setWeekPreview(null));
-  useScheduleDraft('shift', form ? JSON.stringify([form, coveragePlan, hourlyRate, agreementDraft, vacancyCount, recurrence, customWeekdays, repeatUntil]) : null, store.saving, () => { setForm(null); setRecurringPreview(null); });
+  const editorKey = coverageEditor?.key;
+  useEffect(() => { if (editorKey) coverageEditorHeading.current?.focus(); }, [editorKey]);
+  useScheduleDraft('shift', form ? coverageSession?.fingerprint || ordinaryFingerprint : null, store.saving || checkingCoverage, () => { setForm(null); setRecurringPreview(null); });
+  useScheduleDraft('coverage', form && coverageSession ? 'coverage' : null, store.saving || checkingCoverage,
+    () => { setSegmentDrafts({}); setCoverageEdits([]); setForm(null); }, hasCoverageChanges);
   const scopePicker = <ScheduleScopePicker units={units} sectors={sectors} unitId={unitId} selection={sectorSelection} compact={scopeReady}
     onSelectUnit={id => editGuard.transition(() => { setUnitId(id); setSectorId(''); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); })}
     onSelectSectors={value => editGuard.transition(() => { setSectorSelection(value); setDoctorId(''); setSpecialty(''); setFocusedTurn(null); })}/>;
@@ -862,78 +1220,129 @@ function Schedule({ params }: { params: URLSearchParams }) {
         try { await refreshMasterShifts(); }
         catch { notify.warning('Atualize a página para consultar a aprovação.'); }
       }}/>}
-    {form && <Dialog title={formTitle} headerActions={form.id && canPerformAction(store.currentUser, 'escala', 'history') ? (
-      <button type="button" onClick={() => setHistoryTarget({ shiftId: form.id })}
-        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-primary hover:bg-state-hover"><History size={15} aria-hidden="true"/>Ver histórico</button>
-    ) : undefined} onClose={() => !store.saving && editGuard.transition(() => setForm(null))} footer={<div className="flex justify-end gap-2"><button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving}>Cancelar</button><button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || cashBusy || !canSaveShift} title={editRestriction || undefined}>{store.saving ? <><LoaderCircle size={15} className="animate-spin"/>Salvando plantão…</> : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId ? 'Salvar plantão' : form.id ? 'Salvar vaga' : vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Criar vaga'}</button></div>}><form data-schedule-edit id="shift-entry-form" className="space-y-5" onSubmit={save} aria-busy={store.saving}>
-      {openedShift && <ShiftRecordSummary shift={openedShift} vacancyLabel={vacancyLabel} organization={activeOrganization?.name}
-        unit={units.find(item => item.id === openedShift.unitId)?.name}
-        sector={sectors.find(item => item.id === openedShift.sectorId)?.name}
-        doctor={doctors.find(item => item.id === openedShift.doctorId)?.name} />}
-      {existingPost?.cancelled && <p className="nv-feedback text-text-secondary">Posto cancelado</p>}
-      {plannedInterval && plan && !existingPost?.cancelled && <ShiftCoverageTimeline key={existingPost?.id || form.id} planned={plannedInterval} capacity={plan.capacity}
-        segments={draftSegments} doctors={doctors} timeZone={coverageZone} selectedId={form.id} preview={coveragePreview} canAllocate={canEditSchedule}
-        onOpen={existingPost && !coveragePreview ? item => {
-          if (item.id !== form.id) editGuard.transition(() => openShift(item));
-        } : undefined}/>}
-      {currentSegment?.coveragePost && !currentSegment.doctorId && currentSegment.status === 'open' && <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+    {form && <Dialog title={formTitle} closeDisabled={store.saving || cashBusy || checkingCoverage}
+      headerActions={<>
+        {canViewCoverage && <button type="button" ref={coverageToggle} aria-expanded={coveragePanelOpen}
+          aria-controls={coveragePanelOpen ? 'shift-coverage-panel' : undefined} onClick={() => setCoveragePanelOpen(!coveragePanelOpen)}
+          className="min-h-10 rounded-lg px-2 text-xs font-semibold text-primary hover:bg-state-hover">Cobertura</button>}
+        {openedShift && canPerformAction(store.currentUser, 'escala', 'history') && <button type="button" onClick={() => setHistoryTarget({ shiftId: openedShift.id })}
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-primary hover:bg-state-hover">
+          <History size={15} aria-hidden="true" className="hidden sm:block"/>Ver histórico</button>}
+      </>}
+      aside={canViewCoverage && coveragePanelOpen && plan && formKind ? <ShiftCoverageTimeline
+        result={panelCoverage || null} doctors={doctors} timeZone={coverageZone} kind={formKind}
+        selectedKey={coverageEditor?.key} selectedId={activeId}
+        onClose={() => { setCoveragePanelOpen(false); coverageToggle.current?.focus(); }}
+        canEdit={panelCanEdit} canAdd={panelCanAdd} busy={store.saving || cashBusy || checkingCoverage}
+        restriction={coverageRestriction} onSelect={selectCoverage}/> : undefined}
+      onClose={() => !store.saving && !cashBusy && !checkingCoverage && editGuard.transition(() => setForm(null))}
+      footer={<div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => setForm(null))} disabled={store.saving || cashBusy || checkingCoverage}>Cancelar</button>
+        <button type="submit" form="shift-entry-form" className="nv-button" disabled={store.saving || cashBusy || checkingCoverage || !(coverageSession ? hasCoverageChanges && canEditSchedule : canSaveShift)}
+          title={coverageSession ? undefined : editRestriction || undefined}>{store.saving || checkingCoverage ? <><LoaderCircle size={15} className="animate-spin" aria-hidden="true"/>Salvando…</>
+            : recurrenceDates.length > 1 ? 'Revisar recorrência' : form.doctorId || coverageSession ? 'Salvar plantão' : !form.id && vacancyCount > 1 ? `Criar ${vacancyCount} vagas` : 'Salvar vaga'}</button>
+      </div>}>
+      <form data-schedule-edit id="shift-entry-form" key={form.id || 'draft'} className="space-y-4" onSubmit={save} aria-busy={store.saving || checkingCoverage}
+        onInvalidCapture={event => { const section = (event.target as HTMLElement).closest('details'); if (section) section.open = true; }}>
+        {existingPost?.cancelled && <p className="nv-feedback text-text-secondary">Posto cancelado</p>}
+        {(contextualRestriction || !coverageEditor && editRestriction) && <p className="nv-feedback text-text-secondary">{contextualRestriction || editRestriction}</p>}
+        {activeCoverageProblem && <p role="status" className="nv-feedback text-danger">{activeCoverageProblem}</p>}
+        {assignmentProblem && <p role="status" className="nv-feedback text-danger">{assignmentProblem}</p>}
+        <fieldset disabled={!canSaveShift || store.saving || cashBusy || checkingCoverage} className="min-w-0 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="nv-label min-w-0">Unidade
+              <select className="nv-input" required value={form.unitId} disabled={Boolean(existingPost || coverageSession)} onChange={event => updateFormUnit(event.target.value)}>
+                <option value="">Selecione</option>{form.unitId && !formUnit && <option value={form.unitId}>{store.units.find(item => item.id === form.unitId)?.name || form.unitId}</option>}
+                {units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select>
+            </label>
+            <div className="min-w-0">
+              <label className="nv-label">Setor
+                <select className="nv-input" required={form.coverageMode !== 'adhoc'} value={form.sectorId || ''} disabled={Boolean(existingPost || coverageSession)} onChange={event => updateFormSector(event.target.value)}>
+                  <option value="">{form.coverageMode === 'adhoc' ? 'Sem setor' : 'Selecione'}</option>
+                  {form.sectorId && !formSector && <option value={form.sectorId}>{form.sector || 'Setor registrado'}</option>}
+                  {formSectors.map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+                </select>
+              </label>
+            </div>
+            {formSector ? <p className="text-xs text-text-secondary sm:col-span-2">{form.specialty || 'Setor sem especialidade principal.'}
+              {!formSector.primarySpecialty && canEditPermission(store.currentUser, 'unidades') && <Link className="ms-2 text-primary underline"
+                href={canViewPermission(store.currentUser, 'configuracoes') ? '/configuracoes#setores-especialidades' : `/unidades/${form.unitId}`}>Configurar especialidade</Link>}
+            </p> : <label className="nv-label sm:col-span-2">Especialidade
+              <select className="nv-input" required value={form.specialty || ''} disabled={Boolean(existingPost || coverageSession)} onChange={event => updateFormSpecialty(event.target.value)}>
+                <option value="">Selecione</option>
+                {form.specialty && !formSpecialties.includes(form.specialty) && <option value={form.specialty}>{form.specialty}</option>}
+                {formSpecialties.map(item => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {!form.id && formPeriods.length > 1 ? <label className="nv-label min-w-0">Período
+              <select className="nv-input" value={coverageKind} onChange={event => chooseCoverage(event.target.value as CoveragePeriodKind)}>
+                {formPeriods.map(period => <option key={period.kind} value={period.kind}>{coveragePeriodLabel(period.kind)}</option>)}
+              </select>
+            </label> : <div className="min-w-0">
+              <span className="nv-label">Período</span>
+              <p className="mt-2 flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+                {formKind === 'night' ? <Moon size={15} aria-hidden="true"/> : <Sun size={15} aria-hidden="true"/>}
+                {coveragePeriodLabel(formKind || 'day')}
+              </p>
+            </div>}
+            <label className="nv-label min-w-0">Data<input className="nv-input" type="date" required value={coverageSession?.plan.date || form.date} disabled={Boolean(coverageSession)}
+              onChange={event => {
+                const day = event.target.value;
+                setForm(current => current && { ...current, date: day });
+                if (coveragePlan && !existingPost) setCoveragePlan({ ...coveragePlan, date: day });
+                if (day && repeatUntil < day) setRepeatUntil(form.coverageMode === 'adhoc' ? endOfMonth(day) : addDays(day, 90));
+              }}/></label>
+          </div>
+          {coverageEditor && <h3 ref={coverageEditorHeading} tabIndex={-1} className="text-sm font-semibold outline-none">{form.doctorId ? 'Editar alocação' : 'Preencher vaga'}</h3>}
+          <label className="nv-label">Médico<select className="nv-input" disabled={!eligibilityReady} value={form.doctorId || ''} onChange={event => updateDoctor(event.target.value)}>
+            <option value="" disabled={Boolean(coverageEditor?.initial.doctorId && !canDeleteSchedule)}>Deixar como vaga aberta</option>
+            {form.doctorId && !eligibleDoctors.some(item => item.id === form.doctorId) && <option value={form.doctorId} disabled>{doctors.find(item => item.id === form.doctorId)?.name || 'Médico selecionado'}</option>}
+            {eligibleDoctors.map(doctor => { const compliance = doctorDocumentState.get(doctor.id); const recorded = unchangedAssignment && form.doctorId === doctor.id && !eligibility?.ids.includes(doctor.id); return <option key={doctor.id} value={doctor.id} disabled={recorded}>{doctor.name}{recorded ? ' · responsável registrado' : compliance?.warning ? ' · atenção documental' : ''}</option>; })}
+          </select>{!eligibilityReady && <span role="status" className="mt-2 block text-xs text-text-muted">{eligibility?.key === eligibilityKey && eligibility.error ? <>{eligibility.error}<button type="button" className="ml-2 text-primary underline" onClick={() => setEligibilityRevision(value => value + 1)}>Tentar novamente</button></> : 'Consultando médicos elegíveis…'}</span>}{eligibilityReady && !eligibleDoctors.length && !assignmentProblem && <span className="mt-2 block text-xs font-normal text-text-muted">Nenhum médico elegível para este intervalo.</span>}{formDoctorChanged && !assignmentProblem && <span className="mt-1.5 block text-xs font-normal text-warning">O novo médico ficará aguardando confirmação após salvar.</span>}</label>
+          {form.doctorId && doctorDocumentState.get(form.doctorId)?.warning && <div className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-xs ${assignmentProblem && doctorDocumentState.get(form.doctorId)?.blocked ? 'border-danger/30 bg-danger/5 text-danger' : 'border-warning/30 bg-warning/5 text-warning'}`}><span className="flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true"/>Confira as pendências documentais do médico.</span><Link href={`/documentos/${form.doctorId}`} className="shrink-0 font-semibold underline">Abrir pasta</Link></div>}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="nv-label min-w-0">{form.doctorId ? 'Início do médico' : 'Início da vaga'}
+              <input className="nv-input" type="time" required value={form.startTime} onChange={event => updateCoverageClock('startTime', event.target.value)}/>
+            </label>
+            <label className="nv-label min-w-0">{form.doctorId ? 'Fim do médico' : 'Fim da vaga'}
+              <input className="nv-input" type="time" required value={form.endTime} onChange={event => updateCoverageClock('endTime', event.target.value)}/>
+            </label>
+          </div>
+          {coverageEditor && form.doctorId && draftInterval && !activeCoverageProblem && (splitEditorOpen ?
+            <CoverageSplitEditor key={form.id} shift={form} span={draftInterval} timeZone={coverageZone} doctors={doctors}
+              eligible={panelEligible} onApply={applyCoverage} onBack={() => setSplitEditorOpen(false)}/>
+            : <div className="flex flex-wrap gap-2">
+              {panelCanAdd && coverageMinutes(draftInterval) > 1 && <button type="button" className="nv-button-secondary min-h-10" onClick={() => setSplitEditorOpen(true)}>Dividir plantão</button>}
+              {canDeleteSchedule && <button type="button" className="min-h-10 px-2 text-sm font-medium text-danger" onClick={() => {
+                const failure = applyCoverage([], form);
+                if (failure) setFormError(failure);
+              }}>Remover alocação</button>}
+            </div>)}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary empty:hidden">
+            {plannedClocks && <span className="tabular-nums">Posto previsto {plannedClocks}</span>}
+            {form.endTime <= form.startTime && (form.endTime < form.startTime || writePlan || existingPost) && <span>Termina no dia seguinte</span>}
+          </div>
+          {sectorNotice && <p role="status" className="text-xs text-text-secondary">{sectorNotice}</p>}
+        </fieldset>
+        {currentSegment?.coveragePost && !currentSegment.doctorId && currentSegment.status === 'open' && <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="text-text-secondary">{currentSegment.coveragePost.published ? 'Publicada no Portal Médico' : 'Publicação pendente no Portal Médico'}</span>
         {canEditSchedule && <button type="button" className="min-h-9 rounded px-2 font-semibold text-primary hover:bg-state-hover"
-          disabled={store.saving || coveragePreview} onClick={() => void editGuard.run(async () => {
+          disabled={store.saving || coveragePreview || hasCoverageChanges} onClick={() => void editGuard.run(async () => {
             const ok = await store.publishCoverage(currentSegment, !currentSegment.coveragePost?.published);
             if (!ok) setFormError(useStore.getState().error || 'Não foi possível atualizar a publicação.');
+            else if (coverageSession) {
+              const anchor = useStore.getState().shifts.find(item => item.id === coverageSession.anchor.id);
+              if (anchor) setCoverageSession({ ...coverageSession, anchor });
+            }
           })}>{currentSegment.coveragePost.published ? 'Retirar publicação' : 'Publicar vaga'}</button>}
       </div>}
-      <div className="flex flex-wrap gap-2 empty:hidden">
-      {form.id && canApproveSchedule && <button type="button" className="nv-button-secondary" onClick={() => editGuard.transition(() => { setSelectionShift(form); setForm(null); })}>Candidaturas e trocas</button>}
-      {openedShift?.doctorId && openedShift.approvalSource === 'pending' && openedShift.status !== 'cancelled'
-        && canEditSchedule && canPerformAction(store.currentUser, 'escala', 'approve_shift') && <button type="button"
-          className="nv-button-secondary" onClick={() => setConfirmAdministrative(openedShift)}>Aprovar pelo administrativo</button>}
-      {canDeleteSchedule && existingPost && !existingPost.cancelled && !coveragePreview && <button type="button" className="min-h-10 rounded-lg px-3 text-sm font-medium text-danger hover:bg-danger/5"
-        onClick={() => setCancelCoverageOpen(true)}>Cancelar posto</button>}
-      </div>
-      {form.id && <MasterShiftOrigin ids={[form.id]} date={form.date} canEdit={canEditSchedule && canCreateSchedule} onEditRule={editMasterRule} editingOccurrence/>}
-      {editRestriction && <p className="nv-feedback text-text-secondary">{editRestriction}</p>}
-      {openedShift && endedShift && canSaveShift && <label className="nv-label">Justificativa da edição retroativa
-        <textarea className="nv-input" required minLength={3} maxLength={1000} value={retroReason} onChange={event => setRetroReason(event.target.value)}/>
-      </label>}
-      <fieldset disabled={!canSaveShift} className="min-w-0 space-y-5">
-      {canSaveShift && <div className="space-y-2 rounded-lg border border-border p-3">
-        <label className="flex min-h-9 items-center gap-2 text-sm font-medium">
-          <input type="checkbox" checked={Boolean(coveragePlan)} onChange={event => {
-            const source = existingPost || openedShift || form;
-            setCoveragePlan(event.target.checked ? { date: source.date, startTime: source.startTime, endTime: source.endTime, capacity: existingPost?.capacity || 1 } : null);
-            if (event.target.checked) { setRecurrence('once'); setVacancyCount(1); }
-          }}/>{existingPost ? 'Editar período previsto' : 'Fracionar cobertura'}
-        </label>
-        {coveragePlan && <div className="grid gap-2 sm:grid-cols-3">
-          {openedShift && !existingPost ? <p className="self-end pb-2 text-xs text-text-secondary sm:col-span-2">Previsto {coveragePlan.startTime}–{coveragePlan.endTime}</p> : <>
-            <label className="nv-label">Início previsto<input className="nv-input" type="time" required value={coveragePlan.startTime}
-              onChange={event => setCoveragePlan({ ...coveragePlan, startTime: event.target.value })}/></label>
-            <label className="nv-label">Fim previsto<input className="nv-input" type="time" required value={coveragePlan.endTime}
-              onChange={event => setCoveragePlan({ ...coveragePlan, endTime: event.target.value })}/></label>
-          </>}
-          <label className="nv-label">Médicos simultâneos<input className="nv-input" type="number" min={1} max={20} required value={coveragePlan.capacity}
-            onChange={event => setCoveragePlan({ ...coveragePlan, capacity: Number(event.target.value) })}/></label>
-          {coveragePlan.startTime === coveragePlan.endTime && <p className="text-xs text-text-secondary sm:col-span-3">O posto termina no mesmo horário do dia seguinte.</p>}
-        </div>}
-      </div>}
-      {form.coverageMode === 'adhoc' && <section className="space-y-3 border-l-2 border-primary pl-3"><p className="text-sm font-semibold text-primary">Cobertura temporária</p><p className="text-xs leading-5 text-text-muted">Vale apenas para as datas cadastradas. Não altera os postos fixos do setor e não entra na cópia de semanas.</p><label className="nv-label">Motivo da cobertura<input className="nv-input" required minLength={3} maxLength={200} placeholder="Ex.: Férias de profissional CLT em outubro" value={form.coverageReason || ''} readOnly={Boolean(existingPost)} onChange={event => setForm({ ...form, coverageReason: event.target.value })} /></label></section>}<div className="grid gap-4 sm:grid-cols-2">
-        <label className="nv-label">Unidade<select aria-label="Unidade" className="nv-input" required value={form.unitId} disabled={Boolean(existingPost)} onChange={event => updateFormUnit(event.target.value)}><option value="">Selecione</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
-        <div className="sm:col-span-2"><div className="flex items-end gap-2">
-          <label className="nv-label min-w-0 flex-1">Setor<select aria-label="Setor" className="nv-input" required={form.coverageMode !== 'adhoc'} value={form.sectorId || ''} disabled={Boolean(existingPost)} onChange={event => updateFormSector(event.target.value)}><option value="">{form.coverageMode === 'adhoc' ? 'Sem setor (avulso)' : 'Selecione'}</option>{formSectors.map(sector => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label>
-          {canCreateSector && !existingPost && <button type="button" disabled={!formUnit || store.saving} className="nv-button-secondary shrink-0" onClick={() => { setSectorNotice(''); setSectorEditorOpen(true); }}><Plus size={15}/>Novo setor</button>}
-        </div>
-        {formUnit && !formSectors.length && <p className="mt-2 text-xs text-text-muted">Nenhum setor ativo atende ao contexto selecionado.</p>}
-        {sectorNotice && <p role="status" className="mt-2 text-xs text-text-muted">{sectorNotice}</p>}
-        </div>
-        <label className="nv-label sm:col-span-2">Especialidade{formSector ? <>
-          <input aria-label="Especialidade" className="nv-input" readOnly value={form.specialty || ''} placeholder="Vinculação pendente" />
-          <span className="mt-1.5 block text-xs font-normal text-text-muted">{formSector.primarySpecialty ? 'Especialidade definida pelo setor.' : 'Configure a especialidade deste setor antes de criar novos plantões.'}</span>
-          {!formSector.primarySpecialty && canEditPermission(store.currentUser, 'unidades') && <Link className="mt-2 inline-block text-xs text-primary underline" href={canViewPermission(store.currentUser, 'configuracoes') ? '/configuracoes#setores-especialidades' : `/unidades/${form.unitId}`}>Configurar setores e especialidades</Link>}
-        </> : <select aria-label="Especialidade" className="nv-input" required value={form.specialty || ''} disabled={Boolean(existingPost)} onChange={event => updateFormSpecialty(event.target.value)}><option value="">Selecione</option>{formSpecialties.map(item => <option key={item} value={item}>{item}</option>)}</select>}</label>
-      </div>{!existingPost && formPeriods.length > 0 && <fieldset><legend className="nv-label">Período de cobertura</legend><div className="grid gap-2 sm:grid-cols-2">{formPeriods.map(period => { const Icon = period.kind === 'day' ? Sun : Moon; const selected = coverageKind === period.kind; return <button key={period.kind} type="button" onClick={() => chooseCoverage(period.kind)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${selected ? 'border-primary bg-primary/10 ring-1 ring-primary/20' : 'border-border hover:bg-state-hover'}`}><Icon size={18} className={period.kind === 'day' ? 'text-warning' : 'text-primary'}/><span className="min-w-0"><strong className="block text-sm text-text-primary">{coveragePeriodLabel(period.kind)}</strong><span className="text-xs tabular-nums text-text-muted">{period.startTime}–{period.endTime} · {period.requiredDoctors} médico{period.requiredDoctors === 1 ? '' : 's'}</span></span></button>; })}</div></fieldset>}<div><p className="nv-label">Data e horário</p><div className="grid gap-4 sm:grid-cols-3"><label className="nv-label font-normal">Data<input className="nv-input" type="date" required value={form.date} onChange={event => { setForm({ ...form, date: event.target.value }); if (coveragePlan && !form.id) setCoveragePlan({ ...coveragePlan, date: event.target.value }); if (repeatUntil < event.target.value) setRepeatUntil(form.coverageMode === 'adhoc' ? endOfMonth(event.target.value) : addDays(event.target.value, 90)); }}/></label><label className="nv-label font-normal">Início<input className="nv-input" type="time" required value={form.startTime} onChange={event => setForm({ ...form, startTime: event.target.value })}/></label><label className="nv-label font-normal">Fim<input className="nv-input" type="time" required value={form.endTime} onChange={event => setForm({ ...form, endTime: event.target.value })}/></label></div><p className="mt-1.5 text-xs text-text-muted">O período preenche o horário padrão. Você pode ajustar este médico sem alterar o setor.</p></div><label className="nv-label">{form.id ? 'Médico deste plantão' : 'Médico'}<select className="nv-input" disabled={!eligibilityReady} value={form.doctorId || ''} onChange={event => updateDoctor(event.target.value)}><option value="">Deixar como vaga aberta</option>{eligibleDoctors.map(doctor => { const compliance = doctorDocumentState.get(doctor.id); const recorded = unchangedAssignment && form.doctorId === doctor.id && !eligibility?.ids.includes(doctor.id); return <option key={doctor.id} value={doctor.id} disabled={recorded}>{doctor.name} · {form.specialty}{recorded ? ' · responsável registrado' : compliance?.warning ? ' · atenção documental' : ''}</option>; })}</select>{!eligibilityReady && <span role="status" className="mt-2 block text-xs text-text-muted">{eligibility?.key === eligibilityKey && eligibility.error ? <>{eligibility.error}<button type="button" className="ml-2 text-primary underline" onClick={() => setEligibilityRevision(value => value + 1)}>Tentar novamente</button></> : 'Consultando médicos elegíveis…'}</span>}{eligibilityReady && !eligibleDoctors.length && <span className="mt-2 block text-xs font-normal text-text-muted">Nenhum médico elegível encontrado para este setor. Você pode deixar a vaga em aberto.</span>}{formDoctorChanged && <span className="mt-1.5 block text-xs font-normal text-warning">O novo médico ficará aguardando confirmação após salvar.</span>}</label>{form.doctorId && doctorDocumentState.get(form.doctorId)?.warning && <div className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-xs ${doctorDocumentState.get(form.doctorId)?.blocked ? 'border-danger/30 bg-danger/5 text-danger' : 'border-warning/30 bg-warning/5 text-warning'}`}><span className="flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0"/>Confira as pendências na pasta documental. As autorizações aplicáveis ao plantão são verificadas ao salvar.</span><Link href={`/documentos/${form.doctorId}`} className="shrink-0 font-semibold underline">Abrir pasta</Link></div>}{!form.id && !coveragePlan && <section className="rounded-xl border border-border bg-surface-muted/35 p-4"><div className="flex items-start gap-3"><Repeat2 size={18} className="mt-0.5 shrink-0 text-primary"/><div><h3 className="text-sm font-semibold">{form.coverageMode === 'adhoc' ? 'Datas da cobertura' : 'Repetição automática'}</h3><p className="mt-1 text-xs text-text-muted">Revise a prévia antes de salvar.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="nv-label">Frequência<select aria-label="Frequência" className="nv-input" value={recurrence} onChange={event => setRecurrence(event.target.value as ShiftRecurrence)}><option value="once">Somente esta data</option><option value="daily">Todos os dias</option><option value="weekdays">Segunda a sexta</option><option value="every_other_day">12x36</option><option value="custom">Personalizado</option><option value="weekly">Semanal</option><option value="fortnightly">Quinzenal</option><option value="monthly">Mensal</option></select></label>{recurrence !== 'once' && <label className="nv-label">Repetir até<input className="nv-input" type="date" min={form.date} required value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>{recurrence === "custom" && <fieldset className="mt-3"><legend className="text-xs font-medium text-text-secondary">Dias da semana</legend><div className="mt-2 flex flex-wrap gap-1">{[["Dom", 0], ["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6]].map(([label, value]) => <button key={value} type="button" aria-pressed={customWeekdays.includes(Number(value))} onClick={() => setCustomWeekdays(days => days.includes(Number(value)) ? days.filter(day => day !== Number(value)) : [...days, Number(value)])} className={`min-h-9 rounded-lg border px-2.5 text-xs font-medium ${customWeekdays.includes(Number(value)) ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary"}`}>{label}</button>)}</div></fieldset>}{recurrence !== "once" && recurrenceDates.length > 0 && <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-text-secondary"><strong className="text-text-primary">{recurrenceDates.length * (form.doctorId ? 1 : vacancyCount)} postos em {recurrenceDates.length} datas:</strong> {recurrenceDescription(form.date, recurrence)}, das {form.startTime} às {form.endTime}, até {new Date(repeatUntil + 'T12:00:00').toLocaleDateString('pt-BR')}.</p>}</section>}{!form.doctorId && !form.id && !coveragePlan && <label className="nv-label">Quantidade de vagas<input className="nv-input" type="number" min={1} max={20} value={vacancyCount} onChange={event => setVacancyCount(Math.max(1, Number(event.target.value)))}/></label>}
-      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <ShiftFormSection title="Dados operacionais" sectionRef={operationalSection}>
+            <fieldset disabled={!canSaveShift || store.saving || cashBusy} className="min-w-0 space-y-3">
+              <div className="grid gap-4 sm:grid-cols-2">
         <label className="nv-label">{form.doctorId ? 'Modalidade de contratação' : 'Modalidade de contratação prevista'}
           <select aria-label={form.doctorId ? 'Modalidade de contratação' : 'Modalidade de contratação prevista'} className="nv-input" value={form.employmentType || ''} disabled={openedShift?.paymentStatus === 'paid'}
             required={!openedShift || Boolean(openedShift.employmentType || (form.doctorId && form.doctorId !== openedShift.doctorId))}
@@ -954,11 +1363,38 @@ function Schedule({ params }: { params: URLSearchParams }) {
           value={form.employerName || ''} onChange={event => setForm({ ...form, employerName: event.target.value })}/>
         <datalist id="employer-options">{employers.map(item => <option key={item} value={item}/>)}</datalist>
       </label>}
-      {form.employmentType && form.employmentType !== 'pj' && <p className="text-sm text-text-muted">Pagamento administrado pelo vínculo empregatício, fora dos repasses PJ.</p>}
       {newPjAgreement && !canEditFinancial && <p className="text-sm text-warning">A confirmação do valor PJ exige permissão financeira.</p>}
-      <div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Modalidade<select className="nv-input" value={form.type} disabled={Boolean(existingPost)} onChange={event => setForm({ ...form, type: event.target.value as Shift['type'] })}>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{form.endTime < form.startTime && <p className="self-end pb-3 text-xs text-primary">Termina no dia seguinte.</p>}</div><label className="nv-label">Observações<textarea className="nv-input" rows={2} maxLength={1000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
-      </fieldset>
-      {cashEligible && <section className="space-y-3">
+      <div className="grid gap-4 sm:grid-cols-2"><label className="nv-label">Modalidade assistencial<select className="nv-input" value={form.type} disabled={Boolean(existingPost)} onChange={event => setForm({ ...form, type: event.target.value as Shift['type'] })}>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><label className="nv-label">Observações<textarea className="nv-input" rows={2} maxLength={1000} value={form.notes || ''} onChange={event => setForm({ ...form, notes: event.target.value })}/></label>
+              <p className="text-xs text-text-secondary">Cobertura {form.coverageMode === 'adhoc' ? 'avulsa' : 'regular'}</p>
+              {form.coverageMode === 'adhoc' && <label className="nv-label">Motivo da cobertura
+                <input className="nv-input" required minLength={3} maxLength={200} value={form.coverageReason || ''} readOnly={Boolean(existingPost)}
+                  onChange={event => setForm({ ...form, coverageReason: event.target.value })}/>
+              </label>}
+              {canCreateSector && !existingPost && <button type="button" disabled={!formUnit || store.saving} className="text-sm font-medium text-primary underline"
+                onClick={() => { setSectorNotice(''); setSectorEditorOpen(true); }}>Novo setor</button>}
+              {canSetCapacity && <div className="grid gap-3 sm:grid-cols-3">
+                {(!openedShift || existingPost) && <>
+                  <label className="nv-label">Início previsto<input className="nv-input" type="time" value={plan?.startTime ?? form.startTime}
+                    onChange={event => setCoveragePlan({ ...(plan || { date: form.date, startTime: form.startTime, endTime: form.endTime, capacity: 1 }), startTime: event.target.value })}/></label>
+                  <label className="nv-label">Fim previsto<input className="nv-input" type="time" value={plan?.endTime ?? form.endTime}
+                    onChange={event => setCoveragePlan({ ...(plan || { date: form.date, startTime: form.startTime, endTime: form.endTime, capacity: 1 }), endTime: event.target.value })}/></label>
+                </>}
+                <label className="nv-label">Médicos simultâneos<input className="nv-input" type="number" min={1} max={20} value={Number.isNaN(plan?.capacity) ? '' : plan?.capacity ?? 1}
+                  onChange={event => setCoveragePlan({ ...(plan || { date: form.date, startTime: form.startTime, endTime: form.endTime, capacity: 1 }), capacity: event.target.valueAsNumber })}/></label>
+              </div>}
+              {!form.id && <div className="space-y-2">
+                <div className="grid gap-3 sm:grid-cols-2"><label className="nv-label">Frequência<select aria-label="Frequência" className="nv-input" value={recurrence} onChange={event => setRecurrence(event.target.value as ShiftRecurrence)}><option value="once">Somente esta data</option><option value="daily">Todos os dias</option><option value="weekdays">Segunda a sexta</option><option value="every_other_day">12x36</option><option value="custom">Personalizado</option><option value="weekly">Semanal</option><option value="fortnightly">Quinzenal</option><option value="monthly">Mensal</option></select></label>{recurrence !== 'once' && <label className="nv-label">Repetir até<input className="nv-input" type="date" min={form.date} required value={repeatUntil} onChange={event => setRepeatUntil(event.target.value)}/></label>}</div>{recurrence === "custom" && <fieldset className="mt-3"><legend className="text-xs font-medium text-text-secondary">Dias da semana</legend><div className="mt-2 flex flex-wrap gap-1">{[["Dom", 0], ["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6]].map(([label, value]) => <button key={value} type="button" aria-pressed={customWeekdays.includes(Number(value))} onClick={() => setCustomWeekdays(days => days.includes(Number(value)) ? days.filter(day => day !== Number(value)) : [...days, Number(value)])} className={`min-h-9 rounded-lg border px-2.5 text-xs font-medium ${customWeekdays.includes(Number(value)) ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary"}`}>{label}</button>)}</div></fieldset>}{recurrence !== "once" && recurrenceDates.length > 0 && <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-text-secondary"><strong className="text-text-primary">{recurrenceDates.length * (form.doctorId ? 1 : vacancyCount)} postos em {recurrenceDates.length} datas:</strong> {recurrenceDescription(form.date, recurrence)}, das {form.startTime} às {form.endTime}, até {new Date(repeatUntil + 'T12:00:00').toLocaleDateString('pt-BR')}.</p>}
+                {!form.doctorId && <label className="nv-label">Quantidade de vagas<input className="nv-input" type="number" min={1} max={20} value={vacancyCount}
+                  onChange={event => setVacancyCount(Math.max(1, Number(event.target.value)))}/></label>}
+              </div>}
+            </fieldset>
+            {form.id && <MasterShiftOrigin ids={[form.id]} date={form.date} canEdit={canEditSchedule && canCreateSchedule}
+              onEditRule={editMasterRule} editingOccurrence/>}
+            {canDeleteSchedule && existingPost && !existingPost.cancelled && !coveragePreview && <button type="button"
+              className="min-h-10 rounded text-sm font-medium text-danger hover:underline" onClick={() => setCancelCoverageOpen(true)}>Cancelar posto</button>}
+          </ShiftFormSection>
+          {showFinancialSection && <ShiftFormSection title="Dados financeiros" sectionRef={financialSection}>
+            {cashEligible && <section className="space-y-3">
         <label className="nv-label flex items-center gap-2">
           <input type="checkbox" checked={Boolean(cashRequest)}
             onChange={event => setCashRequest(event.target.checked ? crypto.randomUUID() : '')}/>
@@ -972,7 +1408,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
         <ShiftPaymentHistory key={openedShift.id} shiftId={openedShift.id} />
         {openedShift.employmentType === 'pj' && (openedShift.doctorId || openedShift.paymentAgreement) && <Link className="nv-button-secondary" href={'/financeiro?' + new URLSearchParams({ period: 'all', shiftId: openedShift.id })}>Abrir ficha no financeiro</Link>}
       </>}
-      {plan && showAgreementFields && form.doctorId && <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
+      {(writePlan || existingPost) && (!coverageEditor || coverageEditor.original) && showAgreementFields && form.doctorId && <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
         <label className="nv-label">Valor por hora (R$)
           <input className="nv-input" value={hourlyRate} inputMode="decimal" placeholder="Opcional"
             onChange={event => setHourlyRate(event.target.value)}/>
@@ -991,7 +1427,39 @@ function Schedule({ params }: { params: URLSearchParams }) {
           <p>{rateQuery.error || 'Consultando valores padrão…'}</p>
           {rateQuery.error && <button type="button" className="text-primary underline" onClick={rateQuery.reload}>Tentar novamente</button>}
         </div>)}
-      {formError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{formError}</p>}</form></Dialog>}
+          </ShiftFormSection>}
+          {openedShift && canApproveSchedule && <ShiftFormSection title="Candidaturas e trocas">
+            <button type="button" className="min-h-10 text-sm font-medium text-primary underline"
+              onClick={() => editGuard.transition(() => { setSelectionShift(openedShift || form); setForm(null); })}>Ver candidaturas e trocas</button>
+          </ShiftFormSection>}
+          {openedShift && <ShiftFormSection title="Intervalos e aprovações">
+            {!openedShift.coveragePost && <p className="text-sm text-text-secondary">{statusLabels[openedShift.status]}</p>}
+            {openedShift.doctorId && openedShift.approvalSource && <p className="text-sm text-text-secondary">{shiftApprovalLabels[openedShift.approvalSource]}</p>}
+            {openedShift.approvalSource === 'automatic' && <p className="text-xs text-text-secondary">{automaticShiftApprovalMessage}</p>}
+            {siblings.length > 1 && <ul className="divide-y divide-border text-sm">
+              {siblings.filter(item => item.status !== 'cancelled' && item.id !== form.id).sort((a,b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)).map(item =>
+                <li key={item.id}><button type="button" className="flex min-h-10 w-full flex-wrap justify-between gap-x-2 rounded py-2 text-left hover:bg-state-hover"
+                  onClick={() => {
+                    const segment = panelCoverage && panelCoverage.segments.find(candidate => candidate.shift?.id === item.id);
+                    if (segment) selectCoverage(segment);
+                  }}>
+                  <span>{item.doctorId ? doctors.find(doctor => doctor.id === item.doctorId)?.name || 'Médico escalado' : 'Vaga aberta'}</span>
+                  <span className="tabular-nums text-text-secondary">{item.startTime}–{item.endTime}{item.approvalSource && item.doctorId && ` · ${shiftApprovalLabels[item.approvalSource]}`}</span>
+                </button></li>)}
+            </ul>}
+            {openedShift.doctorId && openedShift.approvalSource === 'pending' && openedShift.status !== 'cancelled'
+              && canEditSchedule && canPerformAction(store.currentUser, 'escala', 'approve_shift') && <button type="button"
+              className="min-h-10 text-sm font-medium text-primary underline" onClick={() => setConfirmAdministrative(openedShift)}>Aprovar pelo administrativo</button>}
+          </ShiftFormSection>}
+        </div>
+        {requestRetroReason && endedShift && canSaveShift && <label className="nv-label">Justificativa da edição retroativa
+          <span className="mt-1 block text-xs font-normal text-text-secondary">O plantão já terminou. A justificativa será registrada no histórico.</span>
+          <textarea className="nv-input" required rows={2} minLength={3} maxLength={1000} value={retroReason}
+            onChange={event => setRetroReason(event.target.value)}/>
+        </label>}
+        {formError && <p role="alert" className="nv-feedback text-danger">{formError}</p>}
+      </form>
+    </Dialog>}
     {cancelCoverageOpen && openedShift?.coveragePost && <Dialog variant="confirmation" confirmationTone="danger" title="Cancelar posto previsto?" onClose={() => setCancelCoverageOpen(false)} closeDisabled={store.saving}
       footer={<div className="flex flex-wrap justify-end gap-2">
         <button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setCancelCoverageOpen(false)}>Voltar</button>

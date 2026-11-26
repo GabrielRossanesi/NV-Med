@@ -8,12 +8,13 @@ import type { DoctorBanking } from '@/lib/doctorBanking';
 import { notify } from '@/lib/notifications';
 import { defaultAccountPreferences, type AccountPreferences } from '@/lib/account';
 import { createClient } from '@/lib/supabase/client';
+import { coverageSaveMessage } from '@/lib/fractionalCoverage';
 import { doctorStatusActions } from '@/lib/doctorStatus';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
-type SaveFeedback = { success?: string | false; description?: string; inlineError?: boolean; withinDialog?: boolean };
+type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean };
 
 interface NVMedState {
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
@@ -30,9 +31,10 @@ interface NVMedState {
   updateUnit: (unit: Unit, feedback?: SaveFeedback) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
   addSector: (sector: Omit<Sector, 'id' | 'organizationId'>, finance?: SectorFinanceDefaults, feedback?: SaveFeedback) => Promise<Sector | null>;
   updateSector: (sector: Sector, finance?: SectorFinanceDefaults) => Promise<boolean>; deleteSector: (id: string) => Promise<boolean>;
-  addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>) => Promise<boolean>;
+  addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>, draftId?: string) => Promise<boolean>;
   addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[], feedback?: SaveFeedback) => Promise<boolean>;
   updateShift: (shift: ShiftWrite) => Promise<boolean>;
+  saveCoverageDraft: (...input: Parameters<typeof cloud.saveCoverageDraftToSupabase>) => Promise<boolean>;
   publishCoverage: (shift: Shift, enabled: boolean) => Promise<boolean>;
   cancelCoverage: (shift: Shift) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
@@ -72,7 +74,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     const finishSaving = notify.saving();
     try {
       await work();
-      if (success) notify.success(success, { description, withinDialog });
+      if (success) notify.success(typeof success === 'function' ? success() : success, { description, withinDialog });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível salvar. Tente novamente.';
@@ -183,26 +185,47 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     },
     updateSector: (sector, finance) => commit(async () => { await cloud.saveSectorToSupabase(sector, false, finance); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }, { success: 'Setor atualizado.', inlineError: true }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
-    addShift: input => commit(async () => {
-      const shift = { ...input, id: input.cashPayment?.id || crypto.randomUUID(), organizationId: orgId() };
-      const saved = input.coveragePlan ? await cloud.saveFractionalShiftToSupabase(shift) : [await cloud.saveShiftToSupabase(shift)];
-      const savedIds = new Set(saved.map(item => item.id));
-      set({ shifts: [...get().shifts.filter(item => !savedIds.has(item.id)), ...saved] });
-    }, { success: 'Plantão cadastrado.', inlineError: true }),
+    addShift: (input, draftId) => {
+      let message = input.doctorId ? 'Plantão cadastrado.' : 'Vaga cadastrada.';
+      return commit(async () => {
+        const shift = { ...input, id: input.cashPayment?.id || draftId || crypto.randomUUID(), organizationId: orgId() };
+        const saved = input.coveragePlan ? await cloud.saveFractionalShiftToSupabase(shift) : [await cloud.saveShiftToSupabase(shift)];
+        const savedIds = new Set(saved.map(item => item.id));
+        const previous = get().shifts;
+        message = coverageSaveMessage(message, saved, previous);
+        set({ shifts: [...previous.filter(item => !savedIds.has(item.id)), ...saved] });
+      }, { success: () => message, inlineError: true });
+    },
     addShifts: (inputs, feedback) => commit(async () => {
       const saved = await cloud.saveShiftsToSupabase(inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })));
       set({ shifts: [...get().shifts, ...saved] });
     }, { success: 'Plantões cadastrados.', inlineError: true, ...feedback }),
-    updateShift: shift => commit(async () => {
-      if (shift.coveragePlan || shift.coveragePost) {
-        const saved = await cloud.saveFractionalShiftToSupabase(shift);
-        const id = shift.coveragePost?.id || shift.id;
-        set({ shifts: [...get().shifts.filter(item => item.id !== shift.id && item.coveragePost?.id !== id), ...saved] });
-        return;
-      }
-      const saved = await cloud.saveShiftToSupabase(shift);
-      set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
-    }, { success: 'Plantão atualizado.', inlineError: true }),
+    updateShift: shift => {
+      let message = shift.doctorId ? 'Plantão atualizado.' : 'Vaga atualizada.';
+      return commit(async () => {
+        if (shift.coveragePlan || shift.coveragePost) {
+          const saved = await cloud.saveFractionalShiftToSupabase(shift);
+          const id = shift.coveragePost?.id || shift.id;
+          const previous = get().shifts;
+          message = coverageSaveMessage(message, saved, previous);
+          set({ shifts: [...previous.filter(item => item.id !== shift.id && item.coveragePost?.id !== id), ...saved] });
+          return;
+        }
+        const saved = await cloud.saveShiftToSupabase(shift);
+        set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
+      }, { success: () => message, inlineError: true });
+    },
+    saveCoverageDraft: (anchor, plan, changes) => {
+      let message = 'Cobertura salva.';
+      return commit(async () => {
+        const saved = await cloud.saveCoverageDraftToSupabase(anchor, plan, changes);
+        const id = anchor.coveragePost?.id || anchor.id;
+        const savedIds = new Set(saved.map(item => item.id));
+        const previous = get().shifts;
+        message = coverageSaveMessage(message, saved, previous);
+        set({ shifts: [...previous.filter(item => item.coveragePost?.id !== id && !savedIds.has(item.id)), ...saved] });
+      }, { success: () => message, inlineError: true });
+    },
     publishCoverage: (shift, enabled) => commit(async () => {
       if (!shift.coveragePost || shift.organizationId !== orgId() || !canEditPermission(get().currentUser, 'escala')) {
         throw new Error('Seu acesso não permite publicar esta vaga.');

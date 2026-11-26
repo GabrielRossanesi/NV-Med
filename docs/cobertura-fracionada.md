@@ -4,9 +4,11 @@ O posto previsto registra a demanda da unidade. Um posto guarda o período, o fu
 
 ## Cadastro e edição
 
-Na Escala Geral, abra uma ficha e marque **Fracionar cobertura**. Em um plantão existente, seus horários antes da conversão se tornam o período previsto. Para um novo posto, informe o período previsto e os horários do primeiro trecho. Use **Editar período previsto** para ajustar o período ou a capacidade de um posto cadastrado. A revisão precisa acomodar as demais alocações.
+Na Escala Geral, abra a ficha de um posto, plantão ou vaga. Use a barra ou a lista do painel **Cobertura do posto** para carregar o trecho nos campos principais da ficha. Uma vaga abre com os horários do intervalo e sem médico. Para preenchê-la, selecione o profissional e use o intervalo completo ou ajuste os horários dentro dele. **Dados operacionais** reúne os ajustes autorizados de capacidade e de período.
 
-A ficha mostra a linha do tempo, as horas previstas, cobertas e descobertas e a quantidade de médicos. Cada trecho salvo abre sua ficha. Escolha um médico e ajuste o horário dentro da vaga para preencher uma parte. Para liberar um intervalo, remova o médico ou cancele a alocação conforme as permissões e confira a prévia antes de salvar. **Cancelar posto** encerra a demanda e os trechos ativos, preservando os registros.
+**Adicionar médico** sugere o primeiro trecho disponível. Com cobertura integral, selecione uma alocação para dividir ou substituir o médico. **Dividir plantão** preserva o primeiro médico e pode deixar o segundo intervalo como vaga. As edições válidas atualizam a prévia imediatamente e ficam no rascunho ao trocar de trecho. **Salvar plantão** aplica as alterações em uma transação e recalcula as vagas.
+
+Cada trecho salvo abre sua própria ficha na Escala Geral. Escolha um médico e ajuste o horário dentro da vaga para preencher uma parte. Para liberar um intervalo, remova o médico ou cancele a alocação conforme as permissões e confira a prévia antes de salvar. **Cancelar posto** encerra a demanda e os trechos ativos, preservando os registros.
 
 Na Escala Master, marque **Definir período do posto** e informe a alocação do médico fixo e a capacidade prevista. A geração cria o posto e a alocação recorrente e deriva os intervalos descobertos. As ocorrências fracionadas já materializadas são preservadas nas revisões da recorrência. Ajustes pontuais são feitos na Escala Geral.
 
@@ -14,11 +16,12 @@ As operações antigas de copiar dia ou semana se aplicam a plantões regulares 
 
 ## Persistência e concorrência
 
-- A migration `52_fractional_coverage.sql` acrescenta `shift_coverage_posts`, um vínculo opcional em `shifts` e índices. O cadastro inicial não reescreve registros legados.
+- A migration `53_fractional_coverage.sql` acrescenta `shift_coverage_posts`, um vínculo opcional em `shifts` e índices. O cadastro inicial não reescreve registros legados.
 - A conversão mantém o ID do plantão de origem. Alocações, vagas derivadas e eventos de auditoria podem ser consultados pelo posto previsto.
 - A rotina separa os intervalos pelos limites das alocações e calcula quantas posições faltam em cada trecho semiaberto. Vagas com os mesmos limites são reaproveitadas. Vagas obsoletas são canceladas para manter candidaturas e histórico.
 - O PostgreSQL valida os limites em minutos no fuso da unidade. Horários iguais no posto fracionado indicam o mesmo horário do dia seguinte. Em regiões com mudança de fuso, a duração efetiva corresponde ao tempo entre os instantes registrados.
 - Uma trava transacional por posto e a revisão da ficha evitam gravações concorrentes inconsistentes. O RPC retorna os registros do posto afetado. Leituras da escala seguem o lote já usado por `nv_staff_shifts`.
+- A migration `55_interactive_shift_coverage.sql` reaproveita os validadores de plantão, aplica o lote sob a mesma revisão do posto e reconcilia as vagas uma vez. Um erro reverte toda a operação. Alocações encerradas ou pagas usam os fluxos de ajuste existentes. O acordo PJ é recalculado conforme a duração ou a referência configurada para o trecho, sem copiar pagamentos de outra alocação.
 - As tabelas internas de cobertura são privadas. A leitura segue as permissões da view administrativa e os RPCs exigem acesso à empresa e à ação. A confirmação, o bloqueio documental e os impedimentos financeiros continuam sendo verificados nas operações de plantão.
 
 ## Portal Médico e financeiro
@@ -31,6 +34,6 @@ O painel distingue cobertura integral, parcial e horas descobertas. Os relatóri
 
 ## Implantação e recuperação
 
-Aplique a migration 52 somente após as migrations anteriores e depois da validação em homologação. Execute `scripts/test-database.ps1` contra o PostgreSQL descartável. O teste da cobertura usa cadastros sintéticos e inclui geração, publicação, candidatura, valores e isolamento.
+Aplique `53_fractional_coverage.sql` após suas dependências. Aplique `55_interactive_shift_coverage.sql` antes de promover a aplicação com o editor interativo. Execute `scripts/test-database.ps1` no PostgreSQL descartável e `scripts/interactive-coverage.browser.mjs` com o navegador de homologação. Os testes usam cadastros sintéticos.
 
 Antes da implantação, preserve um backup e confirme a restauração em homologação. Se houver registros fracionados, mantenha a migration vigente ao reverter a aplicação e suspenda a edição desse recurso até publicar a correção. Os vínculos e o histórico são necessários para interpretar os registros gerados. Uma eventual reversão do esquema deve ser planejada a partir do backup e dos registros criados após a implantação.

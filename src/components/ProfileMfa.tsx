@@ -220,4 +220,3 @@ export default function ProfileMfa({ status, error, refresh }: ReturnType<typeof
     </Dialog>}
   </>;
 }
-

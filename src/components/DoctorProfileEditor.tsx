@@ -11,6 +11,7 @@ import DoctorProfileFields, { doctorProfileFromForm } from './DoctorProfileField
 type Snapshot = {
   profile: Record<string, unknown> & { updated_at: string }; specialties: string[];
   birth_date?: string | null; can_read_personal?: boolean; has_enrollment: boolean; can_approve: boolean; can_edit: boolean;
+  can_preserve_name_capitalization?: boolean;
   enrollment_status: string; requested_specialties: string[];
 };
 export default function DoctorProfileEditor({ doctorId, specialties = [], own = false, onClose, onSaved }: {
@@ -36,12 +37,15 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
     if (!snapshot?.can_edit || busy) return;
     const fields = new FormData(event.currentTarget);
     if (snapshot.birth_date && fields.has('birth') && !fields.get('birth')) { setError('Informe a data de nascimento ou mantenha o valor atual.'); return; }
-    const draft = doctorProfileFromForm(fields);
+    let draft;
+    try { draft = doctorProfileFromForm(fields, String(snapshot.profile.name)); }
+    catch (failure) { setError((failure as Error).message); return; }
     const personal = snapshot.can_read_personal === false ? {} : { phone: draft.phone, address: draft.address };
     const values: Record<string, unknown> = own ? { name: draft.name, ...personal } : {
       name: draft.name, ...personal, ...(snapshot.can_read_personal === false ? {} : { cpf: draft.cpf }), crm: draft.crm, crm_uf: draft.crmUf,
       rqe: draft.rqe || null, specialty: draft.specialty, status: draft.status,
       contract_model: draft.contractModel, contract_signed: draft.contractSigned,
+      ...(snapshot.can_preserve_name_capitalization ? { name_capitalization_override: fields.has('nameCapitalizationOverride') } : {}),
     };
     // Only changed fields are sent, preserving incomplete legacy values.
     const profile = Object.fromEntries(Object.entries(values).filter(([key, value]) => {
@@ -66,7 +70,8 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
     } catch (failure) { setError((failure as Error).message); } finally { finishSaving(); setBusy(false); }
   }
   const p = snapshot?.profile;
-  const initial = p ? { ...p, crmUf: p.crm_uf, contractModel: p.contract_model, contractSigned: p.contract_signed } as unknown as Doctor : undefined;
+  const initial = p ? { ...p, crmUf: p.crm_uf, contractModel: p.contract_model, contractSigned: p.contract_signed,
+    nameCapitalizationOverride: !own && p.name_capitalization_override === true } as unknown as Doctor : undefined;
   const profileSpecialties = snapshot?.enrollment_status === 'approved' ? snapshot.specialties : snapshot?.requested_specialties || [];
   const canEditSpecialties = !own && snapshot?.has_enrollment && (snapshot.enrollment_status === 'approved' ? snapshot.can_approve : ['pending', 'correction_requested'].includes(snapshot.enrollment_status));
   return <Dialog title={own ? 'Editar meus dados' : 'Editar perfil'} onClose={onClose} size="lg" closeDisabled={busy}
@@ -82,6 +87,7 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
     {snapshot && <form id={formId} onSubmit={save} aria-busy={busy}>
       <fieldset disabled={busy || !snapshot.can_edit} className="min-w-0 space-y-5">
         <DoctorProfileFields initial={initial} specialties={specialties} editing own={own} personal={snapshot.can_read_personal !== false}
+          canPreserveCapitalization={!own && snapshot.can_preserve_name_capitalization}
           birthDate={!own && snapshot.can_read_personal !== false && snapshot.has_enrollment ? snapshot.birth_date || '' : undefined}
           professionalDetails={canEditSpecialties && <fieldset className="min-w-0 sm:col-span-2">
             <legend className="nv-label">{snapshot.enrollment_status === 'approved' ? 'Especialidades autorizadas' : 'Especialidades para análise do credenciamento'}</legend>

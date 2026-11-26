@@ -10,8 +10,8 @@ A data de encerramento é calculada no servidor com o fuso IANA gravado no plant
 
 ## Homologação e ativação
 
-1. Use um banco descartável e aplique os scripts numerados na ordem. Execute `shift-approval.verify.sql` após a 48.
+1. Use um banco descartável e aplique os scripts numerados na ordem. Execute `shift-approval.verify.sql` após a 52.
 2. No ambiente autorizado, confira a versão das migrations, faça backup e conte os pendentes antigos por unidade antes de ativar a rotina. Verifique as unidades que operam com outro fuso e regularize os cadastros antes de criar novos plantões.
 3. Aplique a migration 48 e disponibilize a aplicação correspondente na mesma janela. Verifique uma aprovação por tipo e a proteção das edições em homologação.
-4. Execute `shift-approval-cron.setup.sql` como proprietário do banco após revisar a fila. O job usa o mesmo pg_cron da Escala Master e processa até 200 registros a cada cinco minutos. A aprovação usa o horário do servidor e um bloqueio por linha. Reexecutar a rotina preserva aprovações existentes.
+4. Aplique a migration 52 e execute `shift-approval-cron.setup.sql` como proprietário do banco. O setup grava a hora da primeira ativação no banco. O job só considera encerramentos posteriores a esse corte. O job usa o mesmo pg_cron da Escala Master e processa até 200 registros a cada cinco minutos. A aprovação usa o horário do servidor e um bloqueio por linha. Reexecutar o setup mantém o corte original. Reexecutar o job preserva aprovações existentes.
 5. Confira o histórico do job e a evolução do volume de pendentes. Se precisar suspender a rotina, desative o job nomeado `nvmed-shift-approval`. Os eventos já registrados permanecem auditáveis.

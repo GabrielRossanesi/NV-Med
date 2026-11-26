@@ -72,6 +72,8 @@ A migration 38 e a interface correspondente foram publicadas no domínio princip
 
 O guia do banco descreve a ordem de instalação. O plano de implantação reúne a preparação do piloto interno, o domínio oficial e a recuperação. [Guia do Supabase](supabase/README.md) · [Implantação controlada](docs/implantacao-controlada-nv-med.md)
 
+O padrão de cadastro, pesquisa e correção de nomes de médicos está em [Nomes de médicos](docs/nomes-de-medicos.md).
+
 ```bash
 npm test
 npm run lint

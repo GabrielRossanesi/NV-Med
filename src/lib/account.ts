@@ -50,4 +50,3 @@ export function formatAccountPhone(value: string) {
 export function isAccountPhone(value: string) {
   return value === '' || /^\(\d{2}\) \d{4,5}-\d{4}$/.test(value);
 }
-

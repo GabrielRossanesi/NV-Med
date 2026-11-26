@@ -84,3 +84,9 @@ Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verific
 - Atribuições, candidaturas e substituições exigem credenciamento aprovado e as autorizações de empresa/unidade/especialidade, com política documental e conflitos validados no servidor. Profissionais legados precisam de aprovação estruturada antes de novas atribuições.
 - Mudanças ficam bloqueadas quando existem ocorrências futuras ou em andamento com outra especialidade. Históricos são preservados e as alterações do vínculo são auditadas.
 - Aplique após a migration 30, somente com autorização para o ambiente de destino. Execute `scripts/test-database.ps1` para validar os fluxos no laboratório local. O procedimento de vinculação dos setores legados está em [setores-especialidades](../docs/setores-especialidades.md).
+
+## Evolução já publicada
+
+Após a 51, preserve a ordem de dependências: 52_shift_approval_activation_cutoff.sql, 53_fractional_coverage.sql, 54_doctor_name_normalization.sql e 55_interactive_shift_coverage.sql. O arquivo 53_doctor_status.sql é independente de 53_fractional_coverage.sql; ambos são necessários. A antiga cópia local 52_fractional_coverage.sql foi consolidada no nome 53_fractional_coverage.sql, sem alterar seu conteúdo. Não reaplique migrations já presentes no ambiente.
+
+A 55 acrescenta o salvamento atômico do painel interativo de cobertura, reaproveita as validações existentes e não regrava postos legados. Consulte o guia de cobertura fracionada. A quarentena documental (44) continua opcionalmente adiada até a preparação do scanner, conforme a seção de provisionamento seguro.

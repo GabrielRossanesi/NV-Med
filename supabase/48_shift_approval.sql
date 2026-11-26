@@ -349,7 +349,7 @@ $$;
 CREATE INDEX nv_shift_expiring_approval_idx ON public.shifts(date,id)
 WHERE status = 'pending' AND doctor_id IS NOT NULL AND (approval_source IS NULL OR approval_source = 'pending');
 
-CREATE FUNCTION public.nv_auto_approve_expired_shifts()
+CREATE FUNCTION nv_master_private.auto_approve_expired_shifts(organization_scope text)
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE target_ids text[];
 BEGIN
@@ -358,6 +358,7 @@ BEGIN
     JOIN public.organizations o ON o.id = s.organization_id
     JOIN public.units u ON u.id = s.unit_id AND u.organization_id = s.organization_id
     WHERE s.status = 'pending' AND s.doctor_id IS NOT NULL AND (s.approval_source IS NULL OR s.approval_source = 'pending')
+      AND (organization_scope IS NULL OR s.organization_id = organization_scope)
       AND s.date <= (statement_timestamp() AT TIME ZONE 'UTC')::date + 1
       AND public.nv_shift_ends(s) <= statement_timestamp()
       AND d.status = 'active' AND o.status = 'active' AND u.status = 'active'
@@ -371,6 +372,13 @@ BEGIN
   DELETE FROM nv_master_private.shift_approval_context WHERE transaction_id = txid_current();
   RETURN cardinality(target_ids);
 END $$;
+
+-- The recurring job uses this entry point. Release verification can invoke
+-- the same implementation scoped to its synthetic organization as DB owner.
+CREATE FUNCTION public.nv_auto_approve_expired_shifts()
+RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  SELECT nv_master_private.auto_approve_expired_shifts(NULL);
+$$;
 
 CREATE OR REPLACE FUNCTION public.nv_portal_schedule(from_date date, to_date date, mine boolean)
 RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -406,6 +414,7 @@ REVOKE ALL ON FUNCTION nv_master_private.validate_unit_time_zone(),nv_master_pri
   nv_master_private.approval_state(public.shifts),nv_master_private.guard_shift_approval(),
   nv_master_private.log_shift_approval(public.shifts,text,text,jsonb,jsonb),
   public.nv_save_operational_shifts(jsonb),public.nv_approve_shift(text,integer,boolean,text),
+  nv_master_private.auto_approve_expired_shifts(text),
   public.nv_auto_approve_expired_shifts() FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.nv_save_operational_shifts(jsonb),public.nv_approve_shift(text,integer,boolean,text) TO authenticated;
 -- The view invokes functions under the caller's ACL. Expose only the projection helpers.

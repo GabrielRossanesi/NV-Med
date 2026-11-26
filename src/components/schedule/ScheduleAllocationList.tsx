@@ -13,7 +13,7 @@ export default function ScheduleAllocationList({ entries, fullNames, onOpen }: {
     {entries.map(entry => {
       const Icon = entry.kind === 'day' ? Sun : Moon;
       const time = `${entry.startTime}–${entry.endTime}`;
-      const description = [entry.name, entry.sectorName, coveragePeriodLabel(entry.kind), time].filter(Boolean).join(' · ');
+      const description = [entry.name, entry.sectorName, coveragePeriodLabel(entry.kind), time, entry.duration].filter(Boolean).join(' · ');
       return <li key={entry.id} className="min-w-0">
         <button type="button" title={description}
           data-schedule-tone={entry.vacant ? entry.vacancyState : entry.kind}
@@ -24,6 +24,7 @@ export default function ScheduleAllocationList({ entries, fullNames, onOpen }: {
             <span className={`${fullNames ? 'block' : 'line-clamp-2'} wrap-anywhere text-xs leading-4 font-semibold`}>{entry.name}</span>
             <span className="flex flex-wrap gap-x-1.5 wrap-anywhere text-[11px] leading-[0.875rem]">
               <span className="tabular-nums">{time}</span>
+              {entry.duration && <span>{entry.duration}</span>}
               {entry.sectorName && <span>{entry.sectorName}</span>}
               <span className="sr-only">{coveragePeriodLabel(entry.kind)}</span>
             </span>

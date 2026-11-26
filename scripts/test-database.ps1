@@ -144,19 +144,25 @@ CREATE POLICY "Public Read Medical Documents" ON storage.objects FOR SELECT TO a
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'staff-account.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-evolution.preflight.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '48_shift_approval.sql'))
-  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '49_shift_cash_payments.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-cash-payment.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '50_company_billing.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'company-billing.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '51_finance_overview_and_exports.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-overview.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '52_shift_approval_activation_cutoff.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval-concurrency.verify.sql'))
-  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '52_fractional_coverage.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '53_fractional_coverage.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'fractional-coverage.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '54_doctor_name_normalization.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-names.preflight.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-names.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '53_doctor_status.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-status.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-53, pré/pós-verificação e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '55_interactive_shift_coverage.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'interactive-coverage.verify.sql'))
+  Write-Output 'PASS: baseline, segurança, migrations até 55 e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

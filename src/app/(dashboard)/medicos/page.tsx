@@ -28,6 +28,7 @@ import { doctorHasOperationalUnit, getDoctorOperationalUnitIds } from '@/lib/doc
 import DoctorBankingFields from '@/components/DoctorBankingFields';
 import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileFields, { doctorProfileFromForm } from '@/components/DoctorProfileFields';
+import { matchesDoctorSearch } from '@/lib/doctorName';
 
 function DoctorsPageContent() {
   const confirm = useConfirmation();
@@ -99,11 +100,7 @@ function DoctorsPageContent() {
 
   // Filtered doctors list
   const filteredDoctors = orgDoctors.filter((doc) => {
-    const matchesSearch =
-      doc.name.toLowerCase().includes(search.toLowerCase()) ||
-      doc.crm.includes(search) ||
-      (doc.rqe || '').includes(search) ||
-      doc.specialty.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = matchesDoctorSearch(doc, search);
 
     const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
     const matchesSpecialty = specialtyFilter === 'all' || doc.specialty.toLowerCase() === specialtyFilter.toLowerCase();
@@ -120,12 +117,15 @@ function DoctorsPageContent() {
     if (!canCreate || creating) return;
     setCreateError('');
     const fields = new FormData(e.currentTarget);
-    let banking;
-    try { banking = canCreateBanking ? bankingFromForm(fields) : undefined; }
+    let banking, profile;
+    try {
+      profile = doctorProfileFromForm(fields);
+      banking = canCreateBanking ? bankingFromForm(fields) : undefined;
+    }
     catch (failure) { setCreateError((failure as Error).message); return; }
     
     setCreating(true);
-    const saved = await addDoctor(doctorProfileFromForm(fields), banking);
+    const saved = await addDoctor(profile, banking);
     setCreating(false);
     if (!saved) {
       setCreateError(useStore.getState().error || 'Não foi possível salvar o cadastro. Tente novamente.');
