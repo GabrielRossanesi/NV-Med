@@ -12,7 +12,7 @@ Não carrega os demais médicos, usuários, setores ou o histórico documental g
 
 ## Contexto, segurança e interface
 
-- A chave de carregamento inclui o identificador do médico. Trocar de perfil recarrega o recorte e cancela requisições anteriores; consultas do perfil têm cancelamento após 25 segundos e falhas oferecem nova tentativa com mensagem pública.
+- A chave de carregamento inclui o identificador do médico e a empresa ativa. Trocar de perfil ou de empresa recarrega o recorte e cancela requisições anteriores; consultas do perfil têm cancelamento após 25 segundos e falhas oferecem nova tentativa com mensagem pública.
 - O campo transitório `dataScope` identifica dados completos, da listagem ou de um perfil. Não é uma preferência persistida. O cabeçalho não calcula totais da empresa sobre dados parciais de um médico.
 - A busca global carrega o conjunto completo somente quando é explicitamente aberta e informa carregamento ou falha. Seu mecanismo de busca continua o existente; uma busca remota específica pode otimizar esse fluxo futuramente.
 - Os filtros de empresa também são aplicados ao administrativo SaaS. Um identificador de outra empresa não inicia consultas dos recursos dependentes.

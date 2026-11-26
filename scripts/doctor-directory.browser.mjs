@@ -257,11 +257,12 @@ try{
  await page.keyboard.press('Escape');
  checks.push('global search explicitly loads complete data on demand instead of treating profile data as company-wide');
  actor.type='saas_admin';actor.role='CEO';await page.goto(base+'/medicos/directory-0');await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
- await page.getByRole('combobox',{name:'Empresa ativa',exact:true}).selectOption(otherOrg.id);
- const beforeOther=readRequests.length;await page.reload();await page.getByRole('heading',{name:'Médico não encontrado',exact:true}).waitFor();
+ const beforeOther=readRequests.length;await page.getByRole('combobox',{name:'Empresa ativa',exact:true}).selectOption(otherOrg.id);
+ await page.getByRole('heading',{name:'Médico não encontrado',exact:true}).waitFor();
  const otherReads=readRequests.slice(beforeOther);
  assert.equal(otherReads.find(r=>r.name==='doctors').params.organization_id,'eq.'+otherOrg.id);
  assert.ok(!otherReads.some(r=>['medical_documents','nv_staff_shifts','units'].includes(r.name)));
+ await page.getByRole('combobox',{name:'Empresa ativa',exact:true}).selectOption(org.id);await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
  checks.push('SaaS admin profile reads still require the selected company; cross-company ID does not load resources');
  actor.type='tenant_user';actor.role='Diretor';await page.reload();await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
  profileDocumentFailure=true;await page.reload();await page.getByRole('heading',{name:'Não foi possível abrir o painel',exact:true}).waitFor();

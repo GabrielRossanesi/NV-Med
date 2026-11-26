@@ -11,7 +11,8 @@ export default function StoreHydrator({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const profileSegment = /^\/medicos\/([^/]+)$/.exec(pathname)?.[1];
   const doctorId = profileSegment && profileSegment !== 'credenciamento' ? decodeURIComponent(profileSegment) : '';
-  const scope = doctorId ? `doctor:${doctorId}` : pathname === '/medicos' ? 'directory' : 'full';
+  const organizationId = useStore(state => doctorId ? state.activeOrganizationId : '');
+  const scope = doctorId ? `doctor:${doctorId}:${organizationId}` : pathname === '/medicos' ? 'directory' : 'full';
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [error, setError] = useState('');
   const theme = useResolvedTheme();
