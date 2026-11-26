@@ -4,9 +4,9 @@ O posto previsto registra a demanda da unidade. Um posto guarda o período, o fu
 
 ## Cadastro e edição
 
-Na Escala Geral, abra a ficha de um posto, plantão ou vaga. Use a barra ou a lista do painel **Cobertura do posto** para editar um intervalo. O editor preenche os horários do trecho. Para uma vaga, selecione o médico e use o intervalo completo ou ajuste os horários dentro dele. **Dados operacionais** reúne os ajustes autorizados de capacidade e de período.
+Na Escala Geral, abra a ficha de um posto, plantão ou vaga. Use a barra ou a lista do painel **Cobertura do posto** para carregar o trecho nos campos principais da ficha. Uma vaga abre com os horários do intervalo e sem médico. Para preenchê-la, selecione o profissional e use o intervalo completo ou ajuste os horários dentro dele. **Dados operacionais** reúne os ajustes autorizados de capacidade e de período.
 
-**Adicionar médico** sugere o primeiro trecho disponível. Com cobertura integral, selecione uma alocação para dividir ou substituir o médico. **Dividir plantão** preserva o primeiro médico e pode deixar o segundo intervalo como vaga. **Aplicar alteração** atualiza o rascunho. **Salvar plantão** registra todos os trechos e vagas em uma transação.
+**Adicionar médico** sugere o primeiro trecho disponível. Com cobertura integral, selecione uma alocação para dividir ou substituir o médico. **Dividir plantão** preserva o primeiro médico e pode deixar o segundo intervalo como vaga. As edições válidas atualizam a prévia imediatamente e ficam no rascunho ao trocar de trecho. **Salvar plantão** aplica as alterações em uma transação e recalcula as vagas.
 
 Cada trecho salvo abre sua própria ficha na Escala Geral. Escolha um médico e ajuste o horário dentro da vaga para preencher uma parte. Para liberar um intervalo, remova o médico ou cancele a alocação conforme as permissões e confira a prévia antes de salvar. **Cancelar posto** encerra a demanda e os trechos ativos, preservando os registros.
 

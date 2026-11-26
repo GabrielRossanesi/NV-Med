@@ -26,7 +26,7 @@ VALUES ('draft-root','draft-org','draft-1','draft-unit','draft-sector','Cirurgia
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"55000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 DO $test$
-DECLARE root jsonb; second jsonb; output jsonb; vacancy jsonb; version integer; plan jsonb;
+DECLARE root jsonb; second jsonb; output jsonb; vacancy jsonb; version integer; plan jsonb; protected_history jsonb;
 BEGIN
   SELECT to_jsonb(s) INTO root FROM public.nv_staff_shifts s WHERE id='draft-root';
   plan:=jsonb_build_object('date',root->>'date','start_time','07:00','end_time','19:00','capacity',1);
@@ -71,6 +71,30 @@ BEGIN
     RAISE EXCEPTION 'FAIL overnight split or duplicated financial cost: %',
       (SELECT jsonb_agg(jsonb_build_object('id',s->>'id','amount',s->>'payment_amount','state',s->>'payment_status')) FROM jsonb_array_elements(output) s);
   END IF;
+
+  plan:=jsonb_build_object('date',current_date+35,'start_time','07:00','end_time','19:00','capacity',1);
+  PERFORM public.nv_save_fractional_coverage(jsonb_build_object(
+    'id','draft-protected','organization_id','draft-org','unit_id','draft-unit','sector_id','draft-sector',
+    'doctor_id','draft-1','date',current_date+35,'start_time','10:00','end_time','19:00','specialty','Cirurgia',
+    'type','onsite','status','pending','coverage_mode','regular','employment_type','clt','notes','Registro a preservar'),plan,NULL);
+  PERFORM public.nv_approve_shift('draft-protected',
+    (SELECT s.approval_revision FROM public.nv_staff_shifts s WHERE id='draft-protected'),true,'Aprovação sintética anterior');
+  SELECT to_jsonb(s) INTO root FROM public.nv_staff_shifts s WHERE id='draft-protected';
+  protected_history:=public.nv_shift_history('draft-protected');
+  SELECT to_jsonb(s) INTO vacancy FROM public.nv_staff_shifts s WHERE s.coverage_post->>'id'='draft-protected' AND s.status='open';
+  output:=public.nv_save_coverage_draft(root,jsonb_build_array(vacancy||'{"doctor_id":"draft-2","employment_type":"clt","start_time":"08:00","end_time":"10:00"}'),
+    plan,(root->'coverage_post'->>'revision')::integer);
+  IF (SELECT s-'coverage_post' FROM jsonb_array_elements(output) s WHERE s->>'id'='draft-protected') IS DISTINCT FROM root-'coverage_post'
+    OR public.nv_shift_history('draft-protected') IS DISTINCT FROM protected_history THEN
+    RAISE EXCEPTION 'FAIL neighboring allocation or history changed after filling vacancy';
+  END IF;
+  IF jsonb_array_length(output)<>3 OR NOT EXISTS (SELECT FROM jsonb_array_elements(output) s
+    WHERE (s->>'status',s->>'start_time',s->>'end_time')=('open','07:00','08:00'))
+    OR NOT EXISTS (SELECT FROM jsonb_array_elements(output) s
+    WHERE (s->>'id',s->>'doctor_id',s->>'start_time',s->>'end_time')=(vacancy->>'id','draft-2','08:00','10:00')) THEN
+    RAISE EXCEPTION 'FAIL allocation and residual vacancy were not saved individually';
+  END IF;
+
   PERFORM set_config('request.jwt.claims','{"sub":"55000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
   BEGIN
     PERFORM public.nv_save_coverage_draft(root,jsonb_build_array(second),plan,1);

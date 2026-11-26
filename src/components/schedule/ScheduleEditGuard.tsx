@@ -175,13 +175,13 @@ export function ScheduleEditControl() {
   const Icon = guard.unlocked ? LockKeyholeOpen : LockKeyhole;
   return <button type="button" disabled={guard.busy} className="nv-button-secondary" onClick={guard.unlocked ? guard.lock : guard.askUnlock}><Icon size={16} aria-hidden="true"/>{guard.unlocked ? 'Modo edição · Bloquear' : 'Edição bloqueada · Desbloquear'}</button>;
 }
-export function useScheduleDraft(id: string, fingerprint: string | null, saving: boolean, discard: () => void) {
+export function useScheduleDraft(id: string, fingerprint: string | null, saving: boolean, discard: () => void, dirty?: boolean) {
   const { register } = useScheduleEdit();
   const initial = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (fingerprint === null) initial.current = null;
     else if (initial.current === null) initial.current = fingerprint;
-    register(id, fingerprint === null ? null : { dirty: fingerprint !== initial.current, saving, discard });
+    register(id, fingerprint === null ? null : { dirty: dirty ?? (fingerprint !== initial.current), saving, discard });
     return () => register(id, null);
-  }, [id, fingerprint, saving, discard, register]);
+  }, [id, fingerprint, saving, discard, dirty, register]);
 }

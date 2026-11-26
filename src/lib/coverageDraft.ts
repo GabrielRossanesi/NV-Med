@@ -35,10 +35,17 @@ export function editCoverageSegment(planned: CoveragePlan, timeZone: string, shi
   }
   const totals = calculateFractionalCoverage(span, planned.capacity, allocations);
   if (!totals) return null;
-  const gaps = totals.gaps.map<CoverageDraftSegment>((gap, index) => {
+  const gapCopies = new Map<string, number>();
+  const gaps = totals.gaps.map<CoverageDraftSegment>(gap => {
     const existing = vacancies.findIndex(item => item.start <= gap.start && item.end >= gap.end);
-    return existing === -1 ? { ...gap, key: `gap-${gap.start}-${gap.end}-${index}` }
-      : { ...gap, key: vacancies[existing].key, shift: vacancies.splice(existing, 1)[0].shift };
+    if (existing >= 0) {
+      const [vacancy] = vacancies.splice(existing, 1);
+      return { ...gap, key: vacancy.key, shift: vacancy.shift };
+    }
+    const range = `gap-${gap.start}-${gap.end}`;
+    const copy = gapCopies.get(range) || 0;
+    gapCopies.set(range, copy + 1);
+    return { ...gap, key: `${range}-${copy}` };
   });
   return { span, totals, segments: [...allocations, ...gaps].sort((a, b) => a.start - b.start || a.end - b.end) };
 }
@@ -51,4 +58,21 @@ export function mergeCoverageDraft<T extends Shift>(original: Shift[], edits: T[
 export function coverageAssignmentChanged(before: Shift | undefined, after: Shift) {
   return !before || before.doctorId !== after.doctorId || before.date !== after.date || before.startTime !== after.startTime
     || before.endTime !== after.endTime || before.status !== after.status;
+}
+
+export function coverageSegmentChanged(before: Shift, after: Shift) {
+  return coverageAssignmentChanged(before, after) || before.notes !== after.notes
+    || before.employmentType !== after.employmentType || before.employerName !== after.employerName;
+}
+
+export function coverageSegmentForm(segment: CoverageDraftSegment, template: Shift, timeZone: string, id: string): Shift {
+  const clocks = { date: coverageLocalDate(segment.start, timeZone), startTime: coverageClock(segment.start, timeZone),
+    endTime: coverageClock(segment.end, timeZone) };
+  if (segment.shift?.doctorId) return { ...segment.shift, ...clocks };
+  if (segment.shift) return { ...segment.shift, ...clocks, employmentType: segment.shift.employmentType || template.employmentType,
+    employerName: segment.shift.employerName || template.employerName };
+  return { id, ...clocks, organizationId: template.organizationId, unitId: template.unitId, sectorId: template.sectorId,
+    sector: template.sector, specialty: template.specialty, type: template.type, coverageMode: template.coverageMode,
+    coverageReason: template.coverageReason, status: 'open', employmentType: template.employmentType,
+    employerName: template.employerName, paymentFrequency: template.paymentFrequency };
 }

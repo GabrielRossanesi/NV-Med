@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { coverageAssignmentChanged, coverageDraftInterval, editCoverageSegment, mergeCoverageDraft } from '../src/lib/coverageDraft.ts';
+import { coverageAssignmentChanged, coverageDraftInterval, coverageSegmentChanged, coverageSegmentForm, editCoverageSegment, mergeCoverageDraft } from '../src/lib/coverageDraft.ts';
 import { coveragePlanInterval } from '../src/lib/fractionalCoverage.ts';
 
 const zone = 'America/Sao_Paulo';
@@ -30,6 +30,33 @@ test('a full shift can be split, removed and reconstructed without changing the 
   assert.equal(editCoverageSegment(full, zone, removed).totals.uncoveredMinutes, 360);
   assert.equal(original[0].endTime, '19:00');
   assert.equal(coverageAssignmentChanged(original[0], split[0]), true);
+});
+
+test('selecting a saved vacancy loads its own identity and leaves another allocation unchanged', () => {
+  const original = shift('approved', '10:00', '19:00', 'ana', { approvalSource: 'administrative', paymentStatus: 'paid', notes: 'Preservar' });
+  const vacancy = shift('saved-vacancy', '07:00', '10:00');
+  const { segments } = editCoverageSegment(full, zone, [original, vacancy]);
+  const vacantEditor = coverageSegmentForm(segments[0], original, zone, 'unused');
+  assert.deepEqual([vacantEditor.id, vacantEditor.doctorId, vacantEditor.startTime, vacantEditor.endTime], ['saved-vacancy', undefined, '07:00', '10:00']);
+  assert.equal(vacantEditor.approvalSource, undefined);
+  assert.equal(vacantEditor.notes, undefined);
+  assert.equal(coverageSegmentChanged(original, coverageSegmentForm(segments[1], vacancy, zone, 'unused')), false);
+  const filled = { ...vacantEditor, doctorId: 'bruno', startTime: '08:00', status: 'pending' };
+  const draft = mergeCoverageDraft([original, vacancy], [filled]);
+  assert.equal(draft.find(item => item.id === 'approved'), original);
+  const preview = editCoverageSegment(full, zone, draft);
+  assert.equal(preview.totals.uncoveredMinutes, 60);
+  assert.equal(preview.segments.find(item => item.shift?.doctorId === 'bruno').key, 'saved-vacancy');
+});
+
+test('independent vacancies with the same clocks keep unique identities and inherit only shared details', () => {
+  const original = shift('assigned', '10:00', '19:00', 'ana', { unitId: 'unit', employmentType: 'clt', paymentStatus: 'paid' });
+  const { segments } = editCoverageSegment({ ...full, capacity: 2 }, zone, [original]);
+  const vacancies = segments.filter(item => !item.shift);
+  assert.equal(new Set(vacancies.map(item => item.key)).size, vacancies.length);
+  const drafts = vacancies.map((item, index) => coverageSegmentForm(item, original, zone, `new-${index}`));
+  assert.deepEqual(drafts.map(item => item.id), ['new-0', 'new-1']);
+  assert.ok(drafts.every(item => item.doctorId === undefined && item.paymentStatus === undefined && item.unitId === 'unit'));
 });
 
 test('custom shifts respect simultaneous capacity without increasing contracted hours', () => {
