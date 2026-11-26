@@ -120,7 +120,9 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-names.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '53_doctor_status.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-status.verify.sql'))
-  Write-Output 'PASS: linha de base de produção e migrations 48–54.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '55_interactive_shift_coverage.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'interactive-coverage.verify.sql'))
+  Write-Output 'PASS: linha de base de produção e migrations 48–55.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

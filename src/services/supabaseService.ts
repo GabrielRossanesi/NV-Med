@@ -10,6 +10,7 @@ import {
   Unit,
   Sector,
   SectorFinanceDefaults,
+  CoveragePlan,
   MedicalDocument,
   Shift,
   ShiftWrite,
@@ -624,6 +625,25 @@ export async function fetchCoverageShifts(organizationId: string, postIds: strin
     .in('coverage_post->>id', postIds);
   if (error) throw new Error(error.message);
   return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function saveCoverageDraftToSupabase(anchor: ShiftWrite, plan: CoveragePlan, changes: ShiftWrite[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await withAbortTimeout(
+    async signal => await supabase.rpc('nv_save_coverage_draft', {
+      anchor: coverageDraftRecord(anchor), records: changes.map(coverageDraftRecord),
+      planned: { date: plan.date, start_time: plan.startTime, end_time: plan.endTime, capacity: plan.capacity },
+      expected_revision: anchor.coveragePost?.revision ?? null,
+    }).abortSignal(signal), { message: 'O servidor demorou para confirmar a cobertura. Atualize a escala antes de tentar novamente.' },
+  );
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+function coverageDraftRecord(shift: ShiftWrite) {
+  return { ...operationalShiftRecord(shift), hourly_rate_cents: shift.coverageHourlyRateCents,
+    expected_hourly_agreement_at: shift.paymentAgreement?.changed_at };
 }
 
 export async function publishCoverageVacancy(shiftId: string, enabled: boolean) {

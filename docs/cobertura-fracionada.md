@@ -4,9 +4,9 @@ O posto previsto registra a demanda da unidade. Um posto guarda o período, o fu
 
 ## Cadastro e edição
 
-Na Escala Geral, abra a ficha, selecione o médico e ajuste seu horário. O plantão existente mantém o intervalo previsto. Para um posto novo com setor, o período selecionado define os horários previstos. **Dados operacionais** reúne os ajustes autorizados de capacidade e de período. Os ajustes precisam acomodar as demais alocações.
+Na Escala Geral, abra a ficha de um posto, plantão ou vaga. Use a barra ou a lista do painel **Cobertura do posto** para editar um intervalo. O editor preenche os horários do trecho. Para uma vaga, selecione o médico e use o intervalo completo ou ajuste os horários dentro dele. **Dados operacionais** reúne os ajustes autorizados de capacidade e de período.
 
-A prévia abre ao lado da ficha no desktop e abaixo dela em telas menores. Ela mostra o intervalo previsto, as horas cobertas e as lacunas, proporcionalmente à duração do posto. O botão **Cobertura** abre ou recolhe a prévia. Salvar a ficha registra a alocação e as vagas na mesma transação. Cancelar descarta a prévia.
+**Adicionar médico** sugere o primeiro trecho disponível. Com cobertura integral, selecione uma alocação para dividir ou substituir o médico. **Dividir plantão** preserva o primeiro médico e pode deixar o segundo intervalo como vaga. **Aplicar alteração** atualiza o rascunho. **Salvar plantão** registra todos os trechos e vagas em uma transação.
 
 Cada trecho salvo abre sua própria ficha na Escala Geral. Escolha um médico e ajuste o horário dentro da vaga para preencher uma parte. Para liberar um intervalo, remova o médico ou cancele a alocação conforme as permissões e confira a prévia antes de salvar. **Cancelar posto** encerra a demanda e os trechos ativos, preservando os registros.
 
@@ -21,6 +21,7 @@ As operações antigas de copiar dia ou semana se aplicam a plantões regulares 
 - A rotina separa os intervalos pelos limites das alocações e calcula quantas posições faltam em cada trecho semiaberto. Vagas com os mesmos limites são reaproveitadas. Vagas obsoletas são canceladas para manter candidaturas e histórico.
 - O PostgreSQL valida os limites em minutos no fuso da unidade. Horários iguais no posto fracionado indicam o mesmo horário do dia seguinte. Em regiões com mudança de fuso, a duração efetiva corresponde ao tempo entre os instantes registrados.
 - Uma trava transacional por posto e a revisão da ficha evitam gravações concorrentes inconsistentes. O RPC retorna os registros do posto afetado. Leituras da escala seguem o lote já usado por `nv_staff_shifts`.
+- A migration `55_interactive_shift_coverage.sql` reaproveita os validadores de plantão, aplica o lote sob a mesma revisão do posto e reconcilia as vagas uma vez. Um erro reverte toda a operação. Alocações encerradas ou pagas usam os fluxos de ajuste existentes. O acordo PJ é recalculado conforme a duração ou a referência configurada para o trecho, sem copiar pagamentos de outra alocação.
 - As tabelas internas de cobertura são privadas. A leitura segue as permissões da view administrativa e os RPCs exigem acesso à empresa e à ação. A confirmação, o bloqueio documental e os impedimentos financeiros continuam sendo verificados nas operações de plantão.
 
 ## Portal Médico e financeiro
@@ -33,6 +34,6 @@ O painel distingue cobertura integral, parcial e horas descobertas. Os relatóri
 
 ## Implantação e recuperação
 
-Aplique a migration 53 somente após as migrations anteriores e depois da validação em homologação. Execute `scripts/test-database.ps1` contra o PostgreSQL descartável. O teste da cobertura usa cadastros sintéticos e inclui geração, publicação, candidatura, valores e isolamento.
+Aplique `53_fractional_coverage.sql` após suas dependências. Aplique `55_interactive_shift_coverage.sql` antes de promover a aplicação com o editor interativo. Execute `scripts/test-database.ps1` no PostgreSQL descartável e `scripts/interactive-coverage.browser.mjs` com o navegador de homologação. Os testes usam cadastros sintéticos.
 
 Antes da implantação, preserve um backup e confirme a restauração em homologação. Se houver registros fracionados, mantenha a migration vigente ao reverter a aplicação e suspenda a edição desse recurso até publicar a correção. Os vínculos e o histórico são necessários para interpretar os registros gerados. Uma eventual reversão do esquema deve ser planejada a partir do backup e dos registros criados após a implantação.

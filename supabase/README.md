@@ -63,3 +63,5 @@ Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verific
 ## Correção de status cadastral
 
 `53_doctor_status.sql` acrescenta a RPC exclusiva de status e auditoria anterior/novo. É independente de `53_fractional_coverage.sql`; preserve ambas e a migration 54 de nomes já existente. Não cria contas, convites ou alterações de cadastros em lote.
+
+`55_interactive_shift_coverage.sql` acrescenta o salvamento atômico do painel de cobertura. Aplique após `53_fractional_coverage.sql`, antes de promover o frontend interativo. A migration não regrava postos existentes.

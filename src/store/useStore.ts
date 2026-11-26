@@ -34,6 +34,7 @@ interface NVMedState {
   addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>, draftId?: string) => Promise<boolean>;
   addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[], feedback?: SaveFeedback) => Promise<boolean>;
   updateShift: (shift: ShiftWrite) => Promise<boolean>;
+  saveCoverageDraft: (...input: Parameters<typeof cloud.saveCoverageDraftToSupabase>) => Promise<boolean>;
   publishCoverage: (shift: Shift, enabled: boolean) => Promise<boolean>;
   cancelCoverage: (shift: Shift) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
@@ -212,6 +213,17 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         }
         const saved = await cloud.saveShiftToSupabase(shift);
         set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
+      }, { success: () => message, inlineError: true });
+    },
+    saveCoverageDraft: (anchor, plan, changes) => {
+      let message = 'Cobertura salva.';
+      return commit(async () => {
+        const saved = await cloud.saveCoverageDraftToSupabase(anchor, plan, changes);
+        const id = anchor.coveragePost?.id || anchor.id;
+        const savedIds = new Set(saved.map(item => item.id));
+        const previous = get().shifts;
+        message = coverageSaveMessage(message, saved, previous);
+        set({ shifts: [...previous.filter(item => item.coveragePost?.id !== id && !savedIds.has(item.id)), ...saved] });
       }, { success: () => message, inlineError: true });
     },
     publishCoverage: (shift, enabled) => commit(async () => {
