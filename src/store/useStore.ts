@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 import { coverageSaveMessage } from '@/lib/fractionalCoverage';
 import { doctorStatusActions } from '@/lib/doctorStatus';
 import { sendMedicalDocument, type DocumentUploadOptions } from '@/lib/medicalUpload';
+import type { OrganizationCounts } from '@/lib/workspaceScope';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
@@ -18,7 +19,11 @@ type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
 type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean; progress?: boolean };
 
 interface NVMedState {
-  dataScope: 'full' | 'directory' | 'doctor';
+  dataScope: 'workspace' | 'directory';
+  organizationCounts: Record<string, OrganizationCounts>;
+  workspaceRevision: number;
+  refreshWorkspace: () => Promise<void>;
+  syncWorkspace: (data: Awaited<ReturnType<typeof cloud.fetchWorkspaceData>>) => void;
   doctorDirectorySummary: { organizationId: string; documentIssues: number } | null;
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
   currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
@@ -77,6 +82,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     const finishSaving = progress ? notify.saving() : undefined;
     try {
       await work();
+      set(state => ({ workspaceRevision: state.workspaceRevision + 1 }));
       if (success) notify.success(typeof success === 'function' ? success() : success, { description, withinDialog });
       return true;
     } catch (error) {
@@ -95,11 +101,15 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     return id;
   }
   async function refreshDocumentAudits() {
-    try { set({ documentAudits: await cloud.fetchDocumentAuditLogsFromSupabase() }); }
+    const organizationId=get().activeOrganizationId,owner=get().currentUser.id;
+    try { const documentAudits=await cloud.fetchDocumentAuditLogsFromSupabase(organizationId);if(get().activeOrganizationId===organizationId&&get().currentUser.id===owner)set({documentAudits}); }
     catch { /* The audit migration may not have been applied yet. */ }
   }
   return {
-    ...emptyData, dataScope: 'directory', activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
+    ...emptyData, dataScope: 'directory', organizationCounts: {}, workspaceRevision: 0,
+    refreshWorkspace: async () => { throw new Error('Atualize a tela para consultar os dados atuais.'); },
+    syncWorkspace: data => set({ ...data, dataScope: 'workspace' }),
+    activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
     saving: false, error: null, theme: 'light', sidebarCollapsed: true, doctorDirectorySummary: null,
     accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false,
     async loadAccountPreferences() {
@@ -153,7 +163,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ sidebarCollapsed }, true);
     },
     clearFeedback: () => set({ error: null }),
-    clearSession: () => set({ ...emptyData, dataScope: 'directory', doctorDirectorySummary: null, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
+    clearSession: () => set({ ...emptyData, dataScope: 'directory', organizationCounts: {}, workspaceRevision: 0, doctorDirectorySummary: null, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
       theme: defaultAccountPreferences.theme, sidebarCollapsed: defaultAccountPreferences.sidebarCollapsed,
       accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
@@ -165,7 +175,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         // The database trigger creates required document rows in the same transaction.
         await cloud.createDoctorInSupabase(doctor, banking);
         set({ doctors: [...get().doctors, doctor] });
-        try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
+        try { await get().refreshWorkspace(); }
         catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
       }, { success: 'Médico cadastrado.', inlineError: true });
       return saved ? id : null;
@@ -276,7 +286,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (!uniqueIds.length || uniqueIds.length > 500 || uniqueIds.some(id => !get().shifts.some(shift => shift.id === id && shift.organizationId === organizationId))) throw new Error('Selecione entre 1 e 500 plantões desta empresa.');
       if (uniqueIds.some(id => { const shift = get().shifts.find(item => item.id === id); return shift && (shift.paymentStatus === 'paid' || Number(shift.paymentAmount) > 0); }) && !canEditPermission(get().currentUser, 'financeiro')) throw new Error('Você não pode excluir plantões com dados financeiros.');
       try { await cloud.deleteShiftsFromSupabase(uniqueIds, organizationId); }
-      catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
+      catch (error) { try { await get().refreshWorkspace(); } catch { /* Keep the original error. */ } throw error; }
       const deleted = new Set(uniqueIds);
       set({ shifts: get().shifts.filter(shift => !deleted.has(shift.id)) });
     }, { success: 'Exclusão de plantões concluída.', inlineError: true }),
@@ -290,7 +300,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const updated = selected.map(shift => vacateShift(shift!));
       let saved: Shift[];
       try { saved = await cloud.saveShiftsToSupabase(updated); }
-      catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
+      catch (error) { try { await get().refreshWorkspace(); } catch { /* Keep the original error. */ } throw error; }
       const postIds = [...new Set(saved.flatMap(item => item.coveragePost ? [item.coveragePost.id] : []))];
       if (postIds.length) {
         const siblings = await cloud.fetchCoverageShifts(organizationId, postIds);
@@ -334,6 +344,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const organizations = get().organizations.filter(item => item.id !== id);
       set({
         organizations,
+        organizationCounts: Object.fromEntries(Object.entries(get().organizationCounts).filter(([organizationId]) => organizationId !== id)),
         doctors: get().doctors.filter(item => item.organizationId !== id),
         units: get().units.filter(item => item.organizationId !== id),
         sectors: get().sectors.filter(item => item.organizationId !== id),

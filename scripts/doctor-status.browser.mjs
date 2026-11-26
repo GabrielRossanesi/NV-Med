@@ -51,6 +51,8 @@ const mock = http.createServer(async (request, response) => {
   if (name === 'nv_doctor_directory') return send(directoryFixture([doctor],args));
   if (name === 'nv_doctor_rqes') return send({entries:[],legacy:null,revision:'fixture',canEdit:false});
   if (name === 'nv_session_ready') return send(true);
+  if (name === 'nv_can_action') return send(true);
+  if (name === 'nv_workspace_documents' || name === 'nv_workspace_document_audit') return send([]);
   if (name === 'nv_account_preferences') return send(null);
   if (name === 'nv_doctor_profile') return profileLoadFailure ? send({code:'42501',message:'private SQL error'},403) : send({ profile: doctor, can_read_personal: personalAccess, can_edit: actor.role === 'Diretor', can_approve: false, specialties: [], requested_specialties: [], has_enrollment: false });
   if (name === 'nv_update_doctor_profile') {

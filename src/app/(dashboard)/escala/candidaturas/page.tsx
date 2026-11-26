@@ -7,7 +7,6 @@ import AccessGuard from '@/components/AccessGuard';
 import ShiftSelectionPanel from '@/components/schedule/ShiftSelectionPanel';
 import { ScheduleEditBoundary, ScheduleEditControl } from '@/components/schedule/ScheduleEditGuard';
 import { useStore } from '@/store/useStore';
-import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
 
 function CandidateQueue() {
   const organization = useStore(state => state.activeOrganizationId);
@@ -23,7 +22,7 @@ function CandidateQueue() {
     </header>
     {scope && <Link href="/escala/candidaturas" className="text-sm font-semibold text-primary underline">Ver todas as oportunidades</Link>}
     <ShiftSelectionPanel key={organization + scope} organization={organization} scope={scope} onChanged={() => {
-      void fetchInitialDataFromSupabase().then(useStore.getState().syncWithCloud).catch(() => {});
+      void useStore.getState().refreshWorkspace().catch(() => {});
     }}/>
   </div></ScheduleEditBoundary></AccessGuard>;
 }

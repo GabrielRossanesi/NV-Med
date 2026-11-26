@@ -25,12 +25,7 @@ type CleanupCompany = Pick<Organization, 'id' | 'name'>;
 export default function AdminOrganizationsPage() {
   const { 
     organizations, 
-    doctors, 
-    units, 
-    sectors,
-    shifts,
-    documents, 
-    users,
+    organizationCounts,
     currentUser,
     saving,
     addOrganization, 
@@ -247,12 +242,9 @@ export default function AdminOrganizationsPage() {
               </thead>
               <tbody className="divide-y divide-border text-xs">
                 {filteredOrgs.map((org) => {
-                  const docCount = doctors.filter(d => d.organizationId === org.id).length;
-                  const unitCount = units.filter(u => u.organizationId === org.id).length;
-                  const pendingDocs = documents.filter(
-                    d => d.organizationId === org.id && 
-                    (d.status === 'expired' || d.status === 'rejected' || d.status === 'analyzing')
-                  ).length;
+                  const docCount = organizationCounts[org.id]?.doctors;
+                  const unitCount = organizationCounts[org.id]?.units;
+                  const pendingDocs = organizationCounts[org.id]?.pendingDocuments;
 
                   return (
                     <tr key={org.id} className="hover:bg-table-row-hover transition-colors duration-150">
@@ -289,16 +281,16 @@ export default function AdminOrganizationsPage() {
                         <div className="flex items-center justify-center gap-3">
                           <div className="text-center" title="Médicos">
                             <span className="text-[10px] text-text-muted uppercase font-bold block">MED</span>
-                            <span className="font-semibold text-text-primary font-mono">{docCount}</span>
+                            <span className="font-semibold text-text-primary font-mono">{docCount??'—'}</span>
                           </div>
                           <div className="text-center" title="Unidades">
                             <span className="text-[10px] text-text-muted uppercase font-bold block">UNI</span>
-                            <span className="font-semibold text-text-primary font-mono">{unitCount}</span>
+                            <span className="font-semibold text-text-primary font-mono">{unitCount??'—'}</span>
                           </div>
                           <div className="text-center" title="Pendências Documentais">
                             <span className="text-[10px] text-text-muted uppercase font-bold block">PEND</span>
-                            <span className={`font-semibold font-mono ${pendingDocs > 0 ? 'text-danger font-bold' : 'text-text-muted'}`}>
-                              {pendingDocs}
+                            <span className={`font-semibold font-mono ${(pendingDocs||0) > 0 ? 'text-danger font-bold' : 'text-text-muted'}`}>
+                              {pendingDocs??'—'}
                             </span>
                           </div>
                         </div>
@@ -560,9 +552,9 @@ export default function AdminOrganizationsPage() {
             itemName={deletingOrg.name}
             description={resuming ? 'A empresa já foi removida do painel. A limpeza será retomada a partir dos itens pendentes.' : 'Os cadastros serão removidos e a limpeza de arquivos e acessos será acompanhada até a conclusão. Empresas com retenção ativa ou histórico de plantões são preservadas.'}
             impacts={resuming ? [] : [
-              `${doctors.filter(item => item.organizationId === deletingOrg.id).length} médicos e ${users.filter(item => item.organizationId === deletingOrg.id).length} usuários`,
-              `${units.filter(item => item.organizationId === deletingOrg.id).length} unidades e ${sectors.filter(item => item.organizationId === deletingOrg.id).length} setores`,
-              `${shifts.filter(item => item.organizationId === deletingOrg.id).length} postos de escala e ${documents.filter(item => item.organizationId === deletingOrg.id).length} documentos`,
+              `${organizationCounts[deletingOrg.id]?.doctors??'—'} médicos e ${organizationCounts[deletingOrg.id]?.users??'—'} usuários`,
+              `${organizationCounts[deletingOrg.id]?.units??'—'} unidades e ${organizationCounts[deletingOrg.id]?.sectors??'—'} setores`,
+              `${organizationCounts[deletingOrg.id]?.shifts??'—'} postos de escala e ${organizationCounts[deletingOrg.id]?.documents??'—'} documentos`,
             ]}
             busy={saving}
             onClose={() => setDeletingOrg(null)}

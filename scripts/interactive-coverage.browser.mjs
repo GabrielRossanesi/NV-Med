@@ -66,6 +66,8 @@ const server = http.createServer(async (request, response) => {
     const args = body ? JSON.parse(body) : {};
     if (name === 'nv_eligible_shift_doctors') return send(doctors.filter(x => x.id !== 'ana' || args.candidate.start_time !== excludedClock).map(x => x.id));
     if (name === 'nv_session_ready') return send(true);
+    if (name === 'nv_can_action') return send(true);
+    if (name === 'nv_workspace_documents' || name === 'nv_workspace_document_audit') return send([]);
     if (name === 'nv_account_preferences') return send(null);
     if (name === 'nv_save_coverage_draft') {
       writes.push(args);
@@ -143,6 +145,7 @@ try {
   async function save() {
     await page.getByRole('button',{name:'Salvar plantão',exact:true}).click();
     await page.locator('dialog').waitFor({state:'detached'});
+    await page.getByRole('heading',{name:'Escala médica',exact:true}).waitFor();
   }
 
   seed([part('vacancy','07:00','10:00',null,{employment_type:null}),part('primary','10:00','19:00','ana',

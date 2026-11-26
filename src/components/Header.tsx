@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Building2, ChevronDown, EyeOff, LoaderCircle, LogOut, Moon, Search, Sun, UserRound } from 'lucide-react';
 import { logoutCurrentSession } from '@/lib/auth/logout';
-import { doctorsWithDocumentIssues } from '@/lib/dashboardOverview';
+import { useWorkspaceOverview } from '@/components/WorkspaceOverviewProvider';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
 import { canViewPermission } from '@/lib/permissions';
 import { useStore } from '@/store/useStore';
@@ -29,30 +29,18 @@ export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState('');
-  const [referenceTime] = useState(Date.now);
   const profileMenu = useRef<HTMLDivElement>(null);
   const profileTrigger = useRef<HTMLButtonElement>(null);
-  const { activeOrganizationId, organizations, setActiveOrganizationId, setTheme, currentUser, isSimulating, stopSimulation, doctors, documents, shifts } = useStore();
+  const { activeOrganizationId, organizations, setActiveOrganizationId, setTheme, currentUser, isSimulating, stopSimulation } = useStore();
   const theme = useResolvedTheme();
   const showDocumentAlerts = useStore(state => state.accountPreferences.documentAlerts);
-  const directorySummary = useStore(state => state.doctorDirectorySummary);
-  const dataScope = useStore(state => state.dataScope);
+  const overview=useWorkspaceOverview();
 
   const activeOrg = organizations.find(organization => organization.id === activeOrganizationId);
   const canSwitch = currentUser.type === 'saas_admin' && organizations.length > 1;
   const showSearch = ['medicos', 'unidades', 'escala'].some(permission => canViewPermission(currentUser, permission));
   const canSeeDocuments = canViewPermission(currentUser, 'documentos');
-  const documentAlerts = useMemo(() => {
-    const governance = getDocumentGovernance(activeOrg);
-    if (!canSeeDocuments || !activeOrg || !governance.internalNotifications || !showDocumentAlerts) return 0;
-    if (dataScope !== 'full') return directorySummary?.organizationId === activeOrganizationId ? directorySummary.documentIssues : 0;
-    return doctorsWithDocumentIssues(
-      doctors.filter(doctor => doctor.organizationId === activeOrganizationId),
-      documents.filter(document => document.organizationId === activeOrganizationId),
-      shifts.filter(shift => shift.organizationId === activeOrganizationId),
-      referenceTime, activeOrg.settings.requiredDocuments, Math.max(...governance.expiryAlertDays),
-    ).length;
-  }, [activeOrg, activeOrganizationId, canSeeDocuments, doctors, documents, referenceTime, shifts, showDocumentAlerts, dataScope, directorySummary]);
+  const documentAlerts=canSeeDocuments&&activeOrg&&getDocumentGovernance(activeOrg).internalNotifications&&showDocumentAlerts?overview.documents.data?.issues.length||0:0;
 
   useEffect(() => {
     if (!profileOpen) return;

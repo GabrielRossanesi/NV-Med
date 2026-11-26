@@ -1,6 +1,7 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
+import { workspaceTotal } from '@/lib/workspaceScope';
 import { useRouter } from 'next/navigation';
 import AccessGuard from '@/components/AccessGuard';
 import {
@@ -20,12 +21,9 @@ export default function CompaniesPage() {
   const router = useRouter();
   const {
     organizations,
+    organizationCounts,
     activeOrganizationId,
     setActiveOrganizationId,
-    doctors,
-    units,
-    shifts,
-    documents
   } = useStore();
 
   const handleAccessCompany = (orgId: string) => {
@@ -35,9 +33,9 @@ export default function CompaniesPage() {
 
   // Calculate totals across all tenants
   const totalOrgs = organizations.length;
-  const grandTotalDocs = doctors.length;
-  const grandTotalUnits = units.length;
-  const grandTotalShifts = shifts.length;
+  const grandTotalDocs = workspaceTotal(organizationCounts,'doctors')??'—';
+  const grandTotalUnits = workspaceTotal(organizationCounts,'units')??'—';
+  const grandTotalShifts = workspaceTotal(organizationCounts,'shifts')??'—';
 
   return (
     <AccessGuard requiredPermission="empresas">
@@ -93,12 +91,10 @@ export default function CompaniesPage() {
           const isActive = org.id === activeOrganizationId;
           
           // Calculate organization specific metrics
-          const docCount = doctors.filter((d) => d.organizationId === org.id).length;
-          const unitCount = units.filter((u) => u.organizationId === org.id).length;
-          const shiftCount = shifts.filter((s) => s.organizationId === org.id).length;
-          const pendingDocs = documents.filter(
-            (d) => d.organizationId === org.id && (d.status === 'analyzing' || d.status === 'expired' || d.status === 'rejected')
-          ).length;
+          const docCount = organizationCounts[org.id]?.doctors;
+          const unitCount = organizationCounts[org.id]?.units;
+          const shiftCount = organizationCounts[org.id]?.shifts;
+          const pendingDocs = organizationCounts[org.id]?.pendingDocuments;
 
           return (
             <div
@@ -157,7 +153,7 @@ export default function CompaniesPage() {
                       <Users className="h-4 w-4 text-primary" />
                       <div>
                         <span className="block text-[10px] text-text-muted">Médicos</span>
-                        <span className="font-bold text-text-secondary">{docCount}</span>
+                        <span className="font-bold text-text-secondary">{docCount??'—'}</span>
                       </div>
                     </div>
 
@@ -165,7 +161,7 @@ export default function CompaniesPage() {
                       <Building2 className="h-4 w-4 text-primary" />
                       <div>
                         <span className="block text-[10px] text-text-muted">Unidades</span>
-                        <span className="font-bold text-text-secondary">{unitCount}</span>
+                        <span className="font-bold text-text-secondary">{unitCount??'—'}</span>
                       </div>
                     </div>
 
@@ -173,19 +169,19 @@ export default function CompaniesPage() {
                       <Calendar className="h-4 w-4 text-primary" />
                       <div>
                         <span className="block text-[10px] text-text-muted">Plantões</span>
-                        <span className="font-bold text-text-secondary">{shiftCount}</span>
+                        <span className="font-bold text-text-secondary">{shiftCount??'—'}</span>
                       </div>
                     </div>
 
                     <div className={`p-2.5 rounded-lg border flex items-center gap-2 ${
-                      pendingDocs > 0
+                      (pendingDocs||0) > 0
                         ? 'bg-amber-500/5 border-amber-500/10 text-amber-600'
                         : 'bg-background border-border text-text-muted'
                     }`}>
-                      <AlertTriangle className={`h-4 w-4 ${pendingDocs > 0 ? 'text-amber-500' : 'text-text-muted'}`} />
+                      <AlertTriangle className={`h-4 w-4 ${(pendingDocs||0) > 0 ? 'text-amber-500' : 'text-text-muted'}`} />
                       <div>
                         <span className="block text-[10px] text-text-muted">Pendências</span>
-                        <span className="font-bold">{pendingDocs}</span>
+                        <span className="font-bold">{pendingDocs??'—'}</span>
                       </div>
                     </div>
                   </div>

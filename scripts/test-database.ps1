@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][string]$PostgresBin, [switch]$DeferDocumentScan)
+param([Parameter(Mandatory = $true)][string]$PostgresBin, [switch]$DeferDocumentScan, [string]$WorkspaceMigration)
 
 $ErrorActionPreference = 'Stop'
 $initdb = Join-Path $PostgresBin 'initdb.exe'
@@ -172,6 +172,9 @@ CREATE POLICY "Public Read Medical Documents" ON storage.objects FOR SELECT TO a
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-directory.preflight.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '59_doctor_directory.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-directory.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'workspace-loading.preflight.sql'))
+  Invoke-LabSql -Arguments @('-f', $(if ($WorkspaceMigration) { $WorkspaceMigration } else { Join-Path $sqlDir '60_workspace_loading.sql' }))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'workspace-loading.verify.sql'))
   $env:NVMED_STORAGE_PROJECT = 'local'
   $env:NVMED_STORAGE_PSQL = $psql
   $env:PGHOST = '127.0.0.1'
@@ -180,7 +183,7 @@ CREATE POLICY "Public Read Medical Documents" ON storage.objects FOR SELECT TO a
   $env:PGDATABASE = 'postgres'
   & node (Join-Path $PSScriptRoot 'medical-storage.lab.mjs')
   if ($LASTEXITCODE -ne 0) { throw 'Falha no dry-run ou na recuperação em lote no laboratório.' }
-  Write-Output 'PASS: baseline, segurança, migrations até 59 e suítes SQL.'
+  Write-Output 'PASS: baseline, segurança, migrations até 60 e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

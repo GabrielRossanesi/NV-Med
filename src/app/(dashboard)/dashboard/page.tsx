@@ -5,13 +5,15 @@ import Link from 'next/link';
 import { ArrowRight, ArrowUpRight, Building2, CalendarDays, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Clock3, type LucideIcon } from 'lucide-react';
 import OperationalIndicators, { useOperationalCounts } from '@/components/OperationalIndicators';
 import UserAvatar from '@/components/UserAvatar';
-import { coverageDays, coverageWeeks, dashboardAgenda, dashboardPayments, dashboardRange, dashboardShiftMatches, doctorsWithDocumentIssues, moveDashboardMonth, shiftScheduleHref, type DashboardPeriod } from '@/lib/dashboardOverview';
+import { coverageDays, coverageWeeks, dashboardAgenda, dashboardRange, dashboardShiftMatches, moveDashboardMonth, shiftScheduleHref, type DashboardPeriod } from '@/lib/dashboardOverview';
 import { coverageDate, coverageDuration, coverageGroups, summarizeRegisteredCoverage } from '@/lib/fractionalCoverage';
-import { getDocumentGovernance } from '@/lib/documentGovernance';
 import { saoPauloDate } from '@/lib/financeState';
 import { canViewPermission } from '@/lib/permissions';
 import { employmentLabels, localDate, shiftInterval } from '@/lib/scheduling';
 import { useStore } from '@/store/useStore';
+import { useWorkspacePeriod } from '@/components/WorkspaceDataBoundary';
+import { useWorkspaceOverview } from '@/components/WorkspaceOverviewProvider';
+import type { DocumentOverview } from '@/lib/workspaceOverview';
 import type { Doctor, EmploymentType, Sector, Shift, Unit } from '@/types';
 
 const longDate = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -107,6 +109,7 @@ function CoveragePanel({ today, sectors, shifts, unitById, doctorById, filters }
   const [showAll, setShowAll] = useState(false);
   const [referenceTime] = useState(Date.now);
   const { start, end, length } = dashboardRange(today, range, month);
+  useWorkspacePeriod('coverage',{start,end});
   const periodShifts = shifts.filter(shift => shift.status !== 'cancelled' && coverageDate(shift) >= start && coverageDate(shift) <= end);
   const registered = summarizeRegisteredCoverage(periodShifts);
   const hourCoverage = registered.plannedMinutes ? Math.round(100 * registered.coveredMinutes / registered.plannedMinutes) : 0;
@@ -212,6 +215,7 @@ function UpcomingPanel({ today, shifts, unitById, doctorById, filters }: {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [page, setPage] = useState({ key: '', index: 0 });
   const { start: day, end } = dashboardRange(today, selected, month);
+  useWorkspacePeriod('agenda',{start:day,end});
   const agenda = useMemo(() => dashboardAgenda(shifts, day, end, selected !== 'month'), [shifts, day, end, selected]);
   const pageSize = selected === 'month' ? 8 : 4;
   const pageCount = Math.ceil(agenda.length / pageSize);
@@ -253,7 +257,7 @@ function UpcomingPanel({ today, shifts, unitById, doctorById, filters }: {
 }
 
 function PendingPanel({ units, issues, canSeeDocuments, checkins, checkinHref }: {
-  units: Unit[]; issues: ReturnType<typeof doctorsWithDocumentIssues>; canSeeDocuments: boolean;
+  units: Unit[]; issues: DocumentOverview['issues']; canSeeDocuments: boolean;
   checkins?: number | null; checkinHref?: string;
 }) {
   const [unit, setUnit] = useState('');
@@ -304,10 +308,12 @@ function PendingPanel({ units, issues, canSeeDocuments, checkins, checkinHref }:
   </section>;
 }
 
-function FinancePanel({ shifts }: { shifts: Shift[] }) {
+function FinancePanel() {
+  const overview=useWorkspaceOverview();
   const today = saoPauloDate();
   const month = today.slice(0, 7);
-  const { pending, overdue, onDelivery, paidThisMonth, nextDue } = dashboardPayments(shifts, today);
+  if(!overview.finance.data)return <section className="nv-panel p-5"><h2 className="nv-section-title">Financeiro</h2><p role={overview.finance.error?'alert':'status'} className="mt-3 text-sm">{overview.finance.error||'Carregando resumo financeiro…'}</p>{overview.finance.error&&<button className="nv-button-secondary mt-3" onClick={overview.reload}>Tentar novamente</button>}</section>;
+  const { pending, overdue, onDelivery, paidThisMonth, nextDue } = overview.finance.data;
   const financeHref = '/financeiro?' + new URLSearchParams({ month });
 
   return <section aria-labelledby="finance-title" className="nv-panel self-start rounded-[1.375rem] p-4 sm:p-6">
@@ -331,8 +337,8 @@ function FinancePanel({ shifts }: { shifts: Shift[] }) {
 }
 
 function DashboardContent({ organization }: { organization: string }) {
-  const { organizations, doctors, units, sectors, shifts, documents, currentUser } = useStore();
-  const activeOrg = organizations.find(item => item.id === organization);
+  const overview=useWorkspaceOverview();
+  const { doctors, units, sectors, shifts, currentUser } = useStore();
   const canSeeSchedule = canViewPermission(currentUser, 'escala');
   const canSeeDoctors = canViewPermission(currentUser, 'medicos');
   const canSeeDocuments = canViewPermission(currentUser, 'documentos');
@@ -359,11 +365,7 @@ function DashboardContent({ organization }: { organization: string }) {
     && dashboardShiftMatches(shift, scheduleFilters.unit, scheduleFilters.specialty, doctorById, sectorById)), [orgShifts, scheduleFilters, doctorById, sectorById]);
   const specialties = useMemo(() => [...new Set([...orgSectors.flatMap(sector => sector.specialties), ...orgShifts.map(shift => shift.specialty || ''), ...orgDoctors.map(doctor => doctor.specialty)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [orgDoctors, orgSectors, orgShifts]);
   const [todayCoverage] = useMemo(() => coverageDays(today, activeSectors, orgShifts, 1), [today, activeSectors, orgShifts]);
-  const issues = useMemo(() => {
-    if (!canSeeDocuments) return [];
-    return doctorsWithDocumentIssues(orgDoctors, documents.filter(document => document.organizationId === organization), orgShifts, referenceTime,
-      activeOrg?.settings.requiredDocuments, Math.max(...getDocumentGovernance(activeOrg).expiryAlertDays));
-  }, [activeOrg, canSeeDocuments, documents, orgDoctors, organization, orgShifts, referenceTime]);
+  const issues = overview.documents.data?.issues || [];
   const checkins = canSeeSchedule ? result?.counts?.checkins_pending : null;
   const reportDay = result?.counts?.today || today;
   const checkinHref = canSeeReports ? '/relatorios/plantoes?' + new URLSearchParams({ empresa: organization, inicio: reportDay, fim: reportDay, presenca: 'pending' }) : undefined;
@@ -398,8 +400,8 @@ function DashboardContent({ organization }: { organization: string }) {
         </div>
       </section>}
       <div className="nv-overview-grid grid gap-4 lg:gap-5">
-        <PendingPanel units={orgUnits} issues={issues} canSeeDocuments={canSeeDocuments} checkins={checkins} checkinHref={checkinHref} />
-        {canSeeFinance && <FinancePanel shifts={orgShifts} />}
+        {canSeeDocuments&&!overview.documents.data?<section className="nv-panel p-5"><h2 className="nv-section-title">Pendências</h2><p role={overview.documents.error?'alert':'status'} className="mt-3 text-sm">{overview.documents.error||'Carregando pendências…'}</p>{overview.documents.error&&<button className="nv-button-secondary mt-3" onClick={overview.reload}>Tentar novamente</button>}</section>:<PendingPanel units={orgUnits} issues={issues} canSeeDocuments={canSeeDocuments} checkins={checkins} checkinHref={checkinHref} />}
+        {canSeeFinance && <FinancePanel />}
       </div>
     </> : <section id="pendencias"><EmptyState icon={Building2} title="Nenhuma empresa selecionada" detail="Selecione uma empresa disponível para acompanhar a operação." /></section>}
   </div>;

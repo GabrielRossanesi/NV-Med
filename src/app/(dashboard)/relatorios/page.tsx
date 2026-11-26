@@ -12,6 +12,7 @@ import { documentIsCritical, documentIsNearExpiry } from '@/lib/documentComplian
 import { applicableDocuments, getDocumentGovernance } from '@/lib/documentGovernance';
 import { doctorContractModelLabels } from '@/lib/doctorProfile';
 import { useStore } from '@/store/useStore';
+import { useWorkspacePeriod } from '@/components/WorkspaceDataBoundary';
 import type { Shift } from '@/types';
 
 type PeriodMode = 'week' | 'month';
@@ -78,6 +79,7 @@ export default function ReportsPage() {
   const documents = store.documents.filter(item => item.organizationId === orgId && doctors.some(doctor => doctor.id === item.doctorId));
   const canSeeFinancial = canViewPermission(store.currentUser, 'financeiro');
   const bounds = periodBounds(reference, mode);
+  useWorkspacePeriod('main',bounds);
   const periodShifts = store.shifts
     .filter(item => item.organizationId === orgId && item.date >= bounds.start && item.date <= bounds.end && item.status !== 'cancelled')
     .filter(item => !unitId || item.unitId === unitId)

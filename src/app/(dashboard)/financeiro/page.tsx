@@ -24,7 +24,6 @@ import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import ShiftCashPaymentFields from '@/components/schedule/ShiftCashPaymentFields';
 import ShiftPaymentMovements from '@/components/schedule/ShiftPaymentMovements';
 import { readCashPayment, registerShiftPayment } from '@/lib/shiftCashPayment';
-import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
 import { notify } from '@/lib/notifications';
 import ShiftRecordSummary from '@/components/schedule/ShiftRecordSummary';
 import { ShiftAgreementFields, ShiftFinancialDetails, ShiftPaymentHistory, useShiftRates } from '@/components/schedule/ShiftFinancialDetails';
@@ -34,6 +33,7 @@ import { localDate, paymentFrequencyLabels } from '@/lib/scheduling';
 import { canEditPermission, canViewPermission } from '@/lib/permissions';
 import { buildAgreementSelection, chooseShiftRate, initialAgreementDraft } from '@/lib/shiftPricing';
 import { useStore } from '@/store/useStore';
+import { useWorkspacePeriod } from '@/components/WorkspaceDataBoundary';
 import type { Doctor, Organization, PaymentFrequency, PaymentStatus, Sector, Shift, Unit } from '@/types';
 
 type PeriodMode = 'week' | 'month' | 'all';
@@ -75,7 +75,7 @@ function recordFinanceState(shift: Shift, today: string): FinanceState {
 function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClose }: {
   shift: Shift; organization?: Organization; unit?: Pick<Unit, 'name'>; sector?: Pick<Sector, 'name' | 'coveragePeriods' | 'defaultStartTime' | 'defaultEndTime' | 'requiredDoctors'>; doctor?: Pick<Doctor, 'name' | 'specialty'>; onClose: () => void;
 }) {
-  const { currentUser, saving, updateShiftAgreement, syncWithCloud } = useStore();
+  const { currentUser, saving, updateShiftAgreement } = useStore();
   const [settlementBusy, setSettlementBusy] = useState(false);
   const [view, setView] = useState<'details' | 'agreement' | 'settlement' | 'adjustment'>('details');
   const [draft, setDraft] = useState(() => initialAgreementDraft(shift));
@@ -111,7 +111,7 @@ function PaymentRecordDialog({ shift, organization, unit, sector, doctor, onClos
   }
 
   async function refreshSettlement() {
-    try { syncWithCloud(await fetchInitialDataFromSupabase()); }
+    try { await useStore.getState().refreshWorkspace(); }
     catch { notify.warning('Atualize a página para consultar o pagamento.', { withinDialog: true }); }
   }
 
@@ -185,6 +185,7 @@ function FinancePageContent({ params }: { params: URLSearchParams }) {
   const orgId = store.activeOrganizationId;
   const organization = store.organizations.find(item => item.id === orgId);
   const bounds = periodBounds(periodMode, reference);
+  useWorkspacePeriod('main',bounds.start?{start:bounds.start,end:bounds.end}:null);
   const today = saoPauloDate();
 
   const [catalog, setCatalog] = useState<ReportCatalog | null>(null);

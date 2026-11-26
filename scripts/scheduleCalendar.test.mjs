@@ -343,6 +343,8 @@ sourceMocks.set('@/store/useStore', { useStore: selector => selector ? selector(
 sourceMocks.set('next/navigation', { useSearchParams: () => routeParams, useRouter: () => ({ back: noop }) });
 sourceMocks.set('@/lib/supabase/client', { createClient: () => { throw new Error('Tests must not access Supabase'); } });
 sourceMocks.set('@/services/supabaseService', {});
+sourceMocks.set('@/components/WorkspaceDataBoundary', { useWorkspacePeriod: noop });
+sourceMocks.set('@/components/WorkspaceOverviewProvider', { useWorkspaceOverview: () => ({ documents: { data: { issues: [], schedule: {}, units: {} } }, reload: noop }) });
 const SchedulePage = loadSource(path.join(root, 'src/app/(dashboard)/escala/page.tsx')).default;
 function renderPage(query = '') {
   routeParams = new URLSearchParams(query);

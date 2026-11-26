@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useEffect, useRef, useState } from 'react';
-import { fetchInitialDataFromSupabase, mapDoctorFromDb, openDocument } from '@/services/supabaseService';
+import { mapDoctorFromDb, openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import { DocumentStatus, DoctorStatus } from '@/types';
 import MedicalDocumentUpload from '@/components/MedicalDocumentUpload';
@@ -38,6 +38,7 @@ import { doctorStatusActions } from '@/lib/doctorStatus';
 import { useSearchParams } from 'next/navigation';
 import DoctorRqePanel from '@/components/DoctorRqePanel';
 import { useLocationHash } from '@/components/useLocationHash';
+import { useWorkspaceOverview } from '@/components/WorkspaceOverviewProvider';
 
 const registrationStatusLabels: Record<DoctorStatus, string> = {
   active: 'Ativo',
@@ -80,6 +81,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const [revision, setRevision] = useState(0);
   const statusSaving = useStore(state => state.saving);
   const confirm = useConfirmation();
+  const overview = useWorkspaceOverview();
   const profileKey = `${currentUser.id}/${activeOrganizationId}/${doctorId}`;
   const activeProfile = useRef<string | null>(null);
   useEffect(() => {
@@ -97,9 +99,11 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     return () => { live = false; };
   }, [doctorId, profileKey, revision]);
   async function refreshProfile() {
+    overview.reload();
     setRevision(v => v + 1);
     try {
       const result = await createClient()?.rpc('nv_doctor_profile', { target: doctorId });
+      if (activeProfile.current !== profileKey) return;
       if (!result?.data?.profile) throw new Error('Atualize a página para consultar o perfil salvo.');
       const updated = mapDoctorFromDb({ ...result.data.profile, cpf: undefined, phone: undefined, email: undefined, address: undefined });
       useStore.setState(state => ({ doctors: state.doctors.map(d => d.id === updated.id ? updated : d) }));
@@ -108,10 +112,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
     }
   }
   async function refreshSchedule() {
-    const data = await fetchInitialDataFromSupabase({ doctorId, organizationId: activeOrganizationId });
-    if (activeProfile.current === profileKey && useStore.getState().activeOrganizationId === activeOrganizationId) {
-      useStore.getState().syncWithCloud(data);
-    }
+    if (activeProfile.current === profileKey && useStore.getState().activeOrganizationId === activeOrganizationId) await useStore.getState().refreshWorkspace();
   }
   const [portalRole, setPortalRole] = useState<string | null>(null);
   const [roleError, setRoleError] = useState('');

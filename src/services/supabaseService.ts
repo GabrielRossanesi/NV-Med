@@ -4,6 +4,10 @@ import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 import type { DoctorBanking } from '@/lib/doctorBanking';
 import { doctorNameInvalidError, doctorNameNumberError } from '@/lib/doctorName';
 import { doctorStatusError, logDoctorStatusError } from '@/lib/doctorStatus';
+import type { OrganizationCounts, WorkspacePlan } from '@/lib/workspaceScope';
+import { mergeWorkspacePeriods } from '@/lib/workspaceScope';
+import { canViewPermission } from '@/lib/permissions';
+import { workspaceDocuments } from '@/lib/workspaceQueries';
 import {
   Organization,
   Doctor,
@@ -273,7 +277,7 @@ function mapSectorFromDb(row: DbSector): Sector {
   };
 }
 
-function mapDocumentFromDb(row: DbMedicalDocument): MedicalDocument {
+export function mapDocumentFromDb(row: DbMedicalDocument): MedicalDocument {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -309,7 +313,7 @@ function mapDocumentAuditFromDb(row: DbDocumentAudit): DocumentAuditEntry {
   };
 }
 
-function mapShiftFromDb(row: DbShift): Shift {
+export function mapShiftFromDb(row: DbShift): Shift {
   return {
     coveragePost: row.coverage_post || undefined,
     approvalSource: row.approval_source ?? undefined,
@@ -368,9 +372,7 @@ export function mapUserFromDb(row: DbUserAccount): UserAccount {
 // OPERAÇÕES DE LEITURA (BOOTSTRAP & REFRESH)
 // ==============================================================================
 
-export type DoctorBootstrapScope = { doctorId: string; organizationId: string; signal?: AbortSignal };
-
-export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' | DoctorBootstrapScope = 'full') {
+export async function fetchInitialDataFromSupabase() {
   const supabase = createClient();
   if (!supabase || !isSupabaseConfigured()) throw new Error('Conexão não configurada. Contate o administrador.');
   const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -378,8 +380,6 @@ export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' |
   const { data: profile, error: profileError } = await supabase.from('user_accounts').select('*').eq('auth_user_id', auth.user.id).eq('status', 'active').single();
   if (profileError || !profile) throw new Error('Seu acesso ainda não foi liberado. Contate o administrador.');
   const currentUser = mapUserFromDb(profile);
-  const doctorScope = typeof scope === 'object' ? scope : null;
-  let targetOrganization = doctorScope ? currentUser.type === 'tenant_user' ? currentUser.organizationId : doctorScope.organizationId : null;
   currentUser.email = auth.user.email || currentUser.email;
   if (currentUser.avatar) {
     const { data: avatar } = await supabase.storage.from('profile-avatars').createSignedUrl(currentUser.avatar, 3600);
@@ -393,47 +393,71 @@ export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' |
         if (!currentUser.organizationId) throw new Error('Usuário sem empresa vinculada.');
         query = query.eq(table === 'organizations' ? 'id' : 'organization_id', currentUser.organizationId);
       }
-      if (doctorScope && table !== 'organizations') {
-        query = query.eq('organization_id', targetOrganization!);
-        if (table === 'doctors') query = query.eq('id', doctorScope.doctorId);
-        if (table === 'medical_documents' || table === 'nv_staff_shifts') query = query.eq('doctor_id', doctorScope.doctorId);
-      }
-      if (doctorScope?.signal) query = query.abortSignal(doctorScope.signal);
       const { data, error } = await query.overrideTypes<Row[], { merge: false }>();
-      if (error) throw new Error(doctorScope ? 'Não foi possível carregar o perfil médico. Tente novamente.' : 'Não foi possível carregar ' + table + '. Tente novamente.');
+      if (error) throw new Error('Não foi possível carregar ' + table + '. Tente novamente.');
       result.push(...data);
       if (data.length < 500) return result;
     }
   }
-  if (doctorScope) {
-    const orgs = await rows<DbOrganization>('organizations');
-    targetOrganization ||= orgs[0]?.id;
-    if (!orgs.some(org => org.id === targetOrganization)) throw new Error('Empresa indisponível. Selecione uma empresa válida.');
-    const doctors = await rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units');
-    // Do not read dependent resources when the doctor is absent or forbidden by RLS.
-    const [units, documents, shifts] = doctors.length ? await Promise.all([
-      rows<DbUnit>('units'), rows<DbMedicalDocument>('medical_documents'), rows<DbShift>('nv_staff_shifts'),
-    ]) : [[], [], []];
-    return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
-      units: units.map(mapUnitFromDb), sectors: [] as Sector[], documents: documents.map(mapDocumentFromDb),
-      shifts: shifts.map(mapShiftFromDb), users: [] as UserAccount[], documentAudits: [] as DocumentAuditEntry[], dataScope: 'doctor' as const };
-  }
-  const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
-    rows<DbOrganization>('organizations'),
-    scope === 'directory' ? [] : rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units'),
-    scope === 'directory' ? [] : rows<DbUnit>('units'), scope === 'directory' ? [] : rows<DbSector>('sectors'),
-    scope === 'directory' ? [] : rows<DbMedicalDocument>('medical_documents'), scope === 'directory' ? [] : rows<DbShift>('nv_staff_shifts'),
-    scope === 'directory' ? [] : rows<DbUserAccount>('user_accounts'),
-    scope === 'directory' ? [] : fetchDocumentAuditLogsFromSupabase().catch(() => []),
-  ]);
-  return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
-    units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb), documentAudits, dataScope: scope === 'directory' ? 'directory' as const : 'full' as const };
+  const orgs = await rows<DbOrganization>('organizations');
+  return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[],
+    documents: [] as MedicalDocument[], shifts: [] as Shift[], users: [] as UserAccount[], documentAudits: [] as DocumentAuditEntry[], dataScope: 'directory' as const };
 }
 
-export async function fetchDocumentAuditLogsFromSupabase() {
+export async function fetchWorkspaceData(plan: WorkspacePlan, user: UserAccount, signal?: AbortSignal) {
+  const client = createClient();
+  if (!client) throw new Error('Conexão indisponível.');
+  if(!plan.organizationId&&!plan.adminSummary&&plan.users!=='global')return {doctors:[] as Doctor[],units:[] as Unit[],sectors:[] as Sector[],documents:[] as MedicalDocument[],shifts:[] as Shift[],users:[] as UserAccount[],documentAudits:[] as DocumentAuditEntry[],organizationCounts:{} as Record<string,OrganizationCounts>};
+  async function read<Row>(table: string, columns = '*', options: { global?: boolean; id?: string; dates?: WorkspacePlan['shifts']; links?: boolean } = {}) {
+    const result: Row[] = [];
+    for (let offset=0;;offset+=500) {
+      let query=client!.from(table).select(columns).order('id').range(offset,offset+499);
+      if (!options.global) query=query.eq('organization_id',plan.organizationId);
+      if (options.id) query=query.eq('id',options.id);
+      if (plan.doctorId && table==='doctors') query=query.eq('id',plan.doctorId);
+      if (plan.doctorId && table==='nv_staff_shifts') query=query.eq('doctor_id',plan.doctorId);
+      if (plan.unitId && (table==='nv_staff_shifts'||table==='sectors')) query=query.eq('unit_id',plan.unitId);
+      if (Array.isArray(options.dates)) {
+        const ranges=mergeWorkspacePeriods(options.dates);
+        if (ranges.length===1) query=query.gte('date',ranges[0].start).lte('date',ranges[0].end);
+        else query=query.or(ranges.map(r=>`and(date.gte.${r.start},date.lte.${r.end})`).join(','));
+      }
+      if (signal) query=query.abortSignal(signal);
+      const {data,error}=await query.overrideTypes<Row[],{merge:false}>();
+      if (error) throw new Error('Não foi possível carregar os dados desta tela. Tente novamente.');
+      result.push(...data); if(data.length<500)return result;
+    }
+  }
+  const doctors=plan.doctors ? await read<DbDoctor>('doctors','id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units') : [];
+  const hasDoctor=!plan.doctorId||doctors.some(doctor=>doctor.id===plan.doctorId);
+  const documents=async()=>{
+    if(!plan.documents||!hasDoctor||!canViewPermission(user,'documentos'))return [] as DbMedicalDocument[];
+    return workspaceDocuments<DbMedicalDocument>(client,plan.organizationId,plan.doctorId||null,signal);
+  };
+  const audit=async()=>{
+    if(!plan.audit||!hasDoctor||!canViewPermission(user,'documentos'))return [] as DbDocumentAudit[];
+    let request=client.rpc('nv_workspace_document_audit',{org:plan.organizationId,target:plan.doctorId||null});if(signal)request=request.abortSignal(signal);
+    const result=await request;if(result.error)throw new Error('Não foi possível carregar o histórico documental.');return result.data as DbDocumentAudit[];
+  };
+  const counts=async()=>{
+    if(!plan.adminSummary)return {} as Record<string,OrganizationCounts>;
+    let request=client.rpc('nv_workspace_organization_counts');if(signal)request=request.abortSignal(signal);
+    const result=await request;if(result.error)throw new Error('Não foi possível carregar os indicadores das empresas.');return result.data as Record<string,OrganizationCounts>;
+  };
+  const [units,sectors,docs,shifts,users,documentAudits,organizationCounts]=await Promise.all([
+    plan.units&&hasDoctor?read<DbUnit>('units'):[],plan.sectors?read<DbSector>('sectors'):[],documents(),
+    plan.shifts&&hasDoctor?read<DbShift>('nv_staff_shifts','*',{dates:plan.shifts}):[],
+    plan.users?read<DbUserAccount>('user_accounts','*',{global:plan.users==='global'}):[],audit(),counts(),
+  ]);
+  if(plan.shiftId&&!shifts.some(shift=>shift.id===plan.shiftId))(shifts as DbShift[]).push(...await read<DbShift>('nv_staff_shifts','*',{id:plan.shiftId}));
+  return {doctors:doctors.map(mapDoctorFromDb),units:units.map(mapUnitFromDb),sectors:sectors.map(mapSectorFromDb),documents:docs.map(mapDocumentFromDb),
+    shifts:shifts.map(mapShiftFromDb),users:users.map(mapUserFromDb),documentAudits:documentAudits.map(mapDocumentAuditFromDb),organizationCounts};
+}
+
+export async function fetchDocumentAuditLogsFromSupabase(organizationId:string,doctorId?:string) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  const { data, error } = await supabase.from('document_audit_logs').select('*').order('created_at', { ascending: false }).limit(1000);
+  const { data, error } = await supabase.rpc('nv_workspace_document_audit',{org:organizationId,target:doctorId||null});
   if (error) throw new Error('Não foi possível carregar o histórico documental.');
   return (data as DbDocumentAudit[]).map(mapDocumentAuditFromDb);
 }
@@ -441,13 +465,7 @@ export async function fetchDocumentAuditLogsFromSupabase() {
 export async function fetchMedicalDocumentsForOrganization(organizationId: string) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  const { data, error } = await supabase
-    .from('medical_documents')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .order('name');
-  if (error) throw new Error('Não foi possível atualizar o checklist documental.');
-  return (data as DbMedicalDocument[]).map(mapDocumentFromDb);
+  return (await workspaceDocuments<DbMedicalDocument>(supabase,organizationId)).map(mapDocumentFromDb);
 }
 
 // ==============================================================================

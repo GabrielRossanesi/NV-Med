@@ -37,13 +37,15 @@ import { coverageAssignmentChanged, coverageDraftInterval, coverageSegmentChange
 import { calculateFractionalCoverage, coverageDate, coverageDuration, coverageMinutes, coveragePlanInterval, coverageSpan, fractionalWritePlan, type CoverageSpan } from '@/lib/fractionalCoverage';
 import { shiftRecordStatusLabels as statusLabels } from '@/components/schedule/ShiftRecordSummary';
 import { createClient } from '@/lib/supabase/client';
-import { fetchInitialDataFromSupabase, fetchShiftRates } from '@/services/supabaseService';
+import { fetchShiftRates } from '@/services/supabaseService';
 import type { ScheduleDeletionScope, ScheduleDeletionSelection } from '@/lib/scheduleDeletion';
 import { buildRecurringDates, copyableRegularShifts, coverageKindForShift, coveragePeriodLabel, employmentLabels, hasConflict, localDate, paymentFrequencyLabels, sectorCoveragePeriods, shiftInterval, statusAfterDoctorSelection, summarizeSectorCoverage, type ShiftRecurrence } from '@/lib/scheduling';
 import { buildAgreementSelection, buildRequiredPjAgreement, chooseShiftRate, formatShiftMoney, formatShiftMoneyInput, initialAgreementDraft, parseMoneyCents, sectorFinanceDefaults, shiftTypeLabels as typeLabels } from '@/lib/shiftPricing';
 import { canEditPermission, canPerformAction, canViewPermission } from '@/lib/permissions';
 import { doctorScheduleCompliance } from '@/lib/documentGovernance';
 import { useStore } from '@/store/useStore';
+import { useWorkspacePeriod } from '@/components/WorkspaceDataBoundary';
+import { useWorkspaceOverview } from '@/components/WorkspaceOverviewProvider';
 import type { CoveragePeriodKind, CoveragePlan, Doctor, EmploymentType, Sector, Shift, ShiftWrite, Unit } from '@/types';
 
 type ViewMode = 'week' | 'day' | 'month' | 'doctor' | 'specialty' | 'list';
@@ -146,6 +148,7 @@ function ScheduleList({ days, shifts, units, sectors, doctors, doctorWarnings, o
 }
 
 function Schedule({ params }: { params: URLSearchParams }) {
+  const overview=useWorkspaceOverview();
   const store = useStore();
   const editGuard = useScheduleEdit();
   const today = localDate();
@@ -309,15 +312,14 @@ function Schedule({ params }: { params: URLSearchParams }) {
     ...item, exchangeRequested: exchangeState?.organization === orgId && exchangeState.ids.has(item.id),
   }));
   const activeOrganization = store.organizations.find(item => item.id === orgId);
-  const organizationDocuments = store.documents.filter(item => item.organizationId === orgId);
-  const doctorDocumentState = new Map(doctors.map(doctor => [doctor.id, doctorScheduleCompliance(doctor, organizationDocuments, activeOrganization)]));
+  const doctorDocumentState = new Map(doctors.map(doctor => [doctor.id, overview.documents.data?.schedule[doctor.id] || doctorScheduleCompliance(doctor, [], activeOrganization)]));
   const selectedSectors = scheduleSectors(unitId, sectorSelection, units, sectors);
   const sectorIds = selectedSectors.map(item => item.id);
   const sectorId = sectorIds.length === 1 ? sectorIds[0] : '';
   const selectedSector = selectedSectors.length === 1 ? selectedSectors[0] : undefined;
   const scopeReady = selectedSectors.length > 0;
   const visibleSectors = scopeReady ? selectedSectors : [];
-  const visibleDoctors = doctors.filter(item => (!unitId || item.linkedUnits.includes(unitId) || shifts.some(shift => shift.doctorId === item.id && shift.unitId === unitId)) && (!specialty || item.specialty === specialty));
+  const visibleDoctors = doctors.filter(item => (!unitId || item.linkedUnits.includes(unitId) || overview.documents.data?.units[item.id]?.includes(unitId)) && (!specialty || item.specialty === specialty));
   const weekStart = mondayOf(date);
   const week = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const month = date.slice(0, 7);
@@ -331,6 +333,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
   const conflictIds = scheduleConflictIds(scopeReady ? shifts : []);
   const isCritical = (period: ReturnType<typeof coverageFor>['periods'][number], day: string) => isCriticalCoverage(period, day, conflictIds, doctorDocumentState, referenceTime);
   const periodMode = view === 'list' ? listRange : view;
+  useWorkspacePeriod('main',periodMode==='day'?{start:date,end:date}:periodMode==='week'?{start:week[0],end:week[6]}:{start:month+'-01',end:`${month}-${String(daysInMonth).padStart(2,'0')}`});
   const firstWeekYear = week[0].slice(0, 4);
   const lastWeekYear = week[6].slice(0, 4);
   const periodLabel = periodMode === 'day'
@@ -991,7 +994,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     : form?.coverageMode === 'adhoc' ? 'Novo plantão avulso' : form?.doctorId ? 'Novo plantão' : 'Nova vaga';
 
   async function refreshMasterShifts() {
-    store.syncWithCloud(await fetchInitialDataFromSupabase());
+    await store.refreshWorkspace();
   }
   function editMasterRule(context: MasterShiftContext, effectiveDate?: string) {
     if (!context.rule_id || !canEditSchedule || !canCreateSchedule) return;
@@ -1022,6 +1025,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     {scopePicker}
   </div>;
 
+  if(canViewPermission(store.currentUser,'escala')&&!overview.documents.data)return <div className="nv-panel space-y-3 p-5"><p role={overview.documents.error?'alert':'status'}>{overview.documents.error||'Consultando pendências documentais…'}</p>{overview.documents.error&&<button className="nv-button-secondary" onClick={overview.reload}>Tentar novamente</button>}</div>;
   return <div className="nv-schedule min-w-0 space-y-3">
     <header className="flex flex-wrap items-center justify-between gap-2"><h1 className="nv-page-title">Escala médica</h1><div className="flex flex-wrap gap-2"><ScheduleEditControl/>{canPerformAction(store.currentUser, 'escala', 'history') && <button type="button" className="nv-button-secondary" onClick={() => setHistoryTarget({})}>Histórico de alterações</button>}{canApproveSchedule && <Link className="nv-button-secondary" href="/escala/candidaturas"><ArrowRightLeft size={16}/>Candidaturas e trocas</Link>}{canCreateSchedule && scheduleMode === 'general' && <><button className="nv-button-secondary" onClick={() => openShift(undefined, undefined, date, undefined, 1, true)} disabled={!units.length}><Plus size={16}/>Plantão avulso</button><button className="nv-button" onClick={() => openShift()} disabled={!units.length}><Plus size={16}/>Novo posto</button></>}</div></header>
     <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
@@ -1197,7 +1201,7 @@ function Schedule({ params }: { params: URLSearchParams }) {
     {selectionShift && <Dialog title="Candidaturas e histórico do plantão" onClose={() => editGuard.transition(() => setSelectionShift(null))}>
       <ShiftSelectionPanel organization={orgId} shiftId={selectionShift.id} onChanged={() => {
         setOpportunityRevision(value => value + 1);
-        void fetchInitialDataFromSupabase().then(store.syncWithCloud).catch(() => {
+        void store.refreshWorkspace().catch(() => {
           setPageError('Decisão registrada. Recarregue a página para atualizar a escala.');
         });
       }}/>
