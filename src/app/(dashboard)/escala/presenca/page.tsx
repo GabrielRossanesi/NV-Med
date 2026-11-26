@@ -1,5 +1,7 @@
 'use client';
 
+import { useConfirmation } from '@/components/ConfirmationProvider';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AccessGuard from '@/components/AccessGuard';
@@ -7,9 +9,10 @@ import { createClient } from '@/lib/supabase/client';
 import { portalError } from '@/lib/doctorPortal';
 import { useStore } from '@/store/useStore';
 
-type Request = { id: string; kind: 'check_in' | 'check_out'; date: string; time: string; unit: string; doctor: string; reason: string };
+type Request = { id: string; kind: 'check_in' | 'check_out'; source?: 'manual' | 'gps'; date: string; time: string; at: string; unit: string; doctor: string; reason: string };
 
 function Queue({ organization }: { organization: string }) {
+  const confirm = useConfirmation();
   const [queue, setQueue] = useState<Request[] | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -24,11 +27,12 @@ function Queue({ organization }: { organization: string }) {
     });
     return () => { active = false; };
   }, [organization]);
-  async function review(event: React.FormEvent<HTMLFormElement>, id: string) {
+  async function review(event: React.FormEvent<HTMLFormElement>, item: Request) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const approve = form.get('decision') === 'approve';
-    if (!window.confirm(approve ? 'Confirmar o registro excepcional de presença?' : 'Rejeitar o registro excepcional de presença?')) return;
+    const { id } = item;
+    if (!await confirm({ title: approve ? 'Confirmar registro de presença?' : 'Rejeitar registro de presença?', description: 'A decisão e a justificativa serão registradas no histórico.', tone: approve ? 'success' : 'danger', confirmLabel: approve ? 'Confirmar presença' : 'Rejeitar registro' })) return;
     setBusy(id);
     setError('');
     setNotice('');
@@ -48,14 +52,17 @@ function Queue({ organization }: { organization: string }) {
     {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {!queue && !error && <p role="status" className="text-sm text-text-muted">Carregando solicitações…</p>}
-    {queue?.length === 0 && <p className="text-sm text-text-muted">Nenhum registro manual aguardando análise.</p>}
+    {queue?.length === 0 && <p className="text-sm text-text-muted">Nenhum registro de presença aguardando análise.</p>}
     {queue?.map(item => <article key={item.id} className="space-y-3 rounded-xl border border-border bg-card-bg p-4">
       <h2 className="font-semibold">{item.kind === 'check_in' ? 'Check-in' : 'Check-out'} · {item.doctor}</h2>
       <p className="text-sm text-text-muted">{item.unit} · {item.date.split('-').reverse().join('/')} · {item.time}</p>
+      <p className="text-sm text-text-muted">{item.source === 'gps' ? 'Localização declarada' : 'Solicitação manual'} · {new Date(item.at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>
       <p className="whitespace-pre-wrap text-sm">{item.reason}</p>
-      <form onSubmit={event => void review(event, item.id)} className="space-y-3">
+      <form onSubmit={event => void review(event, item)} className="space-y-3">
         <label className="nv-label">Decisão<select className="nv-input" name="decision"><option value="approve">Aprovar</option><option value="reject">Rejeitar</option></select></label>
-        <label className="nv-label">Justificativa<textarea className="nv-input" name="note" required minLength={10} maxLength={1000} rows={2}/></label>
+        <label className="nv-label">Justificativa<textarea className="nv-input" name="note" required minLength={10} maxLength={1000} rows={2}/>
+          {item.source === 'gps' && <span className="text-xs font-normal text-text-muted">Para aprovar, confira a presença com um registro ou responsável da unidade e informe a fonte usada.</span>}
+        </label>
         <button className="nv-button" disabled={Boolean(busy)}>{busy === item.id ? 'Registrando…' : 'Confirmar decisão'}</button>
       </form>
     </article>)}
@@ -66,7 +73,7 @@ export default function AttendancePage() {
   return <AccessGuard requiredPermission="escala" action="approve"><div className="space-y-5">
     <header className="border-b border-border pb-4">
       <Link href="/escala" className="text-sm font-semibold text-primary underline">Voltar à escala</Link>
-      <h1 className="mt-2 text-2xl font-bold">Registros manuais de presença</h1>
+      <h1 className="mt-2 text-2xl font-bold">Revisão de presença</h1>
     </header>
     <Queue key={organization} organization={organization}/>
   </div></AccessGuard>;

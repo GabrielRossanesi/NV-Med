@@ -33,6 +33,8 @@ import DoctorProfileEditor from '@/components/DoctorProfileEditor';
 import DoctorPortalAccess from '@/components/DoctorPortalAccess';
 import DoctorProfileHistory from '@/components/DoctorProfileHistory';
 import DoctorMasterSchedule from '@/components/schedule/DoctorMasterSchedule';
+import { useConfirmation } from '@/components/ConfirmationProvider';
+import { doctorStatusActions } from '@/lib/doctorStatus';
 
 const registrationStatusLabels: Record<DoctorStatus, string> = {
   active: 'Ativo',
@@ -64,14 +66,25 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const [selectedFileNames, setSelectedFileNames] = useState<Record<string, File>>({});
   const [editing, setEditing] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [statusSaving, setStatusSaving] = useState(false);
+  const statusSaving = useStore(state => state.saving);
+  const confirm = useConfirmation();
+  const profileKey = `${currentUser.id}/${activeOrganizationId}/${doctorId}`;
+  const [personal, setPersonal] = useState<{ key: string; data: { cpf?: string; email?: string; phone?: string; address?: string } } | null>(null);
+  const personalData = personal?.key === profileKey ? personal.data : null;
   const canEdit = canPerformAction(currentUser, 'medicos', 'edit');
+  useEffect(() => {
+    let live = true;
+    void createClient()?.rpc('nv_doctor_profile', { target: doctorId }).then(({ data }) => {
+      if (live) setPersonal(data?.can_read_personal ? { key: profileKey, data: data.profile } : null);
+    });
+    return () => { live = false; };
+  }, [doctorId, profileKey, revision]);
   async function refreshProfile() {
     setRevision(v => v + 1);
     try {
       const result = await createClient()?.rpc('nv_doctor_profile', { target: doctorId });
       if (!result?.data?.profile) throw new Error('Atualize a página para consultar o perfil salvo.');
-      const updated = mapDoctorFromDb(result.data.profile);
+      const updated = mapDoctorFromDb({ ...result.data.profile, cpf: undefined, phone: undefined, email: undefined, address: undefined });
       useStore.setState(state => ({ doctors: state.doctors.map(d => d.id === updated.id ? updated : d) }));
     } catch {
       notify.warning('A visualização está desatualizada.', { description: 'Recarregue a página para conferir os dados salvos.' });
@@ -128,23 +141,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   // Handle status update of the doctor
   const handleDoctorStatusChange = async (newStatus: DoctorStatus) => {
     if (!canEdit || statusSaving || newStatus === doctor.status) return;
-    if (!window.confirm(`Confirmar alteração do cadastro para ${newStatus === 'active' ? 'ativo' : newStatus === 'pending' ? 'pendente' : 'inativo'}? Os plantões e documentos serão preservados.`)) return;
-    setStatusSaving(true);
-    try {
-      const client = createClient();
-      const snapshot = await client?.rpc('nv_doctor_profile', { target: doctorId });
-      if (!snapshot?.data?.profile) throw new Error('Não foi possível consultar o cadastro atual.');
-      const result = await client?.rpc('nv_update_doctor_profile', { target: doctorId, profile: { status: newStatus }, revision: snapshot.data.profile.updated_at });
-      if (!result || result.error) throw new Error(result?.error?.message || 'Não foi possível alterar o status.');
-      notify.success('Status do cadastro atualizado.');
-      await refreshProfile();
-    } catch (failure) {
-      notify.error('Não foi possível atualizar o status.', {
-        description: failure instanceof Error ? failure.message : undefined,
-        persistent: true,
-      });
-    }
-    finally { setStatusSaving(false); }
+    const action = doctorStatusActions[newStatus];
+    await confirm({ ...action, description: <><p>{action.description} Seus plantões, documentos e histórico serão preservados.</p><p className="mt-2">Esta ação não libera automaticamente o acesso ao Portal Médico.</p></>, onConfirm: async () => {
+      const saved = await useStore.getState().setDoctorStatus(doctorId, newStatus);
+      if (saved) setRevision(v => v + 1);
+      return saved;
+    } });
   };
 
   // Handle mock file selection
@@ -194,7 +196,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       inactive: 'bg-surface-muted text-text-secondary border-border'
     };
     const inactiveColors = 'bg-background text-text-muted border-border hover:bg-slate-100 dark:hover:bg-slate-900';
-    return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
+    return `px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${doctor.status === s ? activeColors[s] : inactiveColors}`;
   };
 
   const operationalUnitIds = getDoctorOperationalUnitIds(docShifts, doctor.id);
@@ -268,10 +270,10 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
               <div className="flex items-start gap-2.5">
                 <ShieldCheck className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
-                  <span className="block text-[10px] text-text-muted uppercase font-bold">Documentos Pessoais</span>
+                  <span className="block text-[10px] text-text-muted uppercase font-bold">Identificação profissional</span>
                   <span className="font-mono">CRM: {doctor.crm}-{doctor.crmUf}</span>
                   <span className="block font-mono mt-0.5">RQE: {doctor.rqe || 'Não informado'}</span>
-                  <span className="block font-mono mt-0.5">CPF: {doctor.cpf}</span>
+                  {personalData?.cpf && <span className="block font-mono mt-0.5">CPF: {personalData.cpf}</span>}
                 </div>
               </div>
 
@@ -284,29 +286,29 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               </div>
 
-              <div className="flex items-start gap-2.5">
+              {personalData?.email && <div className="flex items-start gap-2.5">
                 <Mail className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
                   <span className="block text-[10px] text-text-muted uppercase font-bold">E-mail</span>
-                  <span className="break-all">{doctor.email}</span>
+                  <span className="break-all">{personalData.email}</span>
                 </div>
-              </div>
+              </div>}
 
-              <div className="flex items-start gap-2.5">
+              {personalData?.phone && <div className="flex items-start gap-2.5">
                 <Phone className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
                   <span className="block text-[10px] text-text-muted uppercase font-bold">Telefone</span>
-                  <span>{doctor.phone}</span>
+                  <span>{personalData.phone}</span>
                 </div>
-              </div>
+              </div>}
 
-              <div className="flex items-start gap-2.5">
+              {personalData?.address && <div className="flex items-start gap-2.5">
                 <MapPin className="h-4 w-4 text-text-muted flex-shrink-0" />
                 <div>
                   <span className="block text-[10px] text-text-muted uppercase font-bold">Endereço Residencial</span>
-                  <span className="wrap-anywhere whitespace-pre-line">{doctor.address}</span>
+                  <span className="wrap-anywhere whitespace-pre-line">{personalData.address}</span>
                 </div>
-              </div>
+              </div>}
             </div>
           </div>
 

@@ -36,7 +36,7 @@ A plataforma faz parte do ecossistema **NV Hub / Morales Hub**, aplicando o mesm
 
 ## 🛠️ Stack Tecnológica
 
-- **Framework**: [Next.js 16.2.9](https://nextjs.org/) (App Router)
+- **Framework**: [Next.js 16.4.6](https://nextjs.org/) (App Router)
 - **Biblioteca**: [React 19](https://react.dev/)
 - **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
 - **Estilização**: [Tailwind CSS v4](https://tailwindcss.com/)

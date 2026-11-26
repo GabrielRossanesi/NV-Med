@@ -20,6 +20,15 @@
 - Reutilize o componente `Dialog`. Dê título acessível ao diálogo, mantenha a ação principal ao alcance em formulários longos e permita rolar os campos quando o teclado reduzir a área visível. Ao fechar, devolva o foco ao controle de origem quando ele ainda estiver disponível.
 - Preserve os valores digitados após erros. Mostre feedback próximo do campo ou da ação que o usuário deve corrigir. Para preenchimento assistido, mantenha uma entrada manual e descarte respostas atrasadas de consultas substituídas.
 
+## Visualização das escalas
+
+- No calendário mensal, mantenha unidade, setores, modo de visualização e navegação de período antes da grade. Posicione filtros avançados e o resumo de cobertura abaixo, recolhidos por padrão. Mostre perto da grade quando houver filtros ativos, ofereça uma ação para limpá-los e dê acesso direto aos alertas críticos.
+- Abra a ficha pelo identificador do plantão, da vaga ou do posto já criado. Reserve o botão do dia para consultar o conjunto de plantões. Postos previstos que ainda não foram criados levam aos detalhes do turno.
+- Use os tokens de escala para distinguir plantões diurnos em verde claro e noturnos em verde escuro. Mantenha as vagas abertas em vermelho e os postos sem médico em tom neutro. Identifique o período com sol ou lua e um nome acessível. No mês, limite nomes a duas linhas com tooltip para o nome completo e mantenha o horário visível.
+- Na ficha, mostre médico ou situação do posto, data e horário no resumo de Dados operacionais. Inicie os detalhes recolhidos, coloque o histórico no cabeçalho conforme a permissão e mantenha as ações de salvar e cancelar no rodapé. Preserve a posição da agenda e devolva o foco ao plantão após fechar a ficha.
+- Em cobertura fracionada, mantenha a largura de cada trecho proporcional aos minutos e acrescente uma lista acessível para segmentos estreitos. Use os mesmos tons da escala e mostre pendências de aprovação separadamente das horas descobertas. Exiba a prévia da divisão antes de salvar qualquer mudança de horário, capacidade ou médico.
+- Mostre a vaga descoberta na Escala Geral assim que for gerada. Indique a publicação no Portal Médico na ficha, junto à ação disponível para o perfil.
+
 ## Responsividade e acessibilidade
 
 - Confira pelo menos 1440, 390 e 360 px nas alterações de layout. Verifique conteúdo longo, filtros, menus, diálogos, rolagem, foco e campos com a área visível reduzida pelo teclado.
@@ -28,10 +37,37 @@
 
 ## Notificações de ações
 
+### Padrão permanente de confirmação e toast
+
+- Use `ConfirmationDialog` para confirmações controladas por um componente e `useConfirmation()` de `ConfirmationProvider` para decisões disparadas por ações. Ambos reutilizam `Dialog`; não implemente outro overlay, portal ou serviço de toast em uma página.
+- O modal de confirmação é compacto (`size="sm"`), com bordas arredondadas, ícone contextual sobre fundo circular suave, título destacado e descrição objetiva. Use texto que explique o efeito e os dados preservados quando isso mudar a decisão.
+- Sempre ofereça cancelamento secundário e confirmação com o verbo da ação: “Ativar cadastro”, “Excluir médico”, “Adicionar checklist”. A confirmação usa verde; ações destrutivas usam vermelho. O ícone pode usar sucesso, perigo, atenção ou informação conforme o contexto. Use os tokens semânticos existentes, que atendem aos temas claro e escuro.
+- Passe a gravação assíncrona em `onConfirm` e devolva seu resultado. O modal só fecha após sucesso; `false` mantém o modal disponível para correção ou nova tentativa. Durante a gravação, mantenha spinner, `aria-busy`, proteção contra clique duplicado e bloqueio de fechamento. Cancelar não deve chamar o backend nem gerar um toast.
+- Para confirmações com formulário ou análise extensa já existentes, use `Dialog variant="confirmation" confirmationTone="danger|success|warning|info"`. Preserve os campos, a validação e as regras de negócio. `DeleteConfirmDialog` mantém a confirmação por texto, usando o mesmo componente visual.
+- Os toasts continuam em `Notifications`, enviados exclusivamente por `notify`. Use ícone semântico, título curto, descrição breve quando houver recuperação a orientar e botão acessível de fechamento. O fundo circular do ícone, as cores e os estados usam os mesmos tokens dos modais.
+- Preserve as animações discretas: entrada de 160 ms, saída de 120 ms nas confirmações do provider e transições de 180 ms nos toasts. Respeite `prefers-reduced-motion`. Não acrescente saltos, escalas decorativas ou efeitos de brilho.
+- Mantenha foco visível, devolução do foco ao controle de origem, cancelamento por Escape quando o modal não estiver ocupado e ausência de rolagem horizontal em 1440, 390 e 360 px.
+- Não use `window.confirm`, `window.alert`, `window.prompt` nem suas formas globais para decisões ou feedback da aplicação. A regra ESLint `no-alert` impede sua reintrodução em `src`. A proteção `beforeunload` de alterações não salvas é a exceção: o navegador controla o aviso ao fechar ou recarregar a aba e não permite substituí-lo por um modal assíncrono. A navegação dentro da aplicação e o logout usam o modal próprio.
+- Mensagens de backend nunca entram diretamente em um toast. Mapeie erros técnicos para mensagens públicas conhecidas; registre somente metadados de diagnóstico sem dados médicos ou credenciais. Erros de status cadastral usam `doctorStatusError`.
+
+Exemplo de uso com gravação:
+
+```tsx
+const confirm = useConfirmation();
+await confirm({
+  title: 'Ativar cadastro do médico?',
+  description: 'Os plantões e documentos serão preservados. O acesso ao portal continua independente.',
+  confirmLabel: 'Ativar cadastro',
+  tone: 'success',
+  onConfirm: () => useStore.getState().setDoctorStatus(doctor.id, 'active'),
+});
+```
+
 - Use `notify` de `src/lib/notifications.ts` para confirmar ações relevantes depois que o servidor responder. Escolha sucesso para a conclusão, informação para um próximo estado, atenção para um cuidado necessário e erro para uma falha sem feedback adequado na tela.
 - Use títulos curtos e inclua uma descrição quando ela explicar o resultado ou orientar a recuperação. Mantenha validações e falhas de formulário perto da ação e preserve o que foi digitado. Mantenha confirmações, avisos operacionais e resumos que precisem ficar na tela.
 - Evite Toasts ao navegar, filtrar ou abrir uma área. Evite repetir a mesma mensagem como Toast e como aviso inline. Use `persistent` para erros que exigem leitura ou ação antes de continuar.
 - Use `withinDialog` para confirmações exibidas em um diálogo que permanece aberto. Por padrão, erros globais usam o diálogo ativo e confirmações usam a página.
+- Posicione os Toasts no canto inferior direito em desktop e acima da navegação inferior no mobile. Use `notify.saving()` enquanto uma gravação estiver em andamento e encerre o Toast no `finally`.
 
 ## Identidade visual e auditoria
 

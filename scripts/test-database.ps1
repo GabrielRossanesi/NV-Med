@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][string]$PostgresBin)
+param([Parameter(Mandatory = $true)][string]$PostgresBin, [switch]$DeferDocumentScan)
 
 $ErrorActionPreference = 'Stop'
 $initdb = Join-Path $PostgresBin 'initdb.exe'
@@ -24,6 +24,14 @@ function Invoke-LabSql {
   if ($LASTEXITCODE -ne 0) { throw 'Falha na verificação SQL do laboratório descartável.' }
 }
 
+function Assert-LabSqlRejected {
+  param([string[]]$Arguments, [string]$Expected)
+  $result = & $psql --no-psqlrc -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p $port -U $role -d postgres @Arguments 2>&1
+  if ($LASTEXITCODE -ne 3 -or ($result -join "`n") -notlike "*$Expected*") {
+    throw "A verificação não recusou a condição esperada ($Expected). $result"
+  }
+}
+
 try {
   & $initdb -D $cluster --username=$role --auth=trust --no-locale --encoding=UTF8 | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Falha ao inicializar o cluster descartável.' }
@@ -43,6 +51,7 @@ try {
     throw 'Falha ao iniciar o cluster descartável.'
   }
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'lab.fixture.sql'))
+  Assert-LabSqlRejected -Arguments @('-f', (Join-Path $sqlDir 'init_all.sql')) -Expected 'instalador de demonstração foi desativado'
   foreach ($number in (1, 2, 4, 5, 6) + (8..25)) {
     if ($number -eq 19) {
       Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'production-inventory.read-only.sql'))
@@ -55,6 +64,9 @@ try {
     $file = @(Get-ChildItem -LiteralPath $sqlDir -Filter $prefix -File)
     if ($file.Count -ne 1) { throw "Migration ausente ou ambígua ($number)." }
     Invoke-LabSql -Arguments @('-f', $file[0].FullName)
+    if ($number -in 1, 2, 4) {
+      Invoke-LabSql -Arguments @('-v', "step=$number", '-f', (Join-Path $sqlDir 'provisioning.baseline.verify.sql'))
+    }
   }
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'homologation.postflight.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'portal.verify.sql'))
@@ -95,6 +107,41 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-audit-context.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'schedule-controls.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'master-schedule.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '40_doctor_credential_writes.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-credential-writes.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-profile-access.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '41_administrative_mfa.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'administrative-mfa.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '42_attendance_confirmation.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'attendance-confirmation.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '43_doctor_data_minimization.sql'))
+  $documentScanMigration = Join-Path $sqlDir '44_medical_document_quarantine.sql'
+  if (!$DeferDocumentScan) { Invoke-LabSql -Arguments @('-f', $documentScanMigration) }
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '45_resumable_organization_cleanup.sql'))
+  # Emulate legacy metadata and grants on the disposable database before the incremental repair.
+  Invoke-LabSql -Arguments @('-c', @'
+UPDATE storage.buckets SET public = true WHERE id = 'medical-documents';
+GRANT SELECT (name) ON public.doctors TO PUBLIC;
+CREATE POLICY "Public Read Medical Documents" ON storage.objects FOR SELECT TO anon USING (true);
+'@)
+  $provisioningVerify = Join-Path $sqlDir 'provisioning.verify.sql'
+  Assert-LabSqlRejected -Arguments @('-f', $provisioningVerify) -Expected 'faltam etapas de endurecimento'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '46_secure_provisioning.sql'))
+  if ($DeferDocumentScan) {
+    Assert-LabSqlRejected -Arguments @('-f', $provisioningVerify) -Expected 'faltam os controles de quarentena documental'
+    Invoke-LabSql -Arguments @('-c', "SET nvmed.verify_deferred_document_scan = 'on';", '-f', $provisioningVerify)
+    Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'medium-security.verify.sql'))
+    Write-Output 'PASS: sequência 40–43, 45–46 com quarentena adiada.'
+    Invoke-LabSql -Arguments @('-f', $documentScanMigration)
+  }
+  Invoke-LabSql -Arguments @('-f', $provisioningVerify)
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'medium-security.verify.sql'))
+  Assert-LabSqlRejected -Arguments @('-c', 'BEGIN; GRANT SELECT (name) ON public.doctors TO PUBLIC;', '-f', $provisioningVerify) -Expected 'permissão anônima em public.doctors'
+  Assert-LabSqlRejected -Arguments @('-c', "BEGIN; UPDATE storage.buckets SET public = true WHERE id = 'profile-avatars';", '-f', $provisioningVerify) -Expected 'buckets privados ou proteção do Storage ausentes'
+  Assert-LabSqlRejected -Arguments @('-c', 'BEGIN; CREATE POLICY nv_lab_legacy ON storage.objects FOR SELECT TO PUBLIC USING (true);', '-f', $provisioningVerify) -Expected 'política permissiva legada ou anônima'
+  Invoke-LabSql -Arguments @('-f', $provisioningVerify)
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '47_staff_account.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'staff-account.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-evolution.preflight.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '48_shift_approval.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval.verify.sql'))
@@ -105,7 +152,11 @@ try {
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '51_finance_overview_and_exports.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'finance-overview.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'shift-approval-concurrency.verify.sql'))
-  Write-Output 'PASS: baseline 01-18, migrations 19-39 e 48-51, pré/pós-verificação e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '52_fractional_coverage.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'fractional-coverage.verify.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '53_doctor_status.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-status.verify.sql'))
+  Write-Output 'PASS: baseline 01-18, migrations 19-53, pré/pós-verificação e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

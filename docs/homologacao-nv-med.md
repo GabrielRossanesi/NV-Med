@@ -22,7 +22,7 @@ O Next.js fixa as variáveis públicas no bundle no momento do build. A validaç
 
 ## Ordem de aplicação
 
-1. No SQL Editor, confira novamente o projeto selecionado pelo hostname e pelo nome. Mantenha o Preview fechado e os buckets vazios durante a criação da base. Em um projeto vazio, use `01 → 02 → 04 → 05 → 06 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18`, um arquivo de cada vez. A 04 cria uma política histórica de Storage que a 05 substitui na mesma janela. Use a 07 apenas para o bootstrap revisto do administrador de teste. A carga 03 e o `init_all.sql` ficam fora dessa reconstrução. Em uma base existente, reconcilie catálogo e histórico antes de qualquer reaplicação.
+1. No SQL Editor, confira novamente o projeto selecionado pelo hostname e pelo nome. Mantenha o Preview fechado e os buckets vazios durante a criação da base. Para uma instalação nova, siga o [roteiro de provisionamento seguro até a migration 46](../supabase/README.md#provisionamento-seguro). A etapa 04 cria o bucket médico privado. Para uma base existente, reconcilie catálogo e histórico antes de escolher o ponto de partida.
 2. Registre os hashes SHA-256 dos arquivos e o commit. Execute [a pré-verificação de leitura](../supabase/homologation.preflight.sql). Compare triggers, funções e políticas com a linha de base, incluindo qualquer view ou RPC extra com acesso a dados financeiros ou documentos. Investigue contagens de vínculos inválidos, colisões, pagamentos legados inconsistentes, caminhos fora da pasta e objetos ausentes. Faça o backup e confirme o plano de restauração antes de abrir a janela.
 3. Aplique na ordem abaixo, com um resultado registrado por arquivo. Pare na primeira falha. Cada arquivo confirma sua própria transação. Se a sequência parar, identifique exatamente o que foi confirmado antes de preparar correção ou restauração.
 
@@ -36,7 +36,7 @@ O Next.js fixa as variáveis públicas no bundle no momento do build. A validaç
 | 24 | [Permissões financeiras](../supabase/24_financial_data_access.sql) | Grants de tabela e coluna revisados, visão mascarada e escrita por RPC. |
 | 25 | [Documentos e preferências](../supabase/25_document_notification_rules.sql) | Bucket médico fechado aos clientes, assinatura por vínculo e revisão, upload e limite de frequência. |
 
-4. Execute [a pós-verificação de leitura](../supabase/homologation.postflight.sql). Confirme que o esquema, os papéis efetivos e o isolamento dos buckets correspondem ao candidato. Só então publique o build **Preview** correspondente, após autorização. As migrations 24 e 25 mudam o contrato de escala e documentos. A versão anterior falha com os novos privilégios. Mantenha aplicação e esquema na mesma janela.
+4. Execute [a pós-verificação de leitura](../supabase/homologation.postflight.sql) após a etapa 25. Conclua a sequência do roteiro de provisionamento e execute [a verificação final](../supabase/provisioning.verify.sql) antes de carregar dados ou abrir o acesso. Mantenha a aplicação e o esquema compatíveis na mesma janela. Qualquer publicação do build **Preview** depende de autorização.
 
 ## Verificação e ativação
 

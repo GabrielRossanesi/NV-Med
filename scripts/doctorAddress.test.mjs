@@ -30,6 +30,12 @@ test('structured addresses round-trip in the existing text field and distinguish
   assert.ok(formatDoctorAddress({ ...longest, cep: '01001-000' }).length <= doctorAddressLimit);
 });
 
+test('missing imported addresses are treated as empty without rewriting legacy text', () => {
+  for (const value of [null, undefined, '']) assert.equal(parseDoctorAddress(value), null);
+  assert.equal(parseDoctorAddress('Rua legada, 10'), null);
+  assert.deepEqual(parseDoctorAddress('Logradouro: Rua Fictícia'), { ...emptyDoctorAddress, street: 'Rua Fictícia' });
+});
+
 test('lookup fills available fields and preserves number, complement and edits made while loading', () => {
   const before = { ...emptyDoctorAddress, street: 'Rua anterior', district: 'Bairro anterior', number: '12', complement: 'Casa 2' };
   const edited = { ...before, street: 'Rua corrigida', number: '14' };

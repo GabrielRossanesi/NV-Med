@@ -14,6 +14,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useState } from 'react';
+import { notify } from '@/lib/notifications';
 import Link from 'next/link';
 import { canEditPermission, canViewPermission } from '@/lib/permissions';
 
@@ -62,7 +63,7 @@ function SettingsForm({
     if (!newSpec.trim()) return;
 
     if (activeOrg.settings.specialties.includes(newSpec.trim())) {
-      alert('Esta especialidade já está cadastrada.');
+      notify.warning('Esta especialidade já está cadastrada.');
       return;
     }
 

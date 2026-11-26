@@ -2,6 +2,8 @@
 -- NV MED - SUPABASE DATABASE SCHEMA (São Paulo / sa-east-1)
 -- ==============================================================================
 
+BEGIN;
+
 -- 1. EXTENSÕES NECESSÁRIAS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -196,3 +198,17 @@ CREATE TRIGGER set_shifts_updated_at
 BEFORE UPDATE ON public.shifts
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+-- Commit the initial schema with no client access. Migration 05 grants tenant-scoped access.
+ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.doctors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.medical_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shifts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.organizations, public.user_accounts, public.doctors, public.units,
+  public.medical_documents, public.shifts FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.organizations, public.user_accounts,
+  public.doctors, public.units, public.medical_documents, public.shifts TO service_role;
+
+COMMIT;

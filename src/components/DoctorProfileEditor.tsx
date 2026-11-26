@@ -10,7 +10,7 @@ import DoctorProfileFields, { doctorProfileFromForm } from './DoctorProfileField
 
 type Snapshot = {
   profile: Record<string, unknown> & { updated_at: string }; specialties: string[];
-  birth_date: string | null; has_enrollment: boolean; can_approve: boolean; can_edit: boolean;
+  birth_date?: string | null; can_read_personal?: boolean; has_enrollment: boolean; can_approve: boolean; can_edit: boolean;
   enrollment_status: string; requested_specialties: string[];
 };
 export default function DoctorProfileEditor({ doctorId, specialties = [], own = false, onClose, onSaved }: {
@@ -37,9 +37,10 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
     const fields = new FormData(event.currentTarget);
     if (snapshot.birth_date && fields.has('birth') && !fields.get('birth')) { setError('Informe a data de nascimento ou mantenha o valor atual.'); return; }
     const draft = doctorProfileFromForm(fields);
-    const values: Record<string, unknown> = own ? { name: draft.name, phone: draft.phone, address: draft.address } : {
-      name: draft.name, phone: draft.phone, address: draft.address, crm: draft.crm, crm_uf: draft.crmUf,
-      cpf: draft.cpf, rqe: draft.rqe || null, specialty: draft.specialty, status: draft.status,
+    const personal = snapshot.can_read_personal === false ? {} : { phone: draft.phone, address: draft.address };
+    const values: Record<string, unknown> = own ? { name: draft.name, ...personal } : {
+      name: draft.name, ...personal, ...(snapshot.can_read_personal === false ? {} : { cpf: draft.cpf }), crm: draft.crm, crm_uf: draft.crmUf,
+      rqe: draft.rqe || null, specialty: draft.specialty, status: draft.status,
       contract_model: draft.contractModel, contract_signed: draft.contractSigned,
     };
     // Only changed fields are sent, preserving incomplete legacy values.
@@ -51,6 +52,7 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
       return original !== (value ?? '');
     }));
     setBusy(true); setError('');
+    const finishSaving = notify.saving();
     try {
       const result = await createClient()?.rpc('nv_update_doctor_profile', {
         target: doctorId, profile, revision: snapshot.profile.updated_at,
@@ -61,7 +63,7 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
       if (result.error) throw new Error(portalError(result.error));
       onSaved();
       notify.success(own ? 'Seus dados foram atualizados.' : 'Perfil médico atualizado.');
-    } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
+    } catch (failure) { setError((failure as Error).message); } finally { finishSaving(); setBusy(false); }
   }
   const p = snapshot?.profile;
   const initial = p ? { ...p, crmUf: p.crm_uf, contractModel: p.contract_model, contractSigned: p.contract_signed } as unknown as Doctor : undefined;
@@ -79,8 +81,8 @@ export default function DoctorProfileEditor({ doctorId, specialties = [], own = 
     {!snapshot && error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {snapshot && <form id={formId} onSubmit={save} aria-busy={busy}>
       <fieldset disabled={busy || !snapshot.can_edit} className="min-w-0 space-y-5">
-        <DoctorProfileFields initial={initial} specialties={specialties} editing own={own}
-          birthDate={!own && snapshot.has_enrollment ? snapshot.birth_date || '' : undefined}
+        <DoctorProfileFields initial={initial} specialties={specialties} editing own={own} personal={snapshot.can_read_personal !== false}
+          birthDate={!own && snapshot.can_read_personal !== false && snapshot.has_enrollment ? snapshot.birth_date || '' : undefined}
           professionalDetails={canEditSpecialties && <fieldset className="min-w-0 sm:col-span-2">
             <legend className="nv-label">{snapshot.enrollment_status === 'approved' ? 'Especialidades autorizadas' : 'Especialidades para análise do credenciamento'}</legend>
             <div className="grid sm:grid-cols-2">{Array.from(new Set([...profileSpecialties, ...specialties])).map(s => <label key={s} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" name="approvedSpecialties" value={s} defaultChecked={profileSpecialties.includes(s)}/>{s}</label>)}</div>

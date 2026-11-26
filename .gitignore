@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Private production import sources, backups and execution evidence
 /Import/
+
+# Supabase CLI cache
+/supabase/.temp/

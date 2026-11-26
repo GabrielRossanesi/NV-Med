@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AccessGuard from '@/components/AccessGuard';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
@@ -19,6 +19,8 @@ import {
   MinusCircle,
   Trash2
 } from 'lucide-react';
+
+type CleanupCompany = Pick<Organization, 'id' | 'name'>;
 
 export default function AdminOrganizationsPage() {
   const { 
@@ -40,7 +42,20 @@ export default function AdminOrganizationsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
-  const [deletingOrg, setDeletingOrg] = useState<Organization | null>(null);
+  const [deletingOrg, setDeletingOrg] = useState<CleanupCompany | null>(null);
+  const [pendingCleanups, setPendingCleanups] = useState<CleanupCompany[]>([]);
+  const [cleanupRevision, setCleanupRevision] = useState(0);
+  const isCeo = currentUser.type === 'saas_admin' && currentUser.role === 'CEO';
+  const resuming = pendingCleanups.some(item => item.id === deletingOrg?.id);
+  useEffect(() => {
+    if (!isCeo) return;
+    const controller = new AbortController();
+    void fetch('/api/admin/organizations', { cache: 'no-store', signal: controller.signal })
+      .then(response => response.ok ? response.json() : { jobs: [] })
+      .then(result => { if (!controller.signal.aborted) setPendingCleanups(Array.isArray(result.jobs) ? result.jobs : []); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [currentUser.id, isCeo, cleanupRevision]);
 
   // Form states
   const [name, setName] = useState('');
@@ -177,6 +192,13 @@ export default function AdminOrganizationsPage() {
   return (
     <AccessGuard requiredPermission="empresas">
       <div className="space-y-8 animate-in fade-in duration-300">
+        {isCeo && pendingCleanups.length > 0 && <section className="nv-panel space-y-2 p-4" aria-label="Exclusões pendentes">
+          <h2 className="text-sm font-semibold">Exclusões pendentes</h2>
+          {pendingCleanups.map(company => <div key={company.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>{company.name}</span>
+            <button type="button" className="nv-button-secondary" disabled={saving} onClick={() => setDeletingOrg(company)}>Retomar exclusão</button>
+          </div>)}
+        </section>}
         {/* Title */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -534,17 +556,20 @@ export default function AdminOrganizationsPage() {
         )}
         {deletingOrg && (
           <DeleteConfirmDialog
-            title="Excluir empresa"
+            title={resuming ? 'Retomar exclusão' : 'Excluir empresa'}
             itemName={deletingOrg.name}
-            description="Toda a operação vinculada será removida em uma única transação. Use esta ação somente quando a empresa não precisar mais ser recuperada."
-            impacts={[
+            description={resuming ? 'A empresa já foi removida do painel. A limpeza será retomada a partir dos itens pendentes.' : 'Os cadastros serão removidos e a limpeza de arquivos e acessos será acompanhada até a conclusão. Empresas com retenção ativa ou histórico de plantões são preservadas.'}
+            impacts={resuming ? [] : [
               `${doctors.filter(item => item.organizationId === deletingOrg.id).length} médicos e ${users.filter(item => item.organizationId === deletingOrg.id).length} usuários`,
               `${units.filter(item => item.organizationId === deletingOrg.id).length} unidades e ${sectors.filter(item => item.organizationId === deletingOrg.id).length} setores`,
               `${shifts.filter(item => item.organizationId === deletingOrg.id).length} postos de escala e ${documents.filter(item => item.organizationId === deletingOrg.id).length} documentos`,
             ]}
             busy={saving}
             onClose={() => setDeletingOrg(null)}
-            onConfirm={async (confirmation) => { if (await deleteOrganization(deletingOrg.id, confirmation)) setDeletingOrg(null); }}
+            onConfirm={async (confirmation) => {
+              if (await deleteOrganization(deletingOrg.id, confirmation)) setDeletingOrg(null);
+              setCleanupRevision(revision => revision + 1);
+            }}
           />
         )}
       </div>

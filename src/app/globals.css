@@ -33,11 +33,21 @@
   overflow-wrap: anywhere;
 }
 
-.nv-toaster [data-icon] { flex: none; margin-top: 1px; }
+.nv-toaster [data-icon] { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: color-mix(in srgb, var(--info) 10%, transparent); }
+.nv-toaster [data-content] { min-width: 0; align-self: center; }
 .nv-toaster [data-type="success"] [data-icon] { color: var(--success); }
+.nv-toaster [data-type="success"] [data-icon] { background: color-mix(in srgb, var(--success) 12%, transparent); }
 .nv-toaster [data-type="info"] [data-icon] { color: var(--info); }
 .nv-toaster [data-type="warning"] [data-icon] { color: var(--warning); }
+.nv-toaster [data-type="warning"] [data-icon] { background: color-mix(in srgb, var(--warning) 12%, transparent); }
 .nv-toaster [data-type="error"] [data-icon] { color: var(--danger); }
+.nv-toaster [data-type="error"] [data-icon] { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.nv-toaster [data-type="loading"] { padding-right: .875rem; }
+.nv-toaster [data-type="loading"] .sonner-loader {
+  position: static;
+  transform: none;
+  color: var(--info);
+}
 
 .nv-toaster [data-close-button] {
   position: absolute;
@@ -52,6 +62,25 @@
 }
 
 .nv-toaster [data-close-button]:hover { background: var(--state-hover); color: var(--text-primary); }
+
+.nv-confirm-success { --nv-confirm-color: var(--success); }
+.nv-confirm-danger { --nv-confirm-color: var(--danger); }
+.nv-confirm-warning { --nv-confirm-color: var(--warning); }
+.nv-confirm-info { --nv-confirm-color: var(--info); }
+.nv-confirmation { --nv-confirm-action: var(--success); }
+.nv-confirmation[data-confirm-tone="danger"] { --nv-confirm-action: var(--danger); }
+.nv-confirm-icon { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--nv-confirm-color); background: color-mix(in srgb, var(--nv-confirm-color) 12%, transparent); }
+.nv-confirmation > div > header { padding: 20px 12px 0 20px; border: 0; }
+.nv-confirmation > div > header h2 { font-size: 1.125rem; line-height: 1.5rem; }
+.nv-confirmation > div > div { padding: 16px 20px 20px; }
+.nv-confirmation > div > footer { padding: 0 20px 20px; border: 0; }
+.nv-confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.nv-confirmation .nv-button { background: var(--nv-confirm-action); color: var(--text-inverse); }
+.nv-confirmation .nv-button:where(:hover:not(:disabled)) { background: color-mix(in srgb, var(--nv-confirm-action) 88%, var(--text-primary)); }
+.nv-confirmation[open][data-closing] { animation: nv-confirm-exit 120ms ease-in forwards; }
+@keyframes nv-confirm-exit { to { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .nv-confirmation[open] { animation: none; } }
+@media (max-width: 400px) { .nv-confirm-actions > button { flex: 1 1 auto; } }
 .nv-toaster:focus-visible,
 .nv-toaster [data-sonner-toast]:focus-visible,
 .nv-toaster [data-close-button]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -90,6 +119,10 @@
   
   --accent: #5D538F;
   --success: #23754F;
+  --schedule-day-bg: #E5F3E9;
+  --schedule-day-text: #20543C;
+  --schedule-night-bg: #21513F;
+  --schedule-night-text: #F0FAF4;
   --warning: #8C550F;
   --danger: #AB394C;
   --info: #345A9B;
@@ -164,6 +197,10 @@
   
   --accent: #C2B6F6;
   --success: #83D5A7;
+  --schedule-day-bg: #BDE5CB;
+  --schedule-day-text: #153C2C;
+  --schedule-night-bg: #214D3D;
+  --schedule-night-text: #F0FAF4;
   --warning: #F5C377;
   --danger: #FDA2AC;
   --info: #A8C2FC;
@@ -353,6 +390,10 @@ body:has(.nv-app-shell) {
 
 @media (width < 48rem) {
   :root { --nv-mobile-bar-height: 56px; }
+
+  body:has(.nv-mobile-bar) .nv-toaster:not(.nv-dialog *) {
+    --nv-toast-navigation-offset: var(--nv-mobile-bar-height);
+  }
 
   html:has(.nv-app-shell), html:has(.nv-portal-content) {
     scrollbar-gutter: auto;
@@ -587,6 +628,34 @@ body, header, aside, .bg-card-bg, .bg-surface, .bg-surface-elevated, .border-bor
 }
 
 @layer components {
+  .nv-schedule-entry {
+    background: var(--schedule-entry-bg, var(--surface-muted));
+    color: var(--schedule-entry-text, var(--text-secondary));
+    border-inline-start: 2px solid var(--schedule-entry-border, var(--border));
+  }
+  .nv-schedule-entry:hover {
+    background: color-mix(in srgb, var(--schedule-entry-bg, var(--surface-muted)), currentColor 9%);
+  }
+  .nv-schedule-entry[data-schedule-tone="day"] {
+    --schedule-entry-bg: var(--schedule-day-bg);
+    --schedule-entry-text: var(--schedule-day-text);
+    --schedule-entry-border: var(--success);
+  }
+  .nv-schedule-entry[data-schedule-tone="night"] {
+    --schedule-entry-bg: var(--schedule-night-bg);
+    --schedule-entry-text: var(--schedule-night-text);
+    --schedule-entry-border: var(--success);
+  }
+  .nv-schedule-entry[data-schedule-tone="available"] {
+    --schedule-entry-bg: color-mix(in srgb, var(--card-bg), var(--danger) 8%);
+    --schedule-entry-text: var(--danger);
+    --schedule-entry-border: var(--danger);
+  }
+  .nv-schedule-entry[data-schedule-tone="planned"] {
+    --schedule-entry-bg: color-mix(in srgb, var(--surface-muted), transparent 65%);
+    --schedule-entry-text: var(--text-muted);
+  }
+
   .nv-page-title {
     color: var(--text-primary);
     font-size: clamp(1.625rem, 1.35rem + 1vw, 2.125rem);

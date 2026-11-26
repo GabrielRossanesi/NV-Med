@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client';
 import { withAbortTimeout } from '@/lib/requestTimeout';
 import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 import type { DoctorBanking } from '@/lib/doctorBanking';
+import { doctorStatusError, logDoctorStatusError } from '@/lib/doctorStatus';
 import {
   Organization,
   Doctor,
@@ -137,6 +138,7 @@ interface DbDocumentAudit {
 }
 
 interface DbShift {
+  coverage_post?: Shift['coveragePost'] | null;
   approval_source?: Shift['approvalSource'];
   approval_revision?: number;
   approval_ended_at?: string;
@@ -307,6 +309,7 @@ function mapDocumentAuditFromDb(row: DbDocumentAudit): DocumentAuditEntry {
 
 function mapShiftFromDb(row: DbShift): Shift {
   return {
+    coveragePost: row.coverage_post || undefined,
     approvalSource: row.approval_source ?? undefined,
     approvalRevision: row.approval_revision,
     approvalEndedAt: row.approval_ended_at,
@@ -371,27 +374,30 @@ export async function fetchInitialDataFromSupabase() {
   const { data: profile, error: profileError } = await supabase.from('user_accounts').select('*').eq('auth_user_id', auth.user.id).eq('status', 'active').single();
   if (profileError || !profile) throw new Error('Seu acesso ainda não foi liberado. Contate o administrador.');
   const currentUser = mapUserFromDb(profile);
+  currentUser.email = auth.user.email || currentUser.email;
   if (currentUser.avatar) {
     const { data: avatar } = await supabase.storage.from('profile-avatars').createSignedUrl(currentUser.avatar, 3600);
     if (avatar?.signedUrl) currentUser.avatar = avatar.signedUrl;
   }
-  async function rows(table: string) {
-    const result = [];
+  async function rows<Row>(table: string, columns = '*') {
+    const result: Row[] = [];
     for (let offset = 0; ; offset += 500) {
-      let query = supabase!.from(table).select('*').order('id').range(offset, offset + 499);
+      let query = supabase!.from(table).select(columns).order('id').range(offset, offset + 499);
       if (currentUser.type !== 'saas_admin') {
         if (!currentUser.organizationId) throw new Error('Usuário sem empresa vinculada.');
         query = query.eq(table === 'organizations' ? 'id' : 'organization_id', currentUser.organizationId);
       }
-      const { data, error } = await query;
+      const { data, error } = await query.overrideTypes<Row[], { merge: false }>();
       if (error) throw new Error('Não foi possível carregar ' + table + '. Tente novamente.');
       result.push(...data);
       if (data.length < 500) return result;
     }
   }
   const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
-    rows('organizations'), rows('doctors'), rows('units'), rows('sectors'), rows('medical_documents'), rows('nv_staff_shifts'),
-    rows('user_accounts'),
+    rows<DbOrganization>('organizations'),
+    rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units'),
+    rows<DbUnit>('units'), rows<DbSector>('sectors'), rows<DbMedicalDocument>('medical_documents'), rows<DbShift>('nv_staff_shifts'),
+    rows<DbUserAccount>('user_accounts'),
     fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
@@ -422,7 +428,7 @@ export async function fetchMedicalDocumentsForOrganization(organizationId: strin
 // OPERAÇÕES DE ESCRITA ASSÍNCRONA (PERSISTÊNCIA EM SEGUNDO PLANO)
 // ==============================================================================
 
-export async function saveDoctorToSupabase(doctor: Doctor, creating = false, banking?: DoctorBanking) {
+export async function createDoctorInSupabase(doctor: Doctor, banking?: DoctorBanking) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
 
@@ -441,15 +447,38 @@ export async function saveDoctorToSupabase(doctor: Doctor, creating = false, ban
     status: doctor.status,
     contract_model: doctor.contractModel,
     contract_signed: doctor.contractSigned,
-    linked_units: doctor.linkedUnits
   };
 
-  if (creating) {
-    const { error } = await supabase.rpc('nv_create_doctor_with_banking', { profile: payload, banking: banking || null });
-    if (error) throw new Error('Não foi possível cadastrar o médico. Confira os dados e as permissões.');
-  } else {
-    const { error } = await supabase.from('doctors').update(payload).eq('id', doctor.id).select('id').single();
-    if (error) throw new Error('Não foi possível salvar o médico.');
+  const { error } = await supabase.rpc('nv_create_doctor_with_banking', { profile: payload, banking: banking || null });
+  if (error) throw new Error('Não foi possível cadastrar o médico. Confira os dados e as permissões.');
+}
+
+export async function updateDoctorContractInSupabase(doctorId: string, changes: Partial<Pick<Doctor, 'contractModel' | 'contractSigned'>>) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+
+  const { error } = await supabase.from('doctors').update({
+    contract_model: changes.contractModel,
+    contract_signed: changes.contractSigned,
+  }).eq('id', doctorId).select('id').single();
+  if (error) throw new Error('Não foi possível salvar o contrato do médico.');
+}
+
+export async function setDoctorStatusInSupabase(doctor: Doctor, status: DoctorStatus): Promise<Doctor> {
+  const client = createClient();
+  if (!client) throw new Error(doctorStatusError(null));
+  try {
+    const snapshot = await withAbortTimeout(signal => client.from('doctors').select('id,organization_id,updated_at')
+      .eq('id', doctor.id).eq('organization_id', doctor.organizationId).abortSignal(signal).single());
+    if (snapshot.error) throw snapshot.error;
+    const result = await withAbortTimeout(signal => client.rpc('nv_set_doctor_status', { target: doctor.id, new_status: status, revision: snapshot.data.updated_at }).abortSignal(signal));
+    if (result.error) throw result.error;
+    if (!result.data || result.data.id !== doctor.id || result.data.organization_id !== doctor.organizationId || result.data.status !== status) throw new Error('Invalid status acknowledgement');
+    return mapDoctorFromDb(result.data);
+  } catch (failure) {
+    const error = failure as { code?: string; message?: string; status?: number; name?: string };
+    logDoctorStatusError(error);
+    throw new Error(doctorStatusError(error));
   }
 }
 
@@ -540,10 +569,8 @@ export async function saveShiftToSupabase(shift: ShiftWrite) {
   return saved;
 }
 
-export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
-  const supabase = createClient();
-  if (!supabase) throw new Error('Conexão não configurada.');
-  const payload = shifts.map((shift): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string; cash_payment?: ShiftWrite['cashPayment'] } => ({
+function operationalShiftRecord(shift: ShiftWrite): DbShift & { agreement?: ShiftAgreementSelection; retro_reason?: string; cash_payment?: ShiftWrite['cashPayment'] } {
+  return {
     id: shift.id,
     coverage_mode: shift.coverageMode || 'regular',
     coverage_reason: shift.coverageMode === 'adhoc' ? shift.coverageReason?.trim() : null,
@@ -568,7 +595,54 @@ export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
     type: shift.type,
     status: shift.status,
     notes: shift.notes
-  }));
+  };
+}
+
+export async function saveFractionalShiftToSupabase(shift: ShiftWrite) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const plan = shift.coveragePlan;
+  const { data, error } = await withAbortTimeout(
+    async signal => await supabase.rpc('nv_save_fractional_coverage', {
+      record: { ...operationalShiftRecord(shift), hourly_rate_cents: shift.coverageHourlyRateCents,
+        expected_hourly_agreement_at: shift.paymentAgreement?.changed_at },
+      planned: plan ? { date: plan.date, start_time: plan.startTime, end_time: plan.endTime, capacity: plan.capacity } : null,
+      expected_revision: shift.coveragePost?.revision ?? null,
+    }).abortSignal(signal),
+    { message: 'O servidor demorou para confirmar a cobertura. Confira a escala antes de tentar novamente.' },
+  );
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function fetchCoverageShifts(organizationId: string, postIds: string[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase.from('nv_staff_shifts').select('*').eq('organization_id', organizationId)
+    .in('coverage_post->>id', postIds);
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function publishCoverageVacancy(shiftId: string, enabled: boolean) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { error } = await supabase.rpc('nv_master_publish_coverage', { target: shiftId, enabled });
+  if (error) throw new Error(error.message);
+}
+
+export async function cancelCoveragePost(post: NonNullable<Shift['coveragePost']>) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const { data, error } = await supabase.rpc('nv_cancel_fractional_coverage', { target: post.id, expected_revision: post.revision });
+  if (error) throw new Error(error.message);
+  return (data as DbShift[]).map(mapShiftFromDb);
+}
+
+export async function saveShiftsToSupabase(shifts: ShiftWrite[]) {
+  const supabase = createClient();
+  if (!supabase) throw new Error('Conexão não configurada.');
+  const payload = shifts.map(operationalShiftRecord);
   const { data, error } = await withAbortTimeout(
     async signal => await supabase.rpc('nv_save_operational_shifts', { records: payload }).abortSignal(signal),
     { message: 'O servidor demorou para confirmar os postos. Verifique sua conexão e tente novamente.' }
@@ -756,11 +830,15 @@ export async function uploadDocumentFileToSupabase(file: File, documentId: strin
   return mapDocumentFromDb(data);
 }
 
-export async function openDocument(documentId: string, revision?: string) {
+export async function openDocument(documentId: string, revision?: string, download = false) {
   const query = new URLSearchParams({ preview: '1' });
   if (revision) query.set('revision', revision);
+  if (download) query.set('download', '1');
   const response = await fetch('/api/portal/documents/' + encodeURIComponent(documentId) + '?' + query, { cache: 'no-store' });
-  if (!response.ok) throw new Error('Não foi possível abrir o documento.');
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error || 'Não foi possível abrir o documento.');
+  }
   const data: { url: string } = await response.json();
   return data.url;
 }

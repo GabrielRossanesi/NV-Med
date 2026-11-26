@@ -6,7 +6,8 @@ import { scheduleAuditLabels, scheduleOriginLabels, type ScheduleAuditEntry, typ
 import type { Sector, Shift, Unit } from '@/types';
 import { shiftApprovalLabels } from '@/lib/shiftApproval';
 
-const fieldLabels: Record<string, string> = { approval_source: 'Aprovação', reason: 'Justificativa', doctor: 'Médico', date: 'Dia do plantão', start_time: 'Início', end_time: 'Término', status: 'Situação',
+const fieldLabels: Record<string, string> = { coverage_post_id: 'Posto previsto', capacity: 'Capacidade simultânea',
+  operational_date: 'Data operacional', approval_source: 'Aprovação', reason: 'Justificativa', doctor: 'Médico', date: 'Dia do plantão', start_time: 'Início', end_time: 'Término', status: 'Situação',
   unit_id: 'Unidade', sector_id: 'Setor', specialty: 'Especialidade', type: 'Modalidade', employment_type: 'Contratação', start_date: 'Data inicial', end_date: 'Data final',
   frequency: 'Frequência', interval_weeks: 'Intervalo em semanas', weekdays: 'Dias da semana', anchor_date: 'Data de referência', horizon_months: 'Meses futuros', employer_name: 'Empregador', coverage_mode: 'Cobertura', kind: 'Tipo de ausência', coverage_reason_updated: 'Motivo da cobertura', private_note_updated: 'Observação privada' };
 const values: Record<string, string> = { active: 'Ativo', suspended: 'Suspenso', ended: 'Encerrado', cancelled: 'Cancelado', pending: 'Pendente', confirmed: 'Confirmado', completed: 'Concluído', open: 'Vaga aberta', scheduled: 'Programada', weeks: 'Semanas', monthly: 'Mensal', clt: 'CLT', pj: 'PJ', concursado: 'Prefeitura', onsite: 'Presencial', oncall: 'Sobreaviso', telemedicine: 'Telemedicina' };

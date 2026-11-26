@@ -40,6 +40,7 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
   const dates = masterDates(spec, rule ? since : today, localDate(end));
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!guard.check()) return; setBusy(true); setError('');
+    const finishSaving = notify.saving();
     try {
       if (!spec.weekdays.length) throw new Error('Selecione pelo menos um dia da semana.');
       const finance = spec.employment_type === 'pj' ? buildRequiredPjAgreement(agreement, rate) : null;
@@ -49,7 +50,7 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
       onClose();
       notify.success(rule ? 'Recorrência atualizada.' : 'Recorrência cadastrada.');
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Não foi possível salvar a recorrência.'); }
-    finally { setBusy(false); }
+    finally { finishSaving(); setBusy(false); }
   }
   return <Dialog title={rule ? 'Editar recorrência' : 'Cadastrar médico fixo'} size="lg" onClose={() => !busy && guard.transition(onClose)}>
     <form data-schedule-edit onSubmit={save} aria-busy={busy}><fieldset disabled={!guard.unlocked || busy} className="space-y-5">
@@ -67,6 +68,23 @@ export default function MasterRuleEditor({ organization, unitId, sectorId, docto
         <label className="nv-label">Início<input className="nv-input" type="time" required value={spec.start_time} onChange={e => setSpec({ ...spec, start_time: e.target.value })}/></label>
         <label className="nv-label">Término<input className="nv-input" type="time" required value={spec.end_time} onChange={e => setSpec({ ...spec, end_time: e.target.value })}/></label>
         {spec.end_time < spec.start_time && <p className="text-xs text-primary sm:col-span-2">O plantão termina no dia seguinte.</p>}
+        <fieldset className="space-y-2 rounded-lg border border-border p-3 sm:col-span-2">
+          <legend className="sr-only">Cobertura do posto recorrente</legend>
+          <label className="flex min-h-9 items-center gap-2 text-sm font-medium">
+            <input type="checkbox" checked={Boolean(spec.coverage_plan)} onChange={event => setSpec({
+              ...spec, coverage_plan: event.target.checked ? { start_time: spec.start_time, end_time: spec.end_time, capacity: 1 } : undefined,
+            })}/>Definir período do posto
+          </label>
+          {spec.coverage_plan && <div className="grid gap-2 sm:grid-cols-3">
+            <label className="nv-label">Início previsto<input type="time" className="nv-input" required value={spec.coverage_plan.start_time}
+              onChange={event => setSpec({ ...spec, coverage_plan: { ...spec.coverage_plan!, start_time: event.target.value } })}/></label>
+            <label className="nv-label">Fim previsto<input type="time" className="nv-input" required value={spec.coverage_plan.end_time}
+              onChange={event => setSpec({ ...spec, coverage_plan: { ...spec.coverage_plan!, end_time: event.target.value } })}/></label>
+            <label className="nv-label">Médicos simultâneos<input type="number" className="nv-input" required min={1} max={20} value={spec.coverage_plan.capacity}
+              onChange={event => setSpec({ ...spec, coverage_plan: { ...spec.coverage_plan!, capacity: Number(event.target.value) } })}/></label>
+            <p className="text-xs text-text-secondary sm:col-span-3">O início e o término acima definem a alocação do médico fixo. Os trechos descobertos geram vagas com publicação pendente.</p>
+          </div>}
+        </fieldset>
         <label className="nv-label">Frequência<select className="nv-input" value={spec.frequency === 'monthly' ? 'monthly' : String(spec.interval_weeks)} onChange={e => setSpec({ ...spec, frequency: e.target.value === 'monthly' ? 'monthly' : 'weeks', interval_weeks: e.target.value === 'monthly' ? 1 : Number(e.target.value) })}>
           <option value="1">Semanal</option><option value="2">Quinzenal</option><option value="monthly">Mensal</option>{spec.interval_weeks > 2 && <option value={spec.interval_weeks}>A cada {spec.interval_weeks} semanas</option>}
         </select></label>

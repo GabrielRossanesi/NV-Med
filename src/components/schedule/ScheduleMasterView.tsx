@@ -45,6 +45,7 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
   async function saveStatus() {
     if (!statusEditor || !confirmed || !guard.check()) return;
     setBusy(true); setActionError('');
+    const finishSaving = notify.saving();
     try {
       const saved = await guard.run(async () => {
         await masterRuleStatus(statusEditor.rule.id, statusEditor.state, statusEditor.rule.revision, decision, true);
@@ -55,11 +56,12 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
       if (saved) notify.success('Status da recorrência atualizado.');
     }
     catch (failure) { setActionError(failure instanceof Error ? failure.message : 'Não foi possível alterar a recorrência.'); }
-    finally { setBusy(false); }
+    finally { finishSaving(); setBusy(false); }
   }
   async function publish(id: string, enabled: boolean) {
     if (!guard.check()) return;
     setBusy(true); setActionError('');
+    const finishSaving = notify.saving();
     try {
       await guard.run(async () => {
         await publishMasterCoverage(id, enabled);
@@ -68,7 +70,7 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
       await changed();
     }
     catch (failure) { setActionError(failure instanceof Error ? failure.message : 'Não foi possível atualizar a oferta.'); }
-    finally { setBusy(false); }
+    finally { finishSaving(); setBusy(false); }
   }
   if (error) return <div role="alert" className="rounded-xl border border-danger/25 p-5 text-sm text-danger">{error}</div>;
   if (!data) return <p role="status" className="py-10 text-sm text-text-muted">Carregando recorrências…</p>;
@@ -96,7 +98,7 @@ export default function ScheduleMasterView({ organization, unitId, sectorId, sec
     <DoctorAbsenceManager organization={organization} doctors={doctors} data={data} canManage={canManageAbsences ?? (canEdit && canApprove)} onChanged={changed} onOpenShift={onOpenShift}/>
     {canViewHistory && <details className="rounded-xl border border-border bg-card-bg p-4"><summary className="cursor-pointer text-sm font-semibold">Histórico de alterações</summary><div className="mt-3 divide-y divide-border">{data.audit.map(entry => <p key={entry.id} className="py-2 text-xs text-text-secondary">{new Date(entry.created_at).toLocaleString('pt-BR')} · {auditLabel(entry.action)}</p>)}{!data.audit.length && <p className="mt-3 text-xs text-text-muted">Nenhuma alteração registrada.</p>}</div></details>}
     {activeEditor && <MasterRuleEditor key={`${activeEditor.rule?.id || 'new'}:${activeEditor.date || ''}`} organization={organization} unitId={unitId} sectorId={sectorId} units={units} sectors={sectors} doctors={doctors} rule={activeEditor.rule} effectiveDate={activeEditor.date} canFinance={canFinance} onClose={() => { setEditor(null); setDismissedRequest(editRequest?.nonce || 0); }} onSaved={changed}/>}
-    {statusEditor && <Dialog title={`${statusEditor.state === 'ended' ? 'Encerrar' : statusEditor.state === 'suspended' ? 'Suspender' : 'Reativar'} recorrência`} onClose={() => !busy && guard.transition(() => setStatusEditor(null))}><fieldset data-schedule-edit disabled={!guard.unlocked || busy} className="space-y-5"><label className="nv-label">Plantões futuros<select className="nv-input" value={decision} onChange={e => setDecision(e.target.value as 'keep' | 'open')}><option value="keep">Preservar os plantões já gerados</option><option value="open">Liberar apenas ocorrências futuras sem ajustes manuais</option></select></label><p className="text-xs leading-5 text-text-muted">Registros realizados, pagamentos consolidados, candidaturas e substituições são preservados. Postos reaproveitados são liberados; postos criados pela regra são cancelados, sem exclusão do histórico.</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>Confirmo o tratamento dos plantões futuros, inclusive os já publicados.</label>{actionError && <p role="alert" className="text-sm text-danger">{actionError}</p>}<button type="button" className="nv-button" disabled={busy || !confirmed} onClick={() => void saveStatus()}>{busy ? 'Salvando…' : 'Confirmar alteração'}</button></fieldset></Dialog>}
+    {statusEditor && <Dialog variant="confirmation" confirmationTone={statusEditor.state === 'ended' ? 'danger' : statusEditor.state === 'active' ? 'success' : 'warning'} title={`${statusEditor.state === 'ended' ? 'Encerrar' : statusEditor.state === 'suspended' ? 'Suspender' : 'Reativar'} recorrência`} onClose={() => !busy && guard.transition(() => setStatusEditor(null))}><fieldset data-schedule-edit disabled={!guard.unlocked || busy} className="space-y-5"><label className="nv-label">Plantões futuros<select className="nv-input" value={decision} onChange={e => setDecision(e.target.value as 'keep' | 'open')}><option value="keep">Preservar os plantões já gerados</option><option value="open">Liberar apenas ocorrências futuras sem ajustes manuais</option></select></label><p className="text-xs leading-5 text-text-muted">Registros realizados, pagamentos consolidados, candidaturas e substituições são preservados. Postos reaproveitados são liberados; postos criados pela regra são cancelados, sem exclusão do histórico.</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>Confirmo o tratamento dos plantões futuros, inclusive os já publicados.</label>{actionError && <p role="alert" className="text-sm text-danger">{actionError}</p>}<button type="button" className="nv-button" disabled={busy || !confirmed} onClick={() => void saveStatus()}>{busy ? 'Salvando…' : 'Confirmar alteração'}</button></fieldset></Dialog>}
   </div>;
 }
 

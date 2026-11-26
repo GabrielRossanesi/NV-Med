@@ -1,5 +1,7 @@
 'use client';
 
+import { notify } from '@/lib/notifications';
+
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import Dialog from '@/components/Dialog';
@@ -141,7 +143,7 @@ export default function AdminUsersPage() {
     setIsModalOpen(false);
   };
 
-  const handleSimulateInvite = (user: UserAccount) => { alert('Acesso de ' + user.name + ': peça para abrir a tela de login e selecionar Primeiro acesso ou esqueci minha senha.'); };
+  const handleSimulateInvite = (user: UserAccount) => { notify.info('Orientação de acesso', { description: 'Peça a ' + user.name + ' para abrir o login e selecionar Primeiro acesso ou esqueci minha senha.' }); };
 
   // Filter logic
   const filteredUsers = users.filter((user) => {

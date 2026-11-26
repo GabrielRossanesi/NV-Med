@@ -17,6 +17,7 @@ import {
   FileCheck2
 } from 'lucide-react';
 import AccessGuard from '@/components/AccessGuard';
+import { useConfirmation } from '@/components/ConfirmationProvider';
 import Dialog from '@/components/Dialog';
 import { canPerformAction } from '@/lib/permissions';
 import Link from 'next/link';
@@ -29,6 +30,7 @@ import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileFields, { doctorProfileFromForm } from '@/components/DoctorProfileFields';
 
 function DoctorsPageContent() {
+  const confirm = useConfirmation();
   const {
     activeOrganizationId,
     currentUser,
@@ -140,9 +142,7 @@ function DoctorsPageContent() {
 
   const handleDelete = (id: string) => {
     if (!canDelete) return;
-    if (confirm('Deseja realmente excluir este médico? Todos os plantões e documentos vinculados serão apagados.')) {
-      deleteDoctor(id);
-    }
+    void confirm({ title: 'Excluir médico?', description: 'Todos os plantões e documentos vinculados serão apagados.', tone: 'danger', confirmLabel: 'Excluir médico', onConfirm: () => deleteDoctor(id) });
   };
 
   const getStatusBadge = (status: DoctorStatus) => {
@@ -343,7 +343,6 @@ function DoctorsPageContent() {
                               </div>
                               <div>
                                 <p className="font-semibold text-text-primary">{doc.name}</p>
-                                <p className="text-[10px] text-text-muted">{doc.email}</p>
                               </div>
                             </div>
                           </td>

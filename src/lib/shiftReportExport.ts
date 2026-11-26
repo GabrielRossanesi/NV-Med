@@ -15,7 +15,7 @@ type Column = {
   width: number;
   field: (item: ReportRow) => string | number | null | undefined;
   total?: 'agreed' | 'paid' | 'balance';
-  kind?: 'date' | 'money' | 'datetime';
+  kind?: 'date' | 'money' | 'datetime' | 'number';
   highlight?: boolean;
 };
 
@@ -32,6 +32,11 @@ const core: Column[] = [
   { label: 'Turno', width: 13, field: row => row.period && reportPeriodLabels[row.period] },
 ];
 const status: Column = { label: 'Situação do plantão', width: 24, field: row => shiftReportStates[row.status], highlight: true };
+const coverage: Column[] = [
+  { label: 'ID do posto previsto', width: 38, field: row => row.coverage_post_id },
+  { label: 'Data operacional', width: 16, field: row => row.coverage_date, kind: 'date' },
+  { label: 'Minutos do trecho', width: 18, field: row => row.segment_minutes, kind: 'number' },
+];
 const attendance: Column[] = [
   { label: 'Presença', width: 24, field: row => row.presence && presenceReportStates[row.presence] },
   { label: 'Check-in', width: 20, field: row => row.check_in, kind: 'datetime' },
@@ -59,7 +64,7 @@ function csvValue(column: Column, row: ReportRow): CsvValue {
 }
 
 export function buildReportCsv(report: ShiftReport) {
-  const columns = [...core, status, ...(report.attendance ? attendance : []), ...(report.finance ? payments : [])];
+  const columns = [...core, status, ...(report.rows.some(row => row.coverage_post_id) ? coverage : []), ...(report.attendance ? attendance : []), ...(report.finance ? payments : [])];
   const rows = report.rows.map(row => columns.map(column => csvValue(column, row)));
   const summary = summarizeReport(report);
   if (summary) {
@@ -76,6 +81,7 @@ export function buildReportCsv(report: ShiftReport) {
 function excelCell(column: Column, row: ReportRow): Cell {
   const value = column.field(row);
   if (value == null) return null;
+  if (column.kind === 'number') return { type: Number, value: Number(value) };
   if (column.kind === 'money') return { type: Number, value: Number(value), format: currencyFormat };
   if (column.kind === 'date') return { type: Date, value: new Date(String(value) + 'T00:00:00Z'), format: dateFormat };
   if (column.kind === 'datetime') return { type: String, value: dateTime.format(new Date(value)) };
@@ -109,13 +115,14 @@ function sheet(name: string, columns: Column[], rows: ReportRow[], totals?: NonN
 }
 
 export function buildReportWorkbook(report: ShiftReport) {
-  const operational = [...core, status, ...(report.attendance ? attendance : [])];
+  const coverageColumns = report.rows.some(row => row.coverage_post_id) ? coverage : [];
+  const operational = [...core, status, ...coverageColumns, ...(report.attendance ? attendance : [])];
   const financial = report.rows.filter(row => Boolean(row.payment));
   const sheets = [sheet('Plantões', operational, report.rows)];
   const lastRows = [report.rows.length + 1];
   const summary = summarizeReport(report);
   if (summary) {
-    sheets.push(sheet('Financeiro', [...core, ...payments], financial, summary.totals));
+    sheets.push(sheet('Financeiro', [...core, ...coverageColumns, ...payments], financial, summary.totals));
     lastRows.push(financial.length + 1);
     for (const [name, items] of [['Por médico', summary.doctors], ['Por unidade', summary.units], ['Por período', summary.months]] as const) {
       const data: SheetData = [

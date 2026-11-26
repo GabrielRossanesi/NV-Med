@@ -19,7 +19,7 @@ function CandidateQueue() {
       <Link href="/escala" className="text-sm font-semibold text-primary underline">Voltar à escala</Link>
       <h1 className="mt-2 text-2xl font-bold">Candidaturas e trocas</h1>
       <p className="mt-1 text-sm text-text-muted">Analise candidatos a vagas e substituições na empresa selecionada.</p>
-      <Link href="/escala/presenca" className="mt-2 inline-block text-sm font-semibold text-primary underline">Analisar registros manuais de presença</Link>
+      <Link href="/escala/presenca" className="mt-2 inline-block text-sm font-semibold text-primary underline">Revisar registros de presença</Link>
     </header>
     {scope && <Link href="/escala/candidaturas" className="text-sm font-semibold text-primary underline">Ver todas as oportunidades</Link>}
     <ShiftSelectionPanel key={organization + scope} organization={organization} scope={scope} onChanged={() => {

@@ -19,6 +19,7 @@ import DoctorBankingPanel from '@/components/DoctorBankingPanel';
 import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileEditor from '@/components/DoctorProfileEditor';
 import { notify } from '@/lib/notifications';
+import { openDocument } from '@/services/supabaseService';
 
 type Enrollment = {
   doctor_id: string; organization_id: string; organization: string; name: string; status: EnrollmentStatus;
@@ -133,6 +134,14 @@ function Documents({ doctor }: { doctor: string }) {
   const [documents, setDocuments] = useState<PortalDocument[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [downloading, setDownloading] = useState('');
+  async function download(documentId: string) {
+    setDownloading(documentId);
+    setError('');
+    try { window.location.assign(await openDocument(documentId, undefined, true)); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Não foi possível baixar o documento.'); }
+    finally { setDownloading(''); }
+  }
   async function load() {
     const result = await createClient()?.rpc('nv_portal_documents', { target: doctor });
     if (result?.error || !result) {
@@ -153,7 +162,8 @@ function Documents({ doctor }: { doctor: string }) {
       if (!response.ok) throw new Error(result.error);
       form.reset();
       await load();
-      notify.info('Documento enviado para análise.');
+      if (result.scanning) notify.info('Documento enviado para verificação de segurança.');
+      else notify.success('Documento enviado.');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível enviar o documento.');
     } finally {
@@ -173,7 +183,7 @@ function Documents({ doctor }: { doctor: string }) {
           {item.expiry_date && <span>Válido até <time dateTime={item.expiry_date}>{item.expiry_date.split('-').reverse().join('/')}</time></span>}
         </div>
         {item.review_note && <p className="text-sm">{item.review_note}</p>}
-        {item.has_file && <a className="text-sm font-semibold text-primary underline" href={'/api/portal/documents/' + encodeURIComponent(item.id)}>Baixar arquivo enviado</a>}
+        {item.has_file && <button type="button" className="text-sm font-semibold text-primary underline" disabled={Boolean(downloading)} onClick={() => void download(item.id)}>{downloading === item.id ? 'Verificando arquivo…' : 'Baixar arquivo enviado'}</button>}
         <form onSubmit={event => upload(event, item)} className="flex flex-wrap items-end gap-2">
           <label className="nv-label min-w-0 max-w-full grow">PDF, JPEG ou PNG<input type="file" className="nv-input" name="file" accept=".pdf,.jpg,.jpeg,.png" required/></label>
           <button className="nv-button-secondary" disabled={Boolean(busy)}>{busy === item.id ? 'Enviando…' : item.has_file ? 'Enviar nova versão' : 'Enviar arquivo'}</button>

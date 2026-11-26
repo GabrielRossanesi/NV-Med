@@ -16,15 +16,16 @@ const messages = {
   unavailable: 'Consulta de CEP indisponível. Você pode preencher o endereço manualmente.',
 };
 
-export default function DoctorAddressFields({ initialAddress = '', required }: { initialAddress?: string; required: boolean }) {
+export default function DoctorAddressFields({ initialAddress = '', required }: { initialAddress?: string | null; required: boolean }) {
   const [draft, setDraft] = useState(() => {
-    const parsed = parseDoctorAddress(initialAddress);
+    const initial = initialAddress ?? '';
+    const parsed = parseDoctorAddress(initial);
     return {
       fields: parsed || emptyDoctorAddress,
       confirmedCep: parsed?.cep || '',
-      freeform: parsed ? '' : initialAddress,
-      structured: Boolean(parsed || !initialAddress),
-      legacy: Boolean(initialAddress && !parsed),
+      freeform: parsed ? '' : initial,
+      structured: Boolean(parsed || !initial),
+      legacy: Boolean(initial && !parsed),
     };
   });
   const [status, setStatus] = useState<keyof typeof messages>('idle');

@@ -1,16 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Organization, Doctor, Unit, Sector, SectorFinanceDefaults, MedicalDocument, Shift, ShiftWrite, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
+import { Organization, Doctor, DoctorStatus, Unit, Sector, SectorFinanceDefaults, MedicalDocument, Shift, ShiftWrite, DocumentStatus, DocumentType, UserAccount, DocumentAuditEntry } from '@/types';
 import * as cloud from '@/services/supabaseService';
 import { vacateShift } from '@/lib/scheduleDeletion';
 import { canEditPermission, canPerformAction } from '@/lib/permissions';
 import type { DoctorBanking } from '@/lib/doctorBanking';
 import { notify } from '@/lib/notifications';
+import { defaultAccountPreferences, type AccountPreferences } from '@/lib/account';
+import { createClient } from '@/lib/supabase/client';
+import { doctorStatusActions } from '@/lib/doctorStatus';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
-type SaveFeedback = { success?: string | false; inlineError?: boolean; withinDialog?: boolean };
+type SaveFeedback = { success?: string | false; description?: string; inlineError?: boolean; withinDialog?: boolean };
 
 interface NVMedState {
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
@@ -20,7 +23,9 @@ interface NVMedState {
   syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
   addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<boolean>;
-  updateDoctor: (doctor: Doctor) => Promise<boolean>; deleteDoctor: (id: string) => Promise<boolean>;
+  setDoctorStatus: (id: string, status: DoctorStatus) => Promise<boolean>;
+  updateDoctorContract: (id: string, changes: Partial<Pick<Doctor, 'contractModel' | 'contractSigned'>>) => Promise<boolean>;
+  deleteDoctor: (id: string) => Promise<boolean>;
   addUnit: (unit: Omit<Unit, 'id' | 'organizationId'>) => Promise<boolean>;
   updateUnit: (unit: Unit, feedback?: SaveFeedback) => Promise<boolean>; deleteUnit: (id: string) => Promise<boolean>;
   addSector: (sector: Omit<Sector, 'id' | 'organizationId'>, finance?: SectorFinanceDefaults, feedback?: SaveFeedback) => Promise<Sector | null>;
@@ -28,6 +33,8 @@ interface NVMedState {
   addShift: (shift: Omit<ShiftWrite, 'id' | 'organizationId'>) => Promise<boolean>;
   addShifts: (shifts: Omit<ShiftWrite, 'id' | 'organizationId'>[], feedback?: SaveFeedback) => Promise<boolean>;
   updateShift: (shift: ShiftWrite) => Promise<boolean>;
+  publishCoverage: (shift: Shift, enabled: boolean) => Promise<boolean>;
+  cancelCoverage: (shift: Shift) => Promise<boolean>;
   updateShiftPayment: (id: string, status: Shift['paymentStatus']) => Promise<boolean>;
   updateShiftFinancials: (...input: Parameters<typeof cloud.updateShiftFinancialsInSupabase>) => Promise<boolean>;
   updateShiftAgreement: (...input: Parameters<typeof cloud.editShiftAgreement>) => Promise<boolean>;
@@ -47,18 +54,25 @@ interface NVMedState {
   deleteUser: (id: string, confirmation: string) => Promise<boolean>;
   setUserTemporaryPassword: (id: string, password: string) => Promise<boolean>;
   startSimulation: (orgId: string) => void; stopSimulation: () => void;
-  theme: 'light' | 'dark'; setTheme: (theme: 'light' | 'dark') => void;
+  theme: AccountPreferences['theme']; setTheme: (theme: AccountPreferences['theme']) => void;
   sidebarCollapsed: boolean; setSidebarCollapsed: (collapsed: boolean) => void;
+  accountPreferences: AccountPreferences;
+  accountPreferencesStatus: 'loading' | 'ready' | 'error';
+  hasSavedAccountPreferences: boolean;
+  loadAccountPreferences: () => Promise<void>;
+  saveAccountPreferences: (changes: Partial<AccountPreferences>, quiet?: boolean) => Promise<boolean>;
   updateProfile: (form: FormData) => Promise<boolean>;
 }
 
 export const useStore = create<NVMedState>()(persist((set, get) => {
-  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', inlineError = false, withinDialog }: SaveFeedback = {}) {
+  let preferenceWrites = Promise.resolve<boolean>(true);
+  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', description, inlineError = false, withinDialog }: SaveFeedback = {}) {
     if (get().saving) return false;
     set({ saving: true, error: null });
+    const finishSaving = notify.saving();
     try {
       await work();
-      if (success) notify.success(success, { withinDialog });
+      if (success) notify.success(success, { description, withinDialog });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível salvar. Tente novamente.';
@@ -66,6 +80,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (!inlineError) notify.error('Não foi possível concluir a ação.', { description: message, persistent: true });
       return false;
     } finally {
+      finishSaving();
       set({ saving: false });
     }
   }
@@ -81,20 +96,82 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
   return {
     ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
     saving: false, error: null, theme: 'light', sidebarCollapsed: true,
-    setTheme: theme => set({ theme }), clearFeedback: () => set({ error: null }),
-    setSidebarCollapsed: sidebarCollapsed => set({ sidebarCollapsed }),
-    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null }),
+    accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false,
+    async loadAccountPreferences() {
+      const owner = get().currentUser.id;
+      if (!owner) return;
+      set({ accountPreferencesStatus: 'loading' });
+      try {
+        const result = await createClient()?.rpc('nv_account_preferences');
+        if (!result || result.error) throw new Error();
+        if (get().currentUser.id !== owner) return;
+        const accountPreferences: AccountPreferences = result.data
+          ?? { ...defaultAccountPreferences, theme: get().theme, sidebarCollapsed: get().sidebarCollapsed };
+        set({ accountPreferences, theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed,
+          accountPreferencesStatus: 'ready', hasSavedAccountPreferences: Boolean(result.data) });
+      } catch {
+        if (get().currentUser.id === owner) set({ accountPreferencesStatus: 'error' });
+      }
+    },
+    saveAccountPreferences(changes, quiet = false) {
+      const owner = get().currentUser.id;
+      const write = async () => {
+        if (!owner || get().currentUser.id !== owner) return false;
+        const finish = quiet ? undefined : notify.saving();
+        try {
+          const baseline = get().accountPreferences;
+          const initialAppearance = get().hasSavedAccountPreferences ? {}
+            : { theme: baseline.theme, sidebarCollapsed: baseline.sidebarCollapsed };
+          const result = await createClient()?.rpc('nv_save_account_preferences', { changes: { ...initialAppearance, ...changes } });
+          if (!result || result.error || !result.data) throw new Error();
+          if (get().currentUser.id !== owner) return false;
+          const accountPreferences: AccountPreferences = result.data;
+          set({ accountPreferences, hasSavedAccountPreferences: true,
+            theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed });
+          if (!quiet) notify.success('Preferências salvas.');
+          return true;
+        } catch {
+          if (get().currentUser.id === owner) notify.error('Não foi possível sincronizar as preferências.');
+          return false;
+        } finally { finish?.(); }
+      };
+      preferenceWrites = preferenceWrites.then(write);
+      return preferenceWrites;
+    },
+    setTheme: theme => {
+      set({ theme });
+      if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ theme }, true);
+    },
+    setSidebarCollapsed: sidebarCollapsed => {
+      set({ sidebarCollapsed });
+      if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ sidebarCollapsed }, true);
+    },
+    clearFeedback: () => set({ error: null }),
+    clearSession: () => set({ ...emptyData, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
+      theme: defaultAccountPreferences.theme, sidebarCollapsed: defaultAccountPreferences.sidebarCollapsed,
+      accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
     addDoctor: (input, banking) => commit(async () => {
       const doctor = { ...input, status: banking ? input.status : 'pending' as const, id: crypto.randomUUID(), organizationId: orgId() };
       // The database trigger creates required document rows in the same transaction.
-      await cloud.saveDoctorToSupabase(doctor, true, banking);
+      await cloud.createDoctorInSupabase(doctor, banking);
       set({ doctors: [...get().doctors, doctor] });
       try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
       catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
     }, { success: 'Médico cadastrado.', inlineError: true }),
-    updateDoctor: doctor => commit(async () => { await cloud.saveDoctorToSupabase(doctor); set({ doctors: get().doctors.map(d => d.id === doctor.id ? doctor : d) }); }),
+    updateDoctorContract: (id, changes) => commit(async () => {
+      await cloud.updateDoctorContractInSupabase(id, changes);
+      set(state => ({ doctors: state.doctors.map(doctor => doctor.id === id ? { ...doctor, ...changes } : doctor) }));
+    }),
+    setDoctorStatus: (id, status) => commit(async () => {
+      const doctor = get().doctors.find(d => d.id === id && d.organizationId === orgId());
+      if (!doctor || !canPerformAction(get().currentUser, 'medicos', 'edit')) throw new Error('Você não possui permissão para alterar este cadastro.');
+      const actor = get().currentUser.id;
+      const updated = await cloud.setDoctorStatusInSupabase(doctor, status);
+      if (get().currentUser.id !== actor || get().activeOrganizationId !== doctor.organizationId) return;
+      set({ doctors: get().doctors.map(d => d.id === updated.id && d.organizationId === updated.organizationId ? updated : d) });
+    }, { success: doctorStatusActions[status].success, description: 'Plantões e documentos preservados.' }),
     deleteDoctor: id => commit(async () => { await cloud.deleteDoctorFromSupabase(id); set({ doctors: get().doctors.filter(d => d.id !== id), documents: get().documents.filter(d => d.doctorId !== id), shifts: get().shifts.filter(s => s.doctorId !== id) }); }),
     addUnit: input => commit(async () => { const unit = { ...input, id: crypto.randomUUID(), organizationId: orgId() }; await cloud.saveUnitToSupabase(unit, true); set({ units: [...get().units, unit] }); }),
     updateUnit: (unit, feedback) => commit(async () => { await cloud.saveUnitToSupabase(unit); set({ units: get().units.map(u => u.id === unit.id ? unit : u) }); }, feedback),
@@ -107,17 +184,42 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     updateSector: (sector, finance) => commit(async () => { await cloud.saveSectorToSupabase(sector, false, finance); set({ sectors: get().sectors.map(s => s.id === sector.id ? sector : s) }); }, { success: 'Setor atualizado.', inlineError: true }),
     deleteSector: id => commit(async () => { await cloud.deleteSectorFromSupabase(id); set({ sectors: get().sectors.filter(s => s.id !== id) }); }),
     addShift: input => commit(async () => {
-      const saved = await cloud.saveShiftToSupabase({ ...input, id: input.cashPayment?.id || crypto.randomUUID(), organizationId: orgId() });
-      set({ shifts: [...get().shifts, saved] });
+      const shift = { ...input, id: input.cashPayment?.id || crypto.randomUUID(), organizationId: orgId() };
+      const saved = input.coveragePlan ? await cloud.saveFractionalShiftToSupabase(shift) : [await cloud.saveShiftToSupabase(shift)];
+      const savedIds = new Set(saved.map(item => item.id));
+      set({ shifts: [...get().shifts.filter(item => !savedIds.has(item.id)), ...saved] });
     }, { success: 'Plantão cadastrado.', inlineError: true }),
     addShifts: (inputs, feedback) => commit(async () => {
       const saved = await cloud.saveShiftsToSupabase(inputs.map(input => ({ ...input, id: crypto.randomUUID(), organizationId: orgId() })));
       set({ shifts: [...get().shifts, ...saved] });
     }, { success: 'Plantões cadastrados.', inlineError: true, ...feedback }),
     updateShift: shift => commit(async () => {
+      if (shift.coveragePlan || shift.coveragePost) {
+        const saved = await cloud.saveFractionalShiftToSupabase(shift);
+        const id = shift.coveragePost?.id || shift.id;
+        set({ shifts: [...get().shifts.filter(item => item.id !== shift.id && item.coveragePost?.id !== id), ...saved] });
+        return;
+      }
       const saved = await cloud.saveShiftToSupabase(shift);
       set({ shifts: get().shifts.map(item => item.id === saved.id ? saved : item) });
     }, { success: 'Plantão atualizado.', inlineError: true }),
+    publishCoverage: (shift, enabled) => commit(async () => {
+      if (!shift.coveragePost || shift.organizationId !== orgId() || !canEditPermission(get().currentUser, 'escala')) {
+        throw new Error('Seu acesso não permite publicar esta vaga.');
+      }
+      await cloud.publishCoverageVacancy(shift.id, enabled);
+      set({ shifts: get().shifts.map(item => item.id === shift.id && item.coveragePost ? {
+        ...item, coveragePost: { ...item.coveragePost, published: enabled },
+      } : item) });
+    }, { success: enabled ? 'Vaga publicada no Portal Médico.' : 'Vaga retirada do Portal Médico.', inlineError: true, withinDialog: true }),
+    cancelCoverage: shift => commit(async () => {
+      const post = shift.coveragePost;
+      if (!post || shift.organizationId !== orgId() || !canPerformAction(get().currentUser, 'escala', 'delete')) {
+        throw new Error('Seu acesso não permite cancelar este posto.');
+      }
+      const saved = await cloud.cancelCoveragePost(post);
+      set({ shifts: [...get().shifts.filter(item => item.coveragePost?.id !== post.id), ...saved] });
+    }, { success: 'Posto cancelado.', inlineError: true }),
     updateShiftPayment: (id, status) => commit(async () => {
       const current = get().shifts.find(shift => shift.id === id && shift.organizationId === orgId());
       if (!current) throw new Error('Plantão não encontrado nesta empresa.');
@@ -158,8 +260,13 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       let saved: Shift[];
       try { saved = await cloud.saveShiftsToSupabase(updated); }
       catch (error) { try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); } catch { /* Keep the original error. */ } throw error; }
+      const postIds = [...new Set(saved.flatMap(item => item.coveragePost ? [item.coveragePost.id] : []))];
+      if (postIds.length) {
+        const siblings = await cloud.fetchCoverageShifts(organizationId, postIds);
+        saved = [...saved.filter(item => !item.coveragePost), ...siblings];
+      }
       const byId = new Map(saved.map(shift => [shift.id, shift]));
-      set({ shifts: get().shifts.map(shift => byId.get(shift.id) || shift) });
+      set({ shifts: [...get().shifts.filter(shift => !byId.has(shift.id)), ...saved] });
     }, { success: 'Plantões liberados.', inlineError: true }),
     uploadDocument: (doctorId, type, file) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());
@@ -222,14 +329,14 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     updateUser: user => commit(async () => { const res = await fetch('/api/admin/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o acesso.'); set({ users: get().users.map(u => u.id === user.id ? result.user : u) }); }, { inlineError: true }),
     deleteUser: (id, confirmation) => commit(async () => { const res = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, confirmation }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível excluir o usuário.'); set({ users: get().users.filter(user => user.id !== id) }); }),
     setUserTemporaryPassword: (id, password) => commit(async () => { const res = await fetch('/api/admin/users/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar a senha.'); }, { success: false }),
-    updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }),
+    updateProfile: form => commit(async () => { const res = await fetch('/api/profile', { method: 'POST', body: form }); const result = await res.json(); if (!res.ok) throw new Error(result.error || 'Não foi possível atualizar o perfil.'); if (get().currentUser.id === result.user.id) set({ currentUser: result.user, users: get().users.map(u => u.id === result.user.id ? result.user : u) }); }, { success: 'Perfil atualizado.', inlineError: true }),
     startSimulation: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ isSimulating: true, simulatedOrganizationId: id, activeOrganizationId: id }); },
     stopSimulation: () => set({ isSimulating: false, simulatedOrganizationId: null }),
   };
 }, {
   name: 'nv-med-preferences',
   skipHydration: true,
-  partialize: state => ({ theme: state.theme, activeOrganizationId: state.activeOrganizationId }),
+  partialize: state => ({ activeOrganizationId: state.activeOrganizationId }),
   merge: (saved, current) => ({
     ...current,
     theme: (saved as { theme?: string })?.theme === 'dark' ? 'dark' : 'light',

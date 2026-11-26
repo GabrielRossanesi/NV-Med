@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Notifications from "@/components/Notifications";
+import ConfirmationProvider from "@/components/ConfirmationProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +30,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground antialiased">
-        {children}
+        <ConfirmationProvider>{children}</ConfirmationProvider>
         <Notifications />
       </body>
     </html>

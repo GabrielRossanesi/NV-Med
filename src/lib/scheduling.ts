@@ -1,17 +1,25 @@
 import type { Sector, SectorCoveragePeriod, Shift } from '../types/index.ts';
+import { coveragePlanInterval, coveragePositions, coverageSpan } from './fractionalCoverage.ts';
 export function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 export function shiftTouchesDay(shift: Shift, date: string) {
   if (shift.date === date) return true;
-  if (shift.endTime >= shift.startTime || shift.endTime === '00:00') return false;
+  if (shift.endTime > shift.startTime || (shift.endTime === shift.startTime && !shift.coveragePost) || shift.endTime === '00:00') return false;
   const next = new Date(shift.date + 'T12:00:00'); next.setDate(next.getDate() + 1);
   return localDate(next) === date;
 }
 export function countDoctors(shifts: Shift[]) {
   return new Set(shifts.filter(s => s.status !== 'cancelled' && s.doctorId).map(s => s.doctorId)).size;
 }
-export function shiftInterval(shift: Pick<Shift, 'date' | 'startTime' | 'endTime'>) {
+export function shiftInterval(shift: Pick<Shift, 'date' | 'startTime' | 'endTime' | 'coveragePost'>) {
+  const post = shift.coveragePost;
+  if (post) {
+    if (shift.date === post.segmentDate && shift.startTime === post.segmentStartTime && shift.endTime === post.segmentEndTime) {
+      return coverageSpan(shift)!;
+    }
+    return coveragePlanInterval(shift, post.timeZone) || { start: NaN, end: NaN };
+  }
   const start = new Date(shift.date + 'T' + shift.startTime);
   const end = new Date(shift.date + 'T' + shift.endTime);
   if (end <= start) end.setDate(end.getDate() + 1);
@@ -107,10 +115,11 @@ function inferredCoverageKind(startTime: string): SectorCoveragePeriod['kind'] {
   return startTime >= '18:00' || startTime < '06:00' ? 'night' : 'day';
 }
 
-export function coverageKindForShift(shift: Pick<Shift, 'startTime' | 'endTime'>, periods: SectorCoveragePeriod[]) {
-  const exact = periods.find(period => period.startTime === shift.startTime && period.endTime === shift.endTime);
+export function coverageKindForShift(shift: Pick<Shift, 'startTime' | 'endTime' | 'coveragePost'>, periods: SectorCoveragePeriod[]) {
+  const planned = shift.coveragePost || shift;
+  const exact = periods.find(period => period.startTime === planned.startTime && period.endTime === planned.endTime);
   if (exact) return exact.kind;
-  const inferred = inferredCoverageKind(shift.startTime);
+  const inferred = inferredCoverageKind(planned.startTime);
   return periods.some(period => period.kind === inferred) ? inferred : periods[0]?.kind ?? inferred;
 }
 
@@ -125,20 +134,23 @@ export function summarizeSectorCoverage(
     const assigned = items.filter(shift => Boolean(shift.doctorId));
     const vacancies = items.filter(shift => !shift.doctorId);
     const regularItems = items.filter(shift => shift.coverageMode !== 'adhoc');
-    const regularAssigned = regularItems.filter(shift => Boolean(shift.doctorId));
-    const additional = items.length - regularItems.length;
-    const required = period.requiredDoctors + additional;
+    const regular = coveragePositions(regularItems);
+    const extra = coveragePositions(items.filter(shift => shift.coverageMode === 'adhoc'));
+    const registeredCapacity = [...new Map(regularItems.flatMap(item => item.coveragePost
+      ? [[item.coveragePost.id, item.coveragePost.capacity] as const] : [])).values()].reduce((sum, capacity) => sum + capacity, 0);
+    const regularRequired = Math.max(period.requiredDoctors, registeredCapacity);
+    const required = regularRequired + extra.created;
     return {
       period,
       items,
       assigned,
       vacancies,
       required,
-      created: items.length,
-      filled: assigned.length,
+      created: regular.created + extra.created,
+      filled: regular.filled + extra.filled,
       open: vacancies.length,
-      uncreated: Math.max(period.requiredDoctors - regularItems.length, 0),
-      deficit: Math.max(period.requiredDoctors - regularAssigned.length, 0) + vacancies.filter(shift => shift.coverageMode === 'adhoc').length,
+      uncreated: Math.max(regularRequired - regular.created, 0),
+      deficit: Math.max(regularRequired - regular.filled, 0) + extra.created - extra.filled,
     };
   });
 
@@ -155,7 +167,7 @@ export function summarizeSectorCoverage(
 }
 
 export function copyableRegularShifts(shifts: Shift[]) {
-  return shifts.filter(shift => shift.status !== 'cancelled' && shift.coverageMode !== 'adhoc');
+  return shifts.filter(shift => shift.status !== 'cancelled' && shift.coverageMode !== 'adhoc' && !shift.coveragePost);
 }
 export const employmentLabels = { pj: 'PJ', clt: 'CLT', concursado: 'PREFEITURA' } as const;
 export const employmentLabel = (value?: keyof typeof employmentLabels | null) => value ? employmentLabels[value] : 'Não definida';

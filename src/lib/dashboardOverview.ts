@@ -54,14 +54,15 @@ export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], 
   const shiftsByDay = new Map<string, Shift[]>();
   const end = dayOffset(today, length - 1);
   for (const shift of shifts) {
-    if (shift.status === 'cancelled' || shift.date < today || shift.date > end) continue;
+    const day = coverageDate(shift);
+    if (shift.status === 'cancelled' || day < today || day > end) continue;
     if (registeredOnly) {
-      const items = shiftsByDay.get(shift.date) || [];
+      const items = shiftsByDay.get(day) || [];
       items.push(shift);
-      shiftsByDay.set(shift.date, items);
+      shiftsByDay.set(day, items);
       continue;
     }
-    const key = `${shift.date}/${shift.sectorId}`;
+    const key = `${day}/${shift.sectorId}`;
     const items = shiftsByTurn.get(key) || [];
     items.push(shift);
     shiftsByTurn.set(key, items);
@@ -71,7 +72,8 @@ export function coverageDays(today: string, sectors: Sector[], shifts: Shift[], 
     const day = dayOffset(today, offset);
     if (registeredOnly) {
       const items = shiftsByDay.get(day) || [];
-      return { day, required: items.length, deficit: items.filter(item => !item.doctorId).length };
+      const positions = coveragePositions(items);
+      return { day, required: positions.created, deficit: positions.created - positions.filled };
     }
     const totals = { day, required: 0, deficit: 0 };
     for (const sector of sectors) {
@@ -145,3 +147,4 @@ export function dashboardPayments(shifts: Shift[], today: string) {
     nextDue: [...upcoming.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, 2).map(([date, cents]): [string, number] => [date, cents / 100]),
   };
 }
+import { coverageDate, coveragePositions } from './fractionalCoverage.ts';

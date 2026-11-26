@@ -77,7 +77,7 @@ export default function ShiftPaymentMovements({ shiftId, canReverse, onChanged }
       </ul>
     </section>}
     {!target && error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    {target && <Dialog title="Estornar pagamento" onClose={() => { if (!busy) setTarget(undefined); }} closeDisabled={busy}>
+    {target && <Dialog variant="confirmation" confirmationTone="danger" title="Estornar pagamento" onClose={() => { if (!busy) setTarget(undefined); }} closeDisabled={busy}>
       <form className="space-y-4" onSubmit={reverse}>
         <p className="text-sm">Valor do estorno {currency.format(target.amount)}</p>
         <label className="nv-label">Data do estorno<input className="nv-input" type="date" name="date"

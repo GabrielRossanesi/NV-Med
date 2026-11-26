@@ -1,6 +1,7 @@
 import { localDate, shiftInterval } from './scheduling.ts';
 
 export interface MasterDefinition {
+  coverage_plan?: { start_time: string; end_time: string; capacity: number };
   doctor_id: string; unit_id: string; sector_id: string; specialty: string;
   start_time: string; end_time: string; start_date: string; anchor_date: string; end_date: string | null;
   frequency: 'weeks' | 'monthly'; interval_weeks: number; weekdays: number[];

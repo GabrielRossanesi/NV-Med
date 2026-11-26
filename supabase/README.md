@@ -1,5 +1,36 @@
 # Banco de dados do NV Med
 
+A correção de status cadastral utiliza `53_doctor_status.sql` após a 52. Ela grava apenas o status, preserva as validações existentes e registra estado anterior/novo na auditoria. Não aplicar em produção nem publicar sem autorização. Consulte o [diagnóstico e padrão de confirmações](../docs/correcao-status-medicos.md).
+
+## Provisionamento seguro
+
+1. Em um projeto vazio, aplique os scripts numerados na ordem `01 → 02 → 04 → 05 → 06 → 08–47`. A etapa 01 cria as tabelas iniciais com RLS e acesso fechado aos clientes. A 04 cria `medical-documents` privado. Mantenha a aplicação fechada durante a instalação.
+2. Em um projeto existente com as migrations até a 45, aplique `46_secure_provisioning.sql` para remover concessões e políticas legadas. A migration preserva os objetos armazenados. Aplique a 47 com a versão de Minha conta, depois de conferir o histórico do ambiente.
+3. Execute [a verificação de provisionamento](provisioning.verify.sql) antes de importar dados reais, carregar arquivos ou abrir a aplicação. Ela consulta o catálogo e interrompe a validação quando faltam controles, os buckets médicos ou de avatar estão públicos, há políticas anônimas em `public` ou `storage.objects`, ou `anon` tem permissões nos objetos da aplicação. Investigue a condição identificada e repita a verificação até obter `PASS`.
+4. Use `07_bootstrap_admin.sql` separadamente, se precisar vincular o primeiro administrador já cadastrado no Auth. A carga `03_seed.sql` contém dados de demonstração para laboratório. O antigo `init_all.sql` foi desativado e retorna um erro com este roteiro.
+
+O laboratório PostgreSQL em `scripts/test-database.ps1` reconstitui a instalação e testa a verificação com concessão anônima, bucket público e endurecimento incompleto.
+
+Para adiar a varredura antimalware, aplique `40 → 41 → 42 → 43 → 45 → 46` e publique a aplicação correspondente na mesma janela. Os buckets continuam privados, e a rota exige vínculo e autorização em cada acesso. A análise antimalware permanece pendente até a migration 44. Para verificar esse estado, execute `SET nvmed.verify_deferred_document_scan = 'on';` seguido de `provisioning.verify.sql` na mesma sessão SQL. O laboratório aceita `-DeferDocumentScan` para testar essa sequência e a ativação posterior da 44.
+
+`43_doctor_data_minimization.sql` mantém apenas colunas profissionais na leitura direta de `doctors`. A ficha individual libera CPF, nascimento, endereço e contatos para o próprio médico e para quem tem permissão de aprovar credenciamento. A gestão do Portal Médico usa seu recorte próprio de e-mail e último acesso. A versão da aplicação com a projeção explícita precisa estar no ambiente quando a permissão de coluna mudar.
+
+`44_medical_document_quarantine.sql` exige análise limpa da versão atual do objeto antes de emitir uma URL de acesso ou aprovar um novo arquivo. O bloqueio também se aplica a originais importados e versões históricas. Durante a transição, URLs emitidas pela versão anterior expiram pelo TTL já existente. Mantenha uploads e importações com caminhos imutáveis e nomes novos a cada versão.
+
+Se a 44 foi adiada, aplique-a uma única vez quando o scanner estiver pronto. A rota passa a exigir o resultado automaticamente. Processe o acervo e execute `provisioning.verify.sql` em uma nova sessão antes de reabrir o acesso.
+
+O processo `node scripts/scan-medical-documents.mjs 50` usa `NVMED_SCAN_SUPABASE_URL`, `NVMED_SCAN_SERVICE_ROLE_KEY` e, quando configurado, `NVMED_CLAMD_SOCKET`. Sem esse último, o processo usa o `clamd` local em `127.0.0.1:3310`. Execute o scanner em infraestrutura controlada, com assinaturas atualizadas, `StreamMaxLength` de pelo menos `25M` e alertas para conteúdo criptografado e limites excedidos. Processe o acervo em lotes e execute periodicamente no ambiente autorizado. Falhas mantêm o bloqueio e voltam à fila após o intervalo de reprocessamento. O processo registra apenas totais. [Protocolo do ClamAV](https://docs.clamav.net/manual/Usage/ClamdProtocol.html)
+
+`45_resumable_organization_cleanup.sql` registra a fila antes do expurgo relacional e reconcilia o Storage e o Auth depois de cada tentativa. O CEO com MFA retoma pela lista **Exclusões pendentes**. Identidades vinculadas a outra empresa e autores necessários para históricos retidos são preservados. `settings.retention_hold` impede o expurgo, assim como histórico de plantões. Para esses casos, a operação retorna um impedimento e preserva os registros. A publicação das três migrations deve ser coordenada com a aplicação atualizada.
+
+`41_administrative_mfa.sql` exige uma sessão AAL2 ativa em gestão de contas, troca administrativa de senha, acesso ao Portal Médico, alteração de cargo médico e exclusão de empresa. As contas com essas atribuições cadastram e confirmam o TOTP em **Minha conta → Segurança**. Valide cadastro, confirmação e uso de um autenticador reserva em homologação. Coordene a migration com as rotas e a interface correspondentes. As operações protegidas recusam versões incompatíveis durante a transição.
+
+`47_staff_account.sql` cria as preferências pessoais, o histórico da conta e a regra que preserva o último TOTP de um perfil interno ativo. A configuração de auditoria do Auth e os limites de recuperação e sessões estão no [guia de Minha conta](../docs/minha-conta.md).
+
+`42_attendance_confirmation.sql` envia novos check-outs por GPS para **Escala → Candidaturas → Revisar registros de presença**. A coordenação confere o registro com uma fonte independente da unidade e descreve a fonte na justificativa. O solicitante não pode revisar o próprio registro. Enquanto o check-out estiver pendente ou rejeitado, o banco bloqueia a conclusão e a baixa do plantão. O check-in mantém caráter declaratório, e registros históricos preservam os estados existentes. Aplique a 42 após a 41, junto da interface de revisão atualizada.
+
+`40_doctor_credential_writes.sql` restringe a escrita direta de vínculos e especialidade. Aplique após a 39, depois de disponibilizar a versão da aplicação que envia apenas os campos de contrato pela escrita direta. As RPCs existentes mantêm a edição validada do perfil e a aprovação de vínculos. A migration ajusta as permissões, sem regravar cadastros.
+
 `39_schedule_audit_context.sql` reutiliza o histórico e o estágio privados da 38 para correlação transacional, contexto histórico de unidades e importações privilegiadas. Aplique após a 38. [Guia dos complementos](../docs/complementos-controle-auditoria-escalas.md)
 
 Filtros e controle administrativo das escalas: aplicar `38_schedule_controls_and_audit.sql` após a 37 e antes da interface correspondente. Reforça a autorização usada por RLS/RPCs e amplia o histórico existente, sem modificar escalas reais nem reagendar o Cron. [Guia de filtros, bloqueio e auditoria](../docs/filtros-bloqueio-e-auditoria-escalas.md)
@@ -11,8 +42,6 @@ Perfil médico e acesso individual ao portal: aplicar `36_doctor_profile_access.
 Os dados bancários médicos usam a migration incremental `32_doctor_banking.sql`, após a 31. Aplique em conjunto com a versão correspondente da interface e com autorização para o destino. O [guia de dados bancários](../docs/dados-bancarios-medicos.md) descreve migração dos valores legados, permissões, proteção e testes locais.
 
 O piloto interno no Supabase existente segue o [plano de implantação controlada](../docs/implantacao-controlada-nv-med.md). O [roteiro de laboratório isolado](../docs/homologacao-nv-med.md) registra os testes locais e a estratégia anterior.
-
-A instalação a partir de um projeto vazio usa os scripts numerados de estrutura, conforme a ordem do roteiro. O arquivo `init_all.sql` é um instalador histórico com carga de demonstração.
 
 Use `homologation.preflight.sql` e `homologation.postflight.sql` para as verificações de leitura no alvo confirmado. Execute `portal.verify.sql` em um banco descartável com interfaces de Auth e Storage. A suíte insere dados sintéticos e reverte a transação.
 

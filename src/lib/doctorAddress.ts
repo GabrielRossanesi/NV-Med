@@ -30,8 +30,8 @@ export function formatDoctorAddress(address: DoctorAddress) {
   }).join('\n');
 }
 
-export function parseDoctorAddress(value: string): DoctorAddress | null {
-  const text = value.replace(/\r\n/g, '\n');
+export function parseDoctorAddress(value: string | null | undefined): DoctorAddress | null {
+  const text = (value ?? '').replace(/\r\n/g, '\n');
   if (!text) return null;
   const address = { ...emptyDoctorAddress };
   for (const line of text.split('\n')) {

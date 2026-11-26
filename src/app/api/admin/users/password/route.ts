@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
+import { administrativeMfaMessage, getAdministrativeMfaSession, getAuthorizedUser } from '@/lib/supabase/authorizedUser';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isStrongPassword } from '@/lib/passwordPolicy';
 
@@ -12,6 +12,7 @@ async function authorize(request: NextRequest) {
   if (!user) throw new Error('Entre novamente.');
   const { data: profile } = await client.from('user_accounts').select('id,type,role,status').eq('auth_user_id', user.id).single();
   if (profile?.type !== 'saas_admin' || profile.status !== 'active' || !['CEO', 'Gerente'].includes(profile.role)) throw new Error('Acesso restrito ao administrador.');
+  if (!await getAdministrativeMfaSession(client)) throw new Error(administrativeMfaMessage);
   return profile;
 }
 

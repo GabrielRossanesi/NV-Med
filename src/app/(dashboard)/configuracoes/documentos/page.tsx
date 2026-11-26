@@ -1,5 +1,7 @@
 'use client';
 
+import { useConfirmation } from '@/components/ConfirmationProvider';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
@@ -13,6 +15,7 @@ import { crmStates, documentTypeFromName, starterDocumentRequirements, validateD
 import type { DocumentRequirement, Organization } from '@/types';
 
 function RequirementsWorkspace({ organization }: { organization: Organization }) {
+  const confirm = useConfirmation();
   const store = useStore();
   const reduceMotion = useReducedMotion();
   const requirements = organization.settings.requiredDocuments;
@@ -74,9 +77,7 @@ function RequirementsWorkspace({ organization }: { organization: Organization })
     </header>
     {!canManage && <p className="border-l-2 border-primary pl-3 text-sm text-text-muted">Somente leitura. A pessoa responsável precisa de permissão de edição em Configurações para gerenciar exigências.</p>}
     {canManage && starterAdditions.length > 0 && <button type="button" className="nv-button-secondary" disabled={disabled} onClick={() => {
-      if (window.confirm('Adicionar os itens ausentes do checklist inicial? As exigências atuais serão preservadas.')) {
-        void persist([...requirements, ...starterAdditions], 'Checklist inicial adicionado.');
-      }
+      void confirm({ title: 'Adicionar checklist inicial?', description: 'Os itens ausentes serão adicionados. As exigências atuais serão preservadas.', tone: 'success', confirmLabel: 'Adicionar checklist', onConfirm: () => persist([...requirements, ...starterAdditions], 'Checklist inicial adicionado.') });
     }}><FilePlus2 size={16}/>Adicionar checklist inicial</button>}
     <section aria-label="Exigências da empresa">
       <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-4">
@@ -124,7 +125,7 @@ function RequirementsWorkspace({ organization }: { organization: Organization })
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex justify-end gap-2"><button type="button" disabled={store.saving} onClick={() => setForm(null)} className="nv-button-secondary">Cancelar</button><button type="submit" disabled={disabled} className="nv-button">{store.saving ? 'Salvando…' : 'Salvar exigência'}</button></div>
     </form></Dialog>}
-    {removing && <Dialog title="Remover exigência" onClose={() => !store.saving && setRemoving(null)}><p className="text-sm text-text-secondary">O documento <strong>{removing.name}</strong> deixará de ser exigido. Os arquivos enviados e o histórico de análise serão preservados.</p><div className="mt-5 flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setRemoving(null)}>Cancelar</button><button type="button" className="nv-button" disabled={disabled} onClick={async () => { if (await persist(requirements.filter(item => item.type !== removing.type), 'Exigência removida. Arquivos e histórico preservados.')) setRemoving(null); }}>{store.saving ? 'Removendo…' : 'Remover exigência'}</button></div></Dialog>}
+    {removing && <Dialog variant="confirmation" confirmationTone="danger" title="Remover exigência" onClose={() => !store.saving && setRemoving(null)}><p className="text-sm text-text-secondary">O documento <strong>{removing.name}</strong> deixará de ser exigido. Os arquivos enviados e o histórico de análise serão preservados.</p><div className="mt-5 flex justify-end gap-2"><button type="button" className="nv-button-secondary" disabled={store.saving} onClick={() => setRemoving(null)}>Cancelar</button><button type="button" className="nv-button" disabled={disabled} onClick={async () => { if (await persist(requirements.filter(item => item.type !== removing.type), 'Exigência removida. Arquivos e histórico preservados.')) setRemoving(null); }}>{store.saving ? 'Removendo…' : 'Remover exigência'}</button></div></Dialog>}
   </div>;
 }
 

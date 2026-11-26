@@ -7,6 +7,7 @@ export const shiftReportStates = {
 export const presenceReportStates = { pending: 'Check-in pendente', checked_in: 'Check-in registrado', checked_out: 'Check-out registrado' };
 
 export type ReportRow = {
+  coverage_post_id?: string | null; coverage_date?: string | null; segment_minutes?: number | null;
   id: string; organization: string; unit: string; sector: string; doctor: string | null; specialty: string | null;
   date: string; start_time: string; end_time: string; status: keyof typeof shiftReportStates;
   presence: keyof typeof presenceReportStates | null; check_in: string | null; check_out: string | null;
