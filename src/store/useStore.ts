@@ -18,6 +18,7 @@ type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
 type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean; progress?: boolean };
 
 interface NVMedState {
+  dataScope: 'full' | 'directory' | 'doctor';
   doctorDirectorySummary: { organizationId: string; documentIssues: number } | null;
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
   currentUser: UserAccount; users: UserAccount[]; isSimulating: boolean; simulatedOrganizationId: string | null;
@@ -98,7 +99,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     catch { /* The audit migration may not have been applied yet. */ }
   }
   return {
-    ...emptyData, activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
+    ...emptyData, dataScope: 'directory', activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
     saving: false, error: null, theme: 'light', sidebarCollapsed: true, doctorDirectorySummary: null,
     accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false,
     async loadAccountPreferences() {
@@ -152,7 +153,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (get().accountPreferencesStatus === 'ready') void get().saveAccountPreferences({ sidebarCollapsed }, true);
     },
     clearFeedback: () => set({ error: null }),
-    clearSession: () => set({ ...emptyData, doctorDirectorySummary: null, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
+    clearSession: () => set({ ...emptyData, dataScope: 'directory', doctorDirectorySummary: null, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
       theme: defaultAccountPreferences.theme, sidebarCollapsed: defaultAccountPreferences.sidebarCollapsed,
       accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),

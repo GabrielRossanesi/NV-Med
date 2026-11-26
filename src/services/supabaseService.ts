@@ -368,7 +368,9 @@ export function mapUserFromDb(row: DbUserAccount): UserAccount {
 // OPERAÇÕES DE LEITURA (BOOTSTRAP & REFRESH)
 // ==============================================================================
 
-export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' = 'full') {
+export type DoctorBootstrapScope = { doctorId: string; organizationId: string; signal?: AbortSignal };
+
+export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' | DoctorBootstrapScope = 'full') {
   const supabase = createClient();
   if (!supabase || !isSupabaseConfigured()) throw new Error('Conexão não configurada. Contate o administrador.');
   const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -376,6 +378,8 @@ export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' =
   const { data: profile, error: profileError } = await supabase.from('user_accounts').select('*').eq('auth_user_id', auth.user.id).eq('status', 'active').single();
   if (profileError || !profile) throw new Error('Seu acesso ainda não foi liberado. Contate o administrador.');
   const currentUser = mapUserFromDb(profile);
+  const doctorScope = typeof scope === 'object' ? scope : null;
+  let targetOrganization = doctorScope ? currentUser.type === 'tenant_user' ? currentUser.organizationId : doctorScope.organizationId : null;
   currentUser.email = auth.user.email || currentUser.email;
   if (currentUser.avatar) {
     const { data: avatar } = await supabase.storage.from('profile-avatars').createSignedUrl(currentUser.avatar, 3600);
@@ -389,11 +393,30 @@ export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' =
         if (!currentUser.organizationId) throw new Error('Usuário sem empresa vinculada.');
         query = query.eq(table === 'organizations' ? 'id' : 'organization_id', currentUser.organizationId);
       }
+      if (doctorScope && table !== 'organizations') {
+        query = query.eq('organization_id', targetOrganization!);
+        if (table === 'doctors') query = query.eq('id', doctorScope.doctorId);
+        if (table === 'medical_documents' || table === 'nv_staff_shifts') query = query.eq('doctor_id', doctorScope.doctorId);
+      }
+      if (doctorScope?.signal) query = query.abortSignal(doctorScope.signal);
       const { data, error } = await query.overrideTypes<Row[], { merge: false }>();
-      if (error) throw new Error('Não foi possível carregar ' + table + '. Tente novamente.');
+      if (error) throw new Error(doctorScope ? 'Não foi possível carregar o perfil médico. Tente novamente.' : 'Não foi possível carregar ' + table + '. Tente novamente.');
       result.push(...data);
       if (data.length < 500) return result;
     }
+  }
+  if (doctorScope) {
+    const orgs = await rows<DbOrganization>('organizations');
+    targetOrganization ||= orgs[0]?.id;
+    if (!orgs.some(org => org.id === targetOrganization)) throw new Error('Empresa indisponível. Selecione uma empresa válida.');
+    const doctors = await rows<DbDoctor>('doctors', 'id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units');
+    // Do not read dependent resources when the doctor is absent or forbidden by RLS.
+    const [units, documents, shifts] = doctors.length ? await Promise.all([
+      rows<DbUnit>('units'), rows<DbMedicalDocument>('medical_documents'), rows<DbShift>('nv_staff_shifts'),
+    ]) : [[], [], []];
+    return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
+      units: units.map(mapUnitFromDb), sectors: [] as Sector[], documents: documents.map(mapDocumentFromDb),
+      shifts: shifts.map(mapShiftFromDb), users: [] as UserAccount[], documentAudits: [] as DocumentAuditEntry[], dataScope: 'doctor' as const };
   }
   const [orgs, doctors, units, sectors, documents, shifts, users, documentAudits] = await Promise.all([
     rows<DbOrganization>('organizations'),
@@ -404,7 +427,7 @@ export async function fetchInitialDataFromSupabase(scope: 'full' | 'directory' =
     scope === 'directory' ? [] : fetchDocumentAuditLogsFromSupabase().catch(() => []),
   ]);
   return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: doctors.map(mapDoctorFromDb),
-    units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb), documentAudits };
+    units: units.map(mapUnitFromDb), sectors: sectors.map(mapSectorFromDb), documents: documents.map(mapDocumentFromDb), shifts: shifts.map(mapShiftFromDb), users: users.map(mapUserFromDb), documentAudits, dataScope: scope === 'directory' ? 'directory' as const : 'full' as const };
 }
 
 export async function fetchDocumentAuditLogsFromSupabase() {

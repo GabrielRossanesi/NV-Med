@@ -36,6 +36,7 @@ export default function Header() {
   const theme = useResolvedTheme();
   const showDocumentAlerts = useStore(state => state.accountPreferences.documentAlerts);
   const directorySummary = useStore(state => state.doctorDirectorySummary);
+  const dataScope = useStore(state => state.dataScope);
 
   const activeOrg = organizations.find(organization => organization.id === activeOrganizationId);
   const canSwitch = currentUser.type === 'saas_admin' && organizations.length > 1;
@@ -44,14 +45,14 @@ export default function Header() {
   const documentAlerts = useMemo(() => {
     const governance = getDocumentGovernance(activeOrg);
     if (!canSeeDocuments || !activeOrg || !governance.internalNotifications || !showDocumentAlerts) return 0;
-    if (pathname === '/medicos') return directorySummary?.organizationId === activeOrganizationId ? directorySummary.documentIssues : 0;
+    if (dataScope !== 'full') return directorySummary?.organizationId === activeOrganizationId ? directorySummary.documentIssues : 0;
     return doctorsWithDocumentIssues(
       doctors.filter(doctor => doctor.organizationId === activeOrganizationId),
       documents.filter(document => document.organizationId === activeOrganizationId),
       shifts.filter(shift => shift.organizationId === activeOrganizationId),
       referenceTime, activeOrg.settings.requiredDocuments, Math.max(...governance.expiryAlertDays),
     ).length;
-  }, [activeOrg, activeOrganizationId, canSeeDocuments, doctors, documents, referenceTime, shifts, showDocumentAlerts, pathname, directorySummary]);
+  }, [activeOrg, activeOrganizationId, canSeeDocuments, doctors, documents, referenceTime, shifts, showDocumentAlerts, dataScope, directorySummary]);
 
   useEffect(() => {
     if (!profileOpen) return;

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { fetchInitialDataFromSupabase, mapDoctorFromDb, openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
 import { DocumentStatus, DoctorStatus } from '@/types';
@@ -81,6 +81,11 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const statusSaving = useStore(state => state.saving);
   const confirm = useConfirmation();
   const profileKey = `${currentUser.id}/${activeOrganizationId}/${doctorId}`;
+  const activeProfile = useRef<string | null>(null);
+  useEffect(() => {
+    activeProfile.current = profileKey;
+    return () => { activeProfile.current = null; };
+  }, [profileKey]);
   const [personal, setPersonal] = useState<{ key: string; data: { cpf?: string; email?: string; phone?: string; address?: string } } | null>(null);
   const personalData = personal?.key === profileKey ? personal.data : null;
   const canEdit = canPerformAction(currentUser, 'medicos', 'edit');
@@ -100,6 +105,12 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       useStore.setState(state => ({ doctors: state.doctors.map(d => d.id === updated.id ? updated : d) }));
     } catch {
       notify.warning('A visualização está desatualizada.', { description: 'Recarregue a página para conferir os dados salvos.' });
+    }
+  }
+  async function refreshSchedule() {
+    const data = await fetchInitialDataFromSupabase({ doctorId, organizationId: activeOrganizationId });
+    if (activeProfile.current === profileKey && useStore.getState().activeOrganizationId === activeOrganizationId) {
+      useStore.getState().syncWithCloud(data);
     }
   }
   const [portalRole, setPortalRole] = useState<string | null>(null);
@@ -444,7 +455,7 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
 
       </div>
       <DoctorRqePanel key={doctor.id + '-rqes'} doctorId={doctor.id} specialties={organizations.find(org => org.id === activeOrganizationId)?.settings.specialties || []} onChanged={() => void refreshProfile()}/>
-      {canViewPermission(currentUser, 'escala') && <DoctorMasterSchedule key={`${activeOrganizationId}:${doctor.id}`} organization={activeOrganizationId} doctor={doctor} canManage={canPerformAction(currentUser, 'escala', 'edit') && canPerformAction(currentUser, 'escala', 'approve')} onChanged={async () => { useStore.getState().syncWithCloud(await fetchInitialDataFromSupabase()); }}/>}
+      {canViewPermission(currentUser, 'escala') && <DoctorMasterSchedule key={`${activeOrganizationId}:${doctor.id}`} organization={activeOrganizationId} doctor={doctor} canManage={canPerformAction(currentUser, 'escala', 'edit') && canPerformAction(currentUser, 'escala', 'approve')} onChanged={refreshSchedule}/>}
       <div id="doctor-access" className="scroll-mt-24"><DoctorPortalAccess key={doctor.id + '-access'} doctorId={doctor.id} organizationId={doctor.organizationId} revision={revision} onChanged={() => void refreshProfile()}/></div>
       <div id="doctor-history" className="scroll-mt-24"><DoctorProfileHistory key={doctor.id + '-history'} doctorId={doctor.id} revision={revision}/></div>
       {editing && <DoctorProfileEditor doctorId={doctor.id} specialties={organizations.find(o => o.id === doctor.organizationId)?.settings.specialties || []}

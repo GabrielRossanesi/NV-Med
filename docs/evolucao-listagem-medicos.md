@@ -107,4 +107,6 @@ CRM/UF continua sendo o registro principal existente. Uma evolução futura para
 
 ## Evoluções futuras
 
+A abertura do perfil recebeu uma otimização adicional de consultas por médico e empresa, descrita em [Carregamento do perfil médico](correcao-carregamento-perfil-medico.md).
+
 Validação de CRM/RQE depende de acesso oficial autorizado, condições de uso, custo e limites. Histórico de validações deve registrar fonte, consulta, data e resultado, separado da mera existência do registro. Favoritos podem estender preferências após definição do produto. Regras de credenciamento e elegibilidade devem ser configuráveis por empresa/unidade/especialidade e aprovadas antes de qualquer bloqueio novo de escala.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, Building2, CalendarDays, Layers3, Search, Stethoscope } from 'lucide-react';
 import { canViewPermission } from '@/lib/permissions';
@@ -8,10 +8,23 @@ import { shiftScheduleHref } from '@/lib/dashboardOverview';
 import { doctorNameSearchKey } from '@/lib/doctorName';
 import { useStore } from '@/store/useStore';
 import Dialog from './Dialog';
+import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
+import { withPromiseTimeout } from '@/lib/requestTimeout';
 
 export default function DashboardSearch({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
-  const { currentUser, activeOrganizationId: org, doctors, units, shifts, sectors } = useStore();
+  const { currentUser, activeOrganizationId: org, doctors, units, shifts, sectors, dataScope } = useStore();
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    if (dataScope === 'full') return;
+    let active = true;
+    void withPromiseTimeout(fetchInitialDataFromSupabase(), { timeoutMs: 25_000 }).then(data => {
+      if (active && useStore.getState().activeOrganizationId === org && useStore.getState().currentUser.id === currentUser.id) {
+        useStore.getState().syncWithCloud(data);
+      }
+    }).catch(() => { if (active) setLoadError('Não foi possível carregar a busca. Feche e tente novamente.'); });
+    return () => { active = false; };
+  }, [dataScope, org, currentUser.id]);
   const search = doctorNameSearchKey(query);
   const terms = search.split(' ');
   const ready = search.length >= 2;
@@ -25,7 +38,7 @@ export default function DashboardSearch({ onClose }: { onClose: () => void }) {
   const doctorNames = new Map(companyDoctors.map(item => [item.id, item.name]));
   const unitNames = new Map(companyUnits.map(item => [item.id, item.name]));
   const canSeeSchedule = canViewPermission(currentUser, 'escala');
-  const groups = ready && org ? [
+  const groups = ready && org && dataScope === 'full' ? [
     { label: 'Médicos', icon: Stethoscope, items: canViewPermission(currentUser, 'medicos') ? companyDoctors.map(doctor => ({ id: doctor.id, name: doctor.name, detail: `${doctor.specialty} · CRM ${doctor.crm}/${doctor.crmUf}`, href: `/medicos/${doctor.id}` })) : [] },
     { label: 'Unidades', icon: Building2, items: canViewPermission(currentUser, 'unidades') ? companyUnits.map(unit => ({ id: unit.id, name: unit.name, detail: [unit.city, unit.state].filter(Boolean).join(' · '), href: `/unidades/${unit.id}` })) : [] },
     { label: 'Postos e setores', icon: Layers3, items: canSeeSchedule ? companySectors.filter(sector => sector.status === 'active').map(sector => ({ id: sector.id, name: sector.name, detail: [unitNames.get(sector.unitId), ...sector.specialties].filter(Boolean).join(' · '), href: '/escala?' + new URLSearchParams({ unitId: sector.unitId, sectorId: sector.id }) })) : [] },
@@ -39,7 +52,7 @@ export default function DashboardSearch({ onClose }: { onClose: () => void }) {
       <input autoFocus id="workspace-search" type="search" className="nv-input pl-10" placeholder="Buscar nos dados da empresa ativa" value={query} onChange={event => setQuery(event.target.value)} />
     </div>
     <p role="status" className="my-3 text-sm text-text-muted">
-      {!ready ? 'Digite pelo menos dois caracteres para pesquisar.' : groups.length ? 'Até 5 resultados por categoria.' : 'Nenhum resultado para esta busca.'}
+      {loadError || (dataScope !== 'full' ? 'Carregando busca…' : !ready ? 'Digite pelo menos dois caracteres para pesquisar.' : groups.length ? 'Até 5 resultados por categoria.' : 'Nenhum resultado para esta busca.')}
     </p>
     <div className="space-y-4">
       {groups.map(({ label, icon: Icon, items }) => <section key={label}>

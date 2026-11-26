@@ -9,31 +9,39 @@ import { usePathname } from 'next/navigation';
 
 export default function StoreHydrator({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const scope = pathname === '/medicos' ? 'directory' : 'full';
+  const profileSegment = /^\/medicos\/([^/]+)$/.exec(pathname)?.[1];
+  const doctorId = profileSegment && profileSegment !== 'credenciamento' ? decodeURIComponent(profileSegment) : '';
+  const scope = doctorId ? `doctor:${doctorId}` : pathname === '/medicos' ? 'directory' : 'full';
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [error, setError] = useState('');
   const theme = useResolvedTheme();
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const timeout = doctorId ? setTimeout(() => controller.abort(), 25_000) : undefined;
     const client = createClient();
     async function load() {
       try {
         await useStore.persist.rehydrate();
         localStorage.removeItem('nv-med-storage');
-        const data = await fetchInitialDataFromSupabase(scope);
+        if (!active) return;
+        const data = await fetchInitialDataFromSupabase(doctorId
+          ? { doctorId, organizationId: useStore.getState().activeOrganizationId, signal: controller.signal }
+          : scope === 'directory' ? 'directory' : 'full');
         if (active) {
           useStore.getState().syncWithCloud(data);
           await useStore.getState().loadAccountPreferences();
           if (active) setLoadedScope(scope);
         }
-      } catch (e) { if (active) { useStore.getState().clearSession(); setError(e instanceof Error ? e.message : 'Falha ao carregar dados.'); } }
+      } catch (e) { if (active) { useStore.getState().clearSession(); setError(controller.signal.aborted ? 'O carregamento demorou demais. Tente novamente.' : e instanceof Error ? e.message : 'Falha ao carregar dados.'); } }
+      finally { clearTimeout(timeout); }
     }
     void load();
     const subscription = client?.auth.onAuthStateChange(event => {
       if (event === 'SIGNED_OUT') { useStore.getState().clearSession(); window.location.replace('/login'); }
     });
-    return () => { active = false; subscription?.data.subscription.unsubscribe(); };
-  }, [scope]);
+    return () => { active = false; controller.abort(); clearTimeout(timeout); subscription?.data.subscription.unsubscribe(); };
+  }, [scope, doctorId]);
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     return () => document.documentElement.classList.remove('dark');

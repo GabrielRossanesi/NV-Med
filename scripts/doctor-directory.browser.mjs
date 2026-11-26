@@ -17,6 +17,7 @@ const id='59000000-0000-4000-8000-000000000001';
 const user={id,email:'directory-test@example.invalid',aud:'authenticated',role:'authenticated',app_metadata:{},user_metadata:{},identities:[],created_at:'2026-01-01T00:00:00Z'};
 const actor={id:'directory-admin',auth_user_id:id,name:'Administrativo fictício',email:user.email,type:'tenant_user',organization_id:'directory-org',role:'Diretor',status:'active',additional_permissions:{},created_at:user.created_at};
 const org={id:'directory-org',name:'Corpo clínico fictício',status:'active',settings:{specialties:['Cirurgia','Pediatria'],requiredDocuments:[]}};
+const otherOrg={...org,id:'directory-org-b',name:'Empresa fictícia B'};
 const names=['Breno Victor Brandão Almeida','Jair Morais de Paula','Cassio Humberto Rocha Solidade','Osvaldo de Lima','Aline Machado Cunha',' Dr. breno Victor ','Dra. aline Machado','Dr Jair Morais','Dra Osvalda Lima','','---','éRICA Souza',...Array.from({length:80},(_,i)=>`Zeno Fictício ${String.fromCharCode(65+i%26)}`)];
 const doctors=names.map((name,index)=>({id:`directory-${index}`,organization_id:org.id,name,crm:String(24974+index),crm_uf:'SP',specialty:'Cirurgia',status:['active','pending','inactive'][index%3],contract_model:index===0?'pj':'pf',contract_signed:index===0,linked_units:[],address:null,phone:null,email:null,cpf:null,updated_at:'2026-01-01T00:00:00Z'}));
 doctors[0].specialties=['Cirurgia','Pediatria'];doctors[0].rqes=[{id:'rqe-1',number:'36373',specialty:'Cirurgia',legacy:false},{id:'rqe-2',number:'44444',specialty:null,legacy:false}];
@@ -24,8 +25,10 @@ doctors[0].units=[{id:'unit-1',name:'Hospital Fictício A'},{id:'unit-2',name:'C
 doctors[1].rqe='3482';doctors[1].portal_status='pending';doctors[4].rqe='   ';
 doctors[2].documents={pending:2,missing:1,expired:1,near:0,complete:false};doctors[2].portal_status='blocked';
 doctors[3].documents={pending:0,missing:0,expired:0,near:1,complete:false};
-let preferences=null,bulkFailure=false,slowQuery='',rqeRevision='rqes-initial',listingFailure=false,emptyDirectory=false;
-const calls=[],reads=[],mutations=[];
+const medicalDocuments=Array.from({length:1354},(_,index)=>({id:`document-${String(index).padStart(4,'0')}`,organization_id:org.id,doctor_id:index<2?doctors[index].id:'another-doctor',name:'CRM fictício',type:'crm',status:'not_sent'}));
+const profileShifts=[{id:'profile-shift',organization_id:org.id,doctor_id:doctors[0].id,unit_id:'unit-1',date:'2026-11-01',start_time:'07:00',end_time:'19:00',type:'onsite',status:'confirmed'}];
+let preferences=null,bulkFailure=false,slowQuery='',rqeRevision='rqes-initial',listingFailure=false,emptyDirectory=false,rejectUnscopedDocuments=false,profileDocumentFailure=false;
+const calls=[],reads=[],readRequests=[],mutations=[];
 const mock=http.createServer(async(request,response)=>{
  response.setHeader('Access-Control-Allow-Origin',base);response.setHeader('Access-Control-Allow-Headers','*');response.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');response.setHeader('Content-Type','application/json');
  if(request.method==='OPTIONS'){response.end();return;}
@@ -44,7 +47,7 @@ const mock=http.createServer(async(request,response)=>{
   if(name==='nv_account_preferences')return send(preferences);
   if(name==='nv_save_account_preferences'){preferences={theme:'light',sidebarCollapsed:true,density:'comfortable',scheduleView:'calendar',homePage:'',documentAlerts:true,applicationAlerts:true,doctorListing:{pageSize:25,sort:'name',descending:false,columns:['crm','specialty','contract','units','status','documents']},...preferences,...args.changes};return send(preferences);}
   if(name==='nv_session_ready')return send(true);
-  if(name==='nv_doctor_profile'){const doctor=doctors.find(d=>d.id===args.target);return send({profile:doctor,can_read_personal:true,can_edit:actor.role==='Diretor',can_approve:true,specialties:doctor.specialties||[doctor.specialty],requested_specialties:[],has_enrollment:false});}
+  if(name==='nv_doctor_profile'){const doctor=doctors.find(d=>d.id===args.target);if(!doctor)return send({code:'42501',message:'unavailable'},403);return send({profile:doctor,can_read_personal:true,can_edit:actor.role==='Diretor',can_approve:true,specialties:doctor.specialties||[doctor.specialty],requested_specialties:[],has_enrollment:false});}
   if(name==='nv_doctor_rqes'){
    if(args.entries){mutations.push({name,args});doctors[0].rqes=args.entries.map((r,i)=>({...r,id:`rqe-${i}`,legacy:false}));rqeRevision='rqes-updated';}
    return send({entries:doctors[0].rqes.map(({number,specialty})=>({number,specialty})),legacy:null,revision:rqeRevision,canEdit:actor.role==='Diretor'});
@@ -64,7 +67,12 @@ const mock=http.createServer(async(request,response)=>{
   return send([]);
  }
  reads.push(name);
- const data=({doctors,organizations:[org],user_accounts:[actor],units:doctors[0].units,sectors:[],medical_documents:[],document_audit_logs:[],nv_staff_shifts:[]})[name]||[];
+ readRequests.push({name,params:Object.fromEntries(url.searchParams)});
+ if(rejectUnscopedDocuments&&name==='medical_documents'&&!url.searchParams.has('doctor_id'))return send({message:'Unscoped document request rejected by test'},500);
+ if(profileDocumentFailure&&name==='medical_documents')return send({message:'private internal database error'},500);
+ let data=({doctors,organizations:[org,otherOrg],user_accounts:[actor],units:doctors[0].units.map(unit=>({...unit,organization_id:org.id,city:'Cidade fictícia',state:'SP',type:'hospital',status:'active'})),sectors:[],medical_documents:medicalDocuments,document_audit_logs:[],nv_staff_shifts:profileShifts})[name]||[];
+ for(const key of ['id','organization_id','doctor_id','auth_user_id','status']){const filter=url.searchParams.get(key);if(filter?.startsWith('eq.'))data=data.filter(row=>row[key]===filter.slice(3));}
+ data=data.slice(Number(url.searchParams.get('offset')||0),Number(url.searchParams.get('offset')||0)+Number(url.searchParams.get('limit')||500));
  return send(request.headers.accept?.includes('vnd.pgrst.object')?data[0]||null:data);
 });
 await new Promise(resolve=>mock.listen(54327,'127.0.0.1',resolve));
@@ -135,6 +143,8 @@ try{
  checks.push('advanced filters combine, count stays visible while collapsed, document expiry and clear');
  await page.getByRole('button',{name:'Próxima página',exact:true}).click();await loaded();assert.match(await page.locator('main').innerText(),/Exibindo 26–50/);
  const target=rows.first().getByRole('link').first();const url=page.url();await target.click();await page.getByRole('button',{name:'Editar perfil',exact:true}).waitFor();
+ const profileReads=readRequests.filter(r=>['doctors','medical_documents','nv_staff_shifts'].includes(r.name));
+ assert.ok(profileReads.length>=3);for(const read of profileReads){assert.equal(read.params.organization_id,'eq.'+org.id);assert.ok(read.params[read.name==='doctors'?'id':'doctor_id']?.startsWith('eq.directory-'));}
  await page.getByRole('link',{name:'Voltar para listagem',exact:true}).click();await loaded();assert.equal(page.url(),url);
  await page.getByRole('combobox',{name:'Por página',exact:true}).selectOption('50');await loaded();assert.equal(await rows.count(),50);
  await page.getByRole('button',{name:'CRM / UF',exact:true}).click();await loaded();assert.match(page.url(),/sort=crm/);assert.match(page.url(),/page=1/);
@@ -219,6 +229,45 @@ try{
  await search().fill('ficticio inexistente');await page.waitForFunction(()=>new URLSearchParams(location.search).get('q')==='ficticio inexistente');await loaded();assert.match(await rows.innerText(),/Nenhum médico encontrado/);
  await clear();actor.role='Jurídico';await page.reload();await loaded();await page.getByRole('button',{name:'Ações de Breno Victor Brandão Almeida'}).first().click();assert.equal(await page.getByRole('menuitem',{name:'Editar cadastro',exact:true}).count(),0);assert.equal(await page.getByRole('menuitem',{name:'Gerenciar acesso ao Portal Médico',exact:true}).count(),0);
  checks.push('empty results and read-only role hide editing and portal administration');
+ actor.role='Diretor';rejectUnscopedDocuments=true;
+ const beforeCold=readRequests.length,started=performance.now();
+ await page.goto(base+'/medicos/directory-0');await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
+ const coldElapsed=Math.round(performance.now()-started);
+ const coldReads=readRequests.slice(beforeCold);
+ assert.equal(coldReads.filter(r=>r.name==='medical_documents').length,1);
+ assert.equal(coldReads.filter(r=>r.name==='nv_staff_shifts').length,1);
+ for(const read of coldReads.filter(r=>['doctors','medical_documents','nv_staff_shifts'].includes(r.name))){assert.equal(read.params.organization_id,'eq.'+org.id);assert.equal(read.params[read.name==='doctors'?'id':'doctor_id'],'eq.directory-0');}
+ assert.ok(!coldReads.some(r=>['sectors','document_audit_logs'].includes(r.name)));
+ assert.ok(coldReads.filter(r=>r.name==='user_accounts').every(r=>r.params.auth_user_id==='eq.'+id));
+ assert.equal(await page.getByText('CRM fictício',{exact:true}).count(),1);
+ assert.match(await page.locator('#doctor-shifts').innerText(),/Hospital Fictício A/);
+ await page.getByRole('button',{name:'Editar perfil',exact:true}).click();await page.getByRole('dialog',{name:'Editar perfil',exact:true}).waitFor();await page.getByRole('dialog').getByRole('button',{name:'Cancelar',exact:true}).click();
+ await page.screenshot({path:fileURLToPath(new URL('profile-scoped-360.png',artifact)),fullPage:true});
+ checks.push(`cold profile scopes documents and shifts to one doctor out of 1354 documents (${coldElapsed} ms), keeps units and existing editor`);
+ const beforeMissing=readRequests.length;await page.goto(base+'/medicos/missing-doctor');await page.getByRole('heading',{name:'Médico não encontrado',exact:true}).waitFor();
+ assert.ok(!readRequests.slice(beforeMissing).some(r=>['medical_documents','nv_staff_shifts','units'].includes(r.name)));
+ checks.push('missing or unauthorized doctor does not fetch dependent resources');
+ await page.goto(base+'/medicos/directory-1');await page.getByRole('heading',{name:doctors[1].name,exact:true}).waitFor();
+ assert.equal(await page.getByText('CRM fictício',{exact:true}).count(),1);
+ checks.push('switching profile does not retain another doctor document set');
+ rejectUnscopedDocuments=false;
+ await page.getByRole('button',{name:'Pesquisar na empresa',exact:true}).click();
+ await page.getByRole('dialog',{name:'Pesquisar na empresa',exact:true}).waitFor();
+ await page.locator('#workspace-search').fill('Breno');await page.getByRole('dialog').getByRole('link',{name:/Breno.*CRM/}).waitFor();
+ await page.keyboard.press('Escape');
+ checks.push('global search explicitly loads complete data on demand instead of treating profile data as company-wide');
+ actor.type='saas_admin';actor.role='CEO';await page.goto(base+'/medicos/directory-0');await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
+ await page.getByRole('combobox',{name:'Empresa ativa',exact:true}).selectOption(otherOrg.id);
+ const beforeOther=readRequests.length;await page.reload();await page.getByRole('heading',{name:'Médico não encontrado',exact:true}).waitFor();
+ const otherReads=readRequests.slice(beforeOther);
+ assert.equal(otherReads.find(r=>r.name==='doctors').params.organization_id,'eq.'+otherOrg.id);
+ assert.ok(!otherReads.some(r=>['medical_documents','nv_staff_shifts','units'].includes(r.name)));
+ checks.push('SaaS admin profile reads still require the selected company; cross-company ID does not load resources');
+ actor.type='tenant_user';actor.role='Diretor';await page.reload();await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
+ profileDocumentFailure=true;await page.reload();await page.getByRole('heading',{name:'Não foi possível abrir o painel',exact:true}).waitFor();
+ assert.ok(!(await page.locator('main').innerText()).includes('private internal'));
+ profileDocumentFailure=false;await page.getByRole('button',{name:'Tentar novamente',exact:true}).click();await page.getByRole('heading',{name:doctors[0].name,exact:true}).waitFor();
+ checks.push('scoped read errors show a safe retry state and recover without changing data');
  assert.deepEqual(errors,[]);
  // The host antivirus may inject this script. All non-loopback requests are aborted above.
  assert.ok(external.every(host=>host==='me.kis.v2.scr.kaspersky-labs.com'),`Unexpected outbound attempt: ${external.join(', ')}`);
