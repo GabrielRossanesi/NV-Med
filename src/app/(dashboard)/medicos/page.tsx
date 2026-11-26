@@ -28,7 +28,8 @@ import { doctorHasOperationalUnit, getDoctorOperationalUnitIds } from '@/lib/doc
 import DoctorBankingFields from '@/components/DoctorBankingFields';
 import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileFields, { doctorProfileFromForm } from '@/components/DoctorProfileFields';
-import { matchesDoctorSearch } from '@/lib/doctorName';
+import { getDoctorInitial, matchesDoctorSearch } from '@/lib/doctorName';
+import UserAvatar from '@/components/UserAvatar';
 
 function DoctorsPageContent() {
   const confirm = useConfirmation();
@@ -338,9 +339,7 @@ function DoctorsPageContent() {
                         <tr key={doc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/10 transition">
                           <td className="p-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                                {doc.name.charAt(4)}
-                              </div>
+                              <UserAvatar name={doc.name} initials={getDoctorInitial(doc.name)} className="h-8 w-8" />
                               <div>
                                 <p className="font-semibold text-text-primary">{doc.name}</p>
                               </div>

@@ -10,6 +10,16 @@ function cleanSpacing(value: string) {
   return value.replace(whitespace, ' ').trim();
 }
 
+/** Presentation only: imported names may still include a professional title. */
+export function getDoctorInitial(value: string | null | undefined) {
+  const name = cleanSpacing(value ?? '').normalize('NFC')
+    .replace(/^(?:dra?(?:\.\s*|\s+|$))+/iu, '');
+  const firstName = name.split(' ')[0];
+  if (!firstName || !validName.test(firstName)) return '';
+  const letter = [...firstName][0];
+  return letter === 'ß' ? 'ẞ' : letter.toUpperCase();
+}
+
 export function normalizeDoctorName(value: string, preserveCapitalization = false) {
   const clean = cleanSpacing(value.replace(numbers, '')).normalize('NFC');
   if (preserveCapitalization) return clean;

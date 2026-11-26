@@ -2,8 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   doctorNameInvalidError, doctorNameNumberError, doctorNameSearchKey, matchesDoctorSearch,
-  normalizeDoctorName, validateDoctorName,
+  getDoctorInitial, normalizeDoctorName, validateDoctorName,
 } from '../src/lib/doctorName.ts';
+
+test('avatar usa a primeira inicial maiúscula do cadastro, ignorando títulos e espaços', () => {
+  const examples = [
+    ['Breno Victor Brandão Almeida', 'B'], ['Jair Morais de Paula', 'J'],
+    ['Cassio Humberto Rocha Solidade', 'C'], ['Osvaldo de Lima', 'O'], ['Aline Machado Cunha', 'A'],
+    ['  dr.  breno  Victor ', 'B'], ['\tDRA.\u00a0 aline Machado', 'A'],
+    ['Dr Jair Morais', 'J'], ['Dra Osvalda Lima', 'O'], ['Dra.Aline Machado', 'A'],
+    ['Dr. Dra. Ana Maria', 'A'], ['Drake Lima', 'D'], ['Drauzio Varella', 'D'],
+    ['a\u0301lvaro Lima', 'Á'], ['éRICA Souza', 'É'], ['李 小龍', '李'], ['ßara Lima', 'ẞ'],
+    ['Ana 82561', 'A'],
+  ];
+  for (const [name, expected] of examples) assert.equal(getDoctorInitial(name), expected, name);
+  for (const name of [null, undefined, '', ' \t\u00a0', 'Dr.', 'Dra ', '---', '123', '👤 Silva']) {
+    assert.equal(getDoctorInitial(name), '', String(name));
+  }
+});
 
 test('normaliza capitalização, nomes compostos, partículas e espaços Unicode', () => {
   const examples = [
