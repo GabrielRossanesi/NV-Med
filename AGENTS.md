@@ -11,3 +11,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Interface do NV Med
 
 Siga as [diretrizes de UI/UX do NV Med](docs/UI_UX_GUIDELINES.md) ao criar, editar ou auditar interfaces.
+
+Para uploads, Storage ou alterações no acervo documental, siga o [guia de otimização de documentos](docs/otimizacao-documentos.md).

@@ -11,6 +11,8 @@ A correção de status cadastral utiliza `53_doctor_status.sql` após a 52. Ela 
 
 O laboratório PostgreSQL em `scripts/test-database.ps1` reconstitui a instalação e testa a verificação com concessão anônima, bucket público e endurecimento incompleto.
 
+Documentos WebP, substituição física do acervo e monitoramento SaaS usam respectivamente as migrations `56_medical_document_webp.sql`, `57_medical_storage_replacements.sql` e `58_storage_usage.sql`, após a sequência do ambiente até a 55. O agendamento é separado em `storage-usage-cron.setup.sql`. Consulte a ordem de ativação, os limites e o procedimento de restauração no [guia de otimização de documentos](../docs/otimizacao-documentos.md).
+
 Para adiar a varredura antimalware, aplique `40 → 41 → 42 → 43 → 45 → 46` e publique a aplicação correspondente na mesma janela. Os buckets continuam privados, e a rota exige vínculo e autorização em cada acesso. A análise antimalware permanece pendente até a migration 44. Para verificar esse estado, execute `SET nvmed.verify_deferred_document_scan = 'on';` seguido de `provisioning.verify.sql` na mesma sessão SQL. O laboratório aceita `-DeferDocumentScan` para testar essa sequência e a ativação posterior da 44.
 
 `43_doctor_data_minimization.sql` mantém apenas colunas profissionais na leitura direta de `doctors`. A ficha individual libera CPF, nascimento, endereço e contatos para o próprio médico e para quem tem permissão de aprovar credenciamento. A gestão do Portal Médico usa seu recorte próprio de e-mail e último acesso. A versão da aplicação com a projeção explícita precisa estar no ambiente quando a permissão de coluna mudar.

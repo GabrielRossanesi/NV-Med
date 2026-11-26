@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAuthorizedUser } from '@/lib/supabase/authorizedUser';
-import { maxMedicalFileBytes, medicalFileExtension } from '@/lib/medicalFile';
+import { maxMedicalFileBytes, medicalFileExtension, medicalImagePolicy, normalizeMedicalFilename, pdfProtectionIndicators } from '@/lib/medicalFile';
+import { validateMedicalImage } from '@/lib/medicalImageValidation';
 import { isMedicalDocumentPath, medicalDocumentPreviewKind, readBoundedBody } from '@/lib/documentAccess';
 
 const bucket = 'medical-documents';
@@ -45,8 +46,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return failure('O arquivo aguarda verificação de segurança. Tente novamente mais tarde.', 423);
   }
   const preview = request.nextUrl.searchParams.get('preview') === '1';
+  const download = !preview || request.nextUrl.searchParams.get('download') === '1' || medicalDocumentPreviewKind(file_path) === 'download';
   const { data, error } = await admin.storage.from(bucket).createSignedUrl(file_path, 60, {
-    download: !preview || request.nextUrl.searchParams.get('download') === '1' || medicalDocumentPreviewKind(file_path) === 'download',
+    download,
   });
   if (error) return failure('Arquivo indisponível.', 404);
   if (preview) return NextResponse.json({ url: data.signedUrl }, { headers: noCache });
@@ -77,7 +79,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!(file instanceof File) || file.size === 0 || form?.getAll('file').length !== 1) return failure('Envie um único arquivo.', 400);
   if (file.size > maxMedicalFileBytes) return failure('O limite por arquivo é de 4 MB.', 413);
   const kind = await medicalFileExtension(file);
-  if (!kind) return failure('Envie um arquivo PDF, JPEG ou PNG válido.', 415);
+  if (!kind || (kind !== 'pdf' && !await validateMedicalImage(file, kind))) {
+    return failure('Envie um arquivo PDF, JPEG, PNG ou WebP válido.', 415);
+  }
   const path = [access.document.organization_id, access.document.doctor_id, crypto.randomUUID() + '.' + kind].join('/');
   if (!isMedicalDocumentPath(path, access.document.organization_id, access.document.doctor_id)) return failure('Pasta indisponível.', 404);
   const scan = await admin.rpc('nv_document_delivery_status', { object_name: path });
@@ -85,10 +89,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return failure('Não foi possível preparar o envio do documento.', 503);
   }
   const storage = admin.storage.from(bucket);
-  const { error: uploadError } = await storage.upload(path, file, { upsert: false, contentType: file.type, cacheControl: '0' });
+  const originalBytes = Number(form?.get('originalBytes'));
+  const originalFormat = form?.get('originalFormat');
+  const protection = kind === 'pdf' ? pdfProtectionIndicators(new Uint8Array(await file.arrayBuffer())) : null;
+  const metadata = protection && (protection.signature || protection.encrypted) ? { nvPdfProtection: protection }
+    : kind === 'webp' && ['jpg', 'png'].includes(String(originalFormat))
+    && Number.isSafeInteger(originalBytes) && originalBytes > file.size && originalBytes <= medicalImagePolicy.maxSourceBytes
+    ? { nvOptimization: medicalImagePolicy.version, nvOriginalBytes: originalBytes, nvOriginalFormat: originalFormat } : undefined;
+  const { error: uploadError } = await storage.upload(path, file, { upsert: false, contentType: file.type, cacheControl: '0', metadata });
   if (uploadError) return failure('Não foi possível armazenar o arquivo.', 502);
   const { data, error } = await admin.rpc('nv_save_portal_document', {
-    actor: access.user.id, target: id, path, filename: file.name.replace(/[\u0000-\u001f]/g, '').slice(0, 200),
+    actor: access.user.id, target: id, path, filename: normalizeMedicalFilename(file.name, kind),
     previous_path: access.document.file_path,
     actor_session: session,
   });

@@ -837,16 +837,9 @@ export async function updateOrganizationInSupabase(org: Organization) {
 // STORAGE: UPLOAD DE DOCUMENTOS PARA O BUCKET 'medical-documents'
 // ==============================================================================
 
-export async function uploadDocumentFileToSupabase(file: File, documentId: string) {
+export async function loadUploadedDocumentFromSupabase(documentId: string) {
   const supabase = createClient();
   if (!supabase) throw new Error('Conexão não configurada.');
-  const body = new FormData();
-  body.set('file', file);
-  const response = await fetch('/api/portal/documents/' + encodeURIComponent(documentId), { method: 'POST', body });
-  if (!response.ok) {
-    const result = await response.json().catch(() => null);
-    throw new Error(result?.error || 'Não foi possível enviar o arquivo.');
-  }
   const { data, error } = await supabase.from('medical_documents').select('*').eq('id', documentId).single();
   if (error || !data) throw new Error('Arquivo enviado. Atualize a pasta para visualizar a nova versão.');
   return mapDocumentFromDb(data);

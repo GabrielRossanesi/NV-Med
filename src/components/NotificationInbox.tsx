@@ -38,7 +38,7 @@ export default function NotificationInbox({ preferences = false, revision = 0, v
       });
     }
     return () => { active = false; };
-  }, [preferences, revision]);
+  }, [preferences, revision, open]);
   async function markRead(id: string) {
     setError('');
     setMarking(id);

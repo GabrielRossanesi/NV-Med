@@ -36,7 +36,8 @@ CREATE TABLE storage.buckets (
   file_size_limit bigint, allowed_mime_types text[]
 );
 CREATE TABLE storage.objects (bucket_id text REFERENCES storage.buckets(id), name text,
-  version text DEFAULT gen_random_uuid()::text, updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (bucket_id, name));
+  version text DEFAULT gen_random_uuid()::text, updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb, user_metadata jsonb, PRIMARY KEY (bucket_id, name));
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE FUNCTION storage.foldername(path text) RETURNS text[] LANGUAGE sql IMMUTABLE AS $$
   SELECT (string_to_array(path, '/'))[1:cardinality(string_to_array(path, '/')) - 1];

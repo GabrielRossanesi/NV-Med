@@ -3,7 +3,8 @@
 import { use, useEffect, useState } from 'react';
 import { fetchInitialDataFromSupabase, mapDoctorFromDb, openDocument } from '@/services/supabaseService';
 import { useStore } from '@/store/useStore';
-import { DocumentStatus, DocumentType, DoctorStatus } from '@/types';
+import { DocumentStatus, DoctorStatus } from '@/types';
+import MedicalDocumentUpload from '@/components/MedicalDocumentUpload';
 import AccessGuard from '@/components/AccessGuard';
 import {
   ArrowLeft,
@@ -13,7 +14,6 @@ import {
   Clock,
   AlertCircle,
   FileText,
-  Upload,
   ShieldCheck,
   MapPin,
   Mail,
@@ -63,7 +63,6 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
   const docShifts = shifts.filter((s) => s.doctorId === doctorId && s.organizationId === activeOrganizationId);
   const docDocs = documents.filter((d) => d.doctorId === doctorId && d.organizationId === activeOrganizationId);
 
-  const [selectedFileNames, setSelectedFileNames] = useState<Record<string, File>>({});
   const [editing, setEditing] = useState(false);
   const [revision, setRevision] = useState(0);
   const statusSaving = useStore(state => state.saving);
@@ -147,26 +146,6 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
       if (saved) setRevision(v => v + 1);
       return saved;
     } });
-  };
-
-  // Handle mock file selection
-  const handleFileChange = (type: DocumentType, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFileNames((prev) => ({ ...prev, [type]: file }));
-    }
-  };
-
-  // Trigger simulated upload
-  const handleUpload = async (type: DocumentType) => {
-    const file = selectedFileNames[type];
-    if (!file || !await uploadDocument(doctorId, type, file)) return;
-    // Clear filename selection
-    setSelectedFileNames((prev) => {
-      const copy = { ...prev };
-      delete copy[type];
-      return copy;
-    });
   };
 
   // Get status color mappings
@@ -389,9 +368,6 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
             <div className="divide-y divide-border mt-4">
               {docDocs.length === 0 && <p className="text-sm text-text-muted">Nenhum documento registrado.</p>}
               {docDocs.map((doc) => {
-                const fileNameInputKey = doc.type;
-                const isSelected = !!selectedFileNames[fileNameInputKey];
-
                 return (
                   <div key={doc.id} className="py-5 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1.5 md:max-w-md">
@@ -416,32 +392,10 @@ export default function DoctorDetailPage({ params }: { params: Promise<{ id: str
                         {docStatusLabels[doc.status]}
                       </span>
 
-                      {/* Document Action Simulator */}
                       <div className="flex items-center gap-1 bg-background p-1.5 rounded-lg border border-card-border">
-                        {/* If not sent, let them simulate mock select and upload */}
                         {!doc.filePath || doc.status === 'not_sent' || doc.status === 'expired' || doc.status === 'rejected' ? (
-                          <div className="flex items-center gap-1.5">
-                            <label className="cursor-pointer bg-card-bg hover:bg-slate-100 dark:hover:bg-slate-800 text-text-secondary border border-border rounded px-2.5 py-1 text-[10px] font-bold flex items-center gap-1 focus-within:outline-2 focus-within:outline-primary">
-                              <Upload className="h-3 w-3" />
-                              Selecionar
-                              <input
-                                type="file"
-                                className="sr-only"
-                                accept=".pdf,.png,.jpg"
-                                onChange={(e) => handleFileChange(doc.type, e)}
-                              />
-                            </label>
-                            
-                            {isSelected && (
-                              <button
-                                disabled={useStore.getState().saving}
-                                onClick={() => handleUpload(doc.type)}
-                                className="bg-primary hover:bg-primary-hover text-text-inverse rounded px-2.5 py-1 text-[10px] font-bold cursor-pointer"
-                              >
-                                Enviar
-                              </button>
-                            )}
-                          </div>
+                          canPerformAction(currentUser, 'documentos', 'edit') && <MedicalDocumentUpload name={doc.name} replace={Boolean(doc.filePath)} disabled={statusSaving}
+                            onUpload={(file, options) => uploadDocument(doctorId, doc.type, file, options)}/>
                         ) : (
                           // If document is sent/analyzing/approved, provide immediate administrative triggers to approve/reject
                           <div className="flex items-center gap-1">

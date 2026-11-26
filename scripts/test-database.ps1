@@ -3,6 +3,7 @@ param([Parameter(Mandatory = $true)][string]$PostgresBin, [switch]$DeferDocument
 $ErrorActionPreference = 'Stop'
 $initdb = Join-Path $PostgresBin 'initdb.exe'
 $pgCtl = Join-Path $PostgresBin 'pg_ctl.exe'
+$pgIsReady = Join-Path $PostgresBin 'pg_isready.exe'
 $psql = Join-Path $PostgresBin 'psql.exe'
 $sqlDir = Join-Path $PSScriptRoot '../supabase'
 $labId = [guid]::NewGuid().ToString('N')
@@ -47,7 +48,9 @@ try {
   }
   $startAttempted = $true
   $startup = Start-Process @startupOptions
-  if (!$startup.WaitForExit(20000) -or $startup.ExitCode -ne 0) {
+  [void]$startup.WaitForExit(20000)
+  & $pgIsReady -q -h 127.0.0.1 -p $port -U $role -d postgres -t 4
+  if ($LASTEXITCODE -ne 0) {
     throw 'Falha ao iniciar o cluster descartável.'
   }
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'lab.fixture.sql'))
@@ -162,7 +165,19 @@ CREATE POLICY "Public Read Medical Documents" ON storage.objects FOR SELECT TO a
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'doctor-status.verify.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '55_interactive_shift_coverage.sql'))
   Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'interactive-coverage.verify.sql'))
-  Write-Output 'PASS: baseline, segurança, migrations até 55 e suítes SQL.'
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '56_medical_document_webp.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '57_medical_storage_replacements.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir '58_storage_usage.sql'))
+  Invoke-LabSql -Arguments @('-f', (Join-Path $sqlDir 'storage-usage.verify.sql'))
+  $env:NVMED_STORAGE_PROJECT = 'local'
+  $env:NVMED_STORAGE_PSQL = $psql
+  $env:PGHOST = '127.0.0.1'
+  $env:PGPORT = [string]$port
+  $env:PGUSER = $role
+  $env:PGDATABASE = 'postgres'
+  & node (Join-Path $PSScriptRoot 'medical-storage.lab.mjs')
+  if ($LASTEXITCODE -ne 0) { throw 'Falha no dry-run ou na recuperação em lote no laboratório.' }
+  Write-Output 'PASS: baseline, segurança, migrations até 58 e suítes SQL.'
 } finally {
   if ($startAttempted -and (Test-Path -LiteralPath (Join-Path $cluster 'postmaster.pid'))) {
     & $pgCtl -D $cluster -m fast -w stop | Out-Null

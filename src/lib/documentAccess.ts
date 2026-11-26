@@ -7,11 +7,11 @@ export function isMedicalDocumentPath(path: string, organization: string, doctor
   return extra === undefined && orgSegment === organization && doctorSegment === doctor
     && isExactMatch(orgSegment, /^[A-Za-z0-9_-]+$/)
     && isExactMatch(doctorSegment, /^[A-Za-z0-9_-]+$/)
-    && Boolean(file && isExactMatch(file, /^[A-Za-z0-9_-]+\.(pdf|jpe?g|png|docx?|heif|pages|mht)$/));
+    && Boolean(file && isExactMatch(file, /^[A-Za-z0-9_-]+\.(pdf|jpe?g|png|webp|docx?|heif|pages|mht)$/));
 }
 
 export function medicalDocumentPreviewKind(path: string): 'image' | 'pdf' | 'download' {
-  if (/\.(png|jpe?g)$/i.test(path)) return 'image';
+  if (/\.(png|jpe?g|webp)$/i.test(path)) return 'image';
   if (/\.pdf$/i.test(path)) return 'pdf';
   return 'download';
 }

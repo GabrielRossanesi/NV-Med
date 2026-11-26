@@ -10,11 +10,12 @@ import { defaultAccountPreferences, type AccountPreferences } from '@/lib/accoun
 import { createClient } from '@/lib/supabase/client';
 import { coverageSaveMessage } from '@/lib/fractionalCoverage';
 import { doctorStatusActions } from '@/lib/doctorStatus';
+import { sendMedicalDocument, type DocumentUploadOptions } from '@/lib/medicalUpload';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
 type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
-type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean };
+type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean; progress?: boolean };
 
 interface NVMedState {
   activeOrganizationId: string; organizations: Organization[]; doctors: Doctor[]; units: Unit[]; sectors: Sector[]; documents: MedicalDocument[]; documentAudits: DocumentAuditEntry[]; shifts: Shift[];
@@ -23,7 +24,7 @@ interface NVMedState {
   clearFeedback: () => void; clearSession: () => void;
   syncWithCloud: (data: CloudData) => void;
   setActiveOrganizationId: (id: string) => void;
-  addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<boolean>;
+  addDoctor: (doctor: Omit<Doctor, 'id' | 'organizationId'>, banking?: DoctorBanking) => Promise<string | null>;
   setDoctorStatus: (id: string, status: DoctorStatus) => Promise<boolean>;
   updateDoctorContract: (id: string, changes: Partial<Pick<Doctor, 'contractModel' | 'contractSigned'>>) => Promise<boolean>;
   deleteDoctor: (id: string) => Promise<boolean>;
@@ -43,7 +44,7 @@ interface NVMedState {
   deleteShift: (id: string) => Promise<boolean>;
   deleteShifts: (ids: string[]) => Promise<boolean>;
   vacateShifts: (ids: string[]) => Promise<boolean>;
-  uploadDocument: (doctorId: string, type: DocumentType, file: File) => Promise<boolean>;
+  uploadDocument: (doctorId: string, type: DocumentType, file: File, options?: DocumentUploadOptions) => Promise<boolean>;
   updateDocumentStatus: (documentId: string, status: DocumentStatus) => Promise<boolean>;
   updateDocument: (document: MedicalDocument) => Promise<boolean>;
   bulkUpdateDocuments: (documentIds: string[], status: DocumentStatus, reviewNote?: string) => Promise<boolean>;
@@ -68,10 +69,10 @@ interface NVMedState {
 
 export const useStore = create<NVMedState>()(persist((set, get) => {
   let preferenceWrites = Promise.resolve<boolean>(true);
-  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', description, inlineError = false, withinDialog }: SaveFeedback = {}) {
+  async function commit(work: () => Promise<void>, { success = 'Alterações salvas.', description, inlineError = false, withinDialog, progress = true }: SaveFeedback = {}) {
     if (get().saving) return false;
     set({ saving: true, error: null });
-    const finishSaving = notify.saving();
+    const finishSaving = progress ? notify.saving() : undefined;
     try {
       await work();
       if (success) notify.success(typeof success === 'function' ? success() : success, { description, withinDialog });
@@ -82,7 +83,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       if (!inlineError) notify.error('Não foi possível concluir a ação.', { description: message, persistent: true });
       return false;
     } finally {
-      finishSaving();
+      finishSaving?.();
       set({ saving: false });
     }
   }
@@ -154,14 +155,18 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
     syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
-    addDoctor: (input, banking) => commit(async () => {
-      const doctor = { ...input, status: banking ? input.status : 'pending' as const, id: crypto.randomUUID(), organizationId: orgId() };
-      // The database trigger creates required document rows in the same transaction.
-      await cloud.createDoctorInSupabase(doctor, banking);
-      set({ doctors: [...get().doctors, doctor] });
-      try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
-      catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
-    }, { success: 'Médico cadastrado.', inlineError: true }),
+    async addDoctor(input, banking) {
+      const id = crypto.randomUUID();
+      const saved = await commit(async () => {
+        const doctor = { ...input, status: banking ? input.status : 'pending' as const, id, organizationId: orgId() };
+        // The database trigger creates required document rows in the same transaction.
+        await cloud.createDoctorInSupabase(doctor, banking);
+        set({ doctors: [...get().doctors, doctor] });
+        try { get().syncWithCloud(await cloud.fetchInitialDataFromSupabase()); }
+        catch { throw new Error('Médico salvo, mas a atualização da lista falhou. Recarregue antes de cadastrar novamente.'); }
+      }, { success: 'Médico cadastrado.', inlineError: true });
+      return saved ? id : null;
+    },
     updateDoctorContract: (id, changes) => commit(async () => {
       await cloud.updateDoctorContractInSupabase(id, changes);
       set(state => ({ doctors: state.doctors.map(doctor => doctor.id === id ? { ...doctor, ...changes } : doctor) }));
@@ -291,15 +296,20 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
       const byId = new Map(saved.map(shift => [shift.id, shift]));
       set({ shifts: [...get().shifts.filter(shift => !byId.has(shift.id)), ...saved] });
     }, { success: 'Plantões liberados.', inlineError: true }),
-    uploadDocument: (doctorId, type, file) => commit(async () => {
+    uploadDocument: (doctorId, type, file, options) => commit(async () => {
       const doctor = get().doctors.find(d => d.id === doctorId && d.organizationId === orgId());
       if (!doctor) throw new Error('Médico não encontrado nesta empresa.');
       const previous = get().documents.find(d => d.doctorId === doctorId && d.type === type);
       if (!previous) throw new Error('Atualize a pasta para localizar o documento antes de enviá-lo.');
-      const saved = await cloud.uploadDocumentFileToSupabase(file, previous.id);
+      await sendMedicalDocument(previous.id, file, options);
+      const saved = await cloud.loadUploadedDocumentFromSupabase(previous.id).catch(() => null);
+      if (!saved) {
+        notify.warning('Atualize a pasta para ver a nova versão.');
+        return;
+      }
       set({ documents: [...get().documents.filter(d => d.id !== saved.id), saved] });
       await refreshDocumentAudits();
-    }, { success: 'Documento enviado.' }),
+    }, { success: false, progress: false }),
     updateDocumentStatus: (id, status) => commit(async () => { const previous = get().documents.find(d => d.id === id); if (!previous) throw new Error('Documento não encontrado.'); const saved = await cloud.saveDocumentToSupabase({ ...previous, status }); set({ documents: get().documents.map(d => d.id === id ? saved : d) }); await refreshDocumentAudits(); }, { success: 'Status do documento atualizado.' }),
     updateDocument: document => commit(async () => { const saved = await cloud.saveDocumentToSupabase(document); set({ documents: get().documents.map(item => item.id === document.id ? saved : item) }); await refreshDocumentAudits(); }, { success: 'Documento atualizado.' }),
     bulkUpdateDocuments: (documentIds, status, reviewNote) => commit(async () => {

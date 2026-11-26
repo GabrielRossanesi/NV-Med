@@ -2,7 +2,7 @@
 
 import { useId, useState, Suspense } from 'react';
 import { useStore } from '@/store/useStore';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DoctorStatus } from '@/types';
 import {
   Search,
@@ -19,7 +19,7 @@ import {
 import AccessGuard from '@/components/AccessGuard';
 import { useConfirmation } from '@/components/ConfirmationProvider';
 import Dialog from '@/components/Dialog';
-import { canPerformAction } from '@/lib/permissions';
+import { canEditPermission, canPerformAction } from '@/lib/permissions';
 import Link from 'next/link';
 import { getDoctorCompliance } from '@/lib/documentCompliance';
 import { getDocumentGovernance } from '@/lib/documentGovernance';
@@ -46,6 +46,7 @@ function DoctorsPageContent() {
   } = useStore();
 
   const canCreate = canPerformAction(currentUser, 'medicos', 'create');
+  const canUploadDocuments = canEditPermission(currentUser, 'documentos');
   const canCreateBanking = canPerformAction(currentUser, 'dados_bancarios', 'edit');
   const canDelete = canPerformAction(currentUser, 'medicos', 'delete');
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) || organizations[0];
@@ -57,6 +58,7 @@ function DoctorsPageContent() {
   const orgDoctors = doctors.filter((d) => d.organizationId === activeOrganizationId);
 
   const searchParams = useSearchParams();
+  const router = useRouter();
   const urlSpecialty = searchParams?.get('especialidade') || searchParams?.get('specialty') || 'all';
   const urlStatus = searchParams?.get('status') || 'all';
   const urlUnit = searchParams?.get('unitId') || 'all';
@@ -116,6 +118,7 @@ function DoctorsPageContent() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!canCreate || creating) return;
+    const openDocuments = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'documents';
     setCreateError('');
     const fields = new FormData(e.currentTarget);
     let banking, profile;
@@ -134,6 +137,7 @@ function DoctorsPageContent() {
     }
 
     setIsModalOpen(false);
+    if (openDocuments && canUploadDocuments) router.push(`/documentos/${saved}`);
   };
 
   function closeCreateForm() {
@@ -422,6 +426,7 @@ function DoctorsPageContent() {
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className="nv-button-secondary" onClick={closeCreateForm} disabled={creating}>Cancelar</button>
             <button type="submit" form={createFormId} className="nv-button" disabled={creating || !canCreate}>{creating ? 'Salvando…' : 'Salvar cadastro'}</button>
+            {canUploadDocuments && <button type="submit" form={createFormId} value="documents" className="nv-button-secondary" disabled={creating || !canCreate}>Salvar e enviar documentos</button>}
           </div>
         </div>}>
         <form id={createFormId} onSubmit={handleSubmit} aria-busy={creating}>

@@ -11,6 +11,8 @@ import { documentStatusClasses, documentStatusLabels } from '@/lib/documentCompl
 import type { DocumentStatus } from '@/types';
 import PortalSchedule from './PortalSchedule';
 import PortalAbsences from './PortalAbsences';
+import MedicalDocumentUpload from '@/components/MedicalDocumentUpload';
+import { sendMedicalDocument, type DocumentUploadOptions } from '@/lib/medicalUpload';
 import NotificationInbox from '@/components/NotificationInbox';
 import { crmStates } from '@/lib/documentRequirements';
 import { authFlowUrl } from '@/lib/appOrigin';
@@ -20,7 +22,6 @@ import { bankingFromForm } from '@/lib/doctorBanking';
 import DoctorProfileEditor from '@/components/DoctorProfileEditor';
 import DoctorNameField from '@/components/DoctorNameField';
 import { doctorNameFromForm } from '@/lib/doctorName';
-import { notify } from '@/lib/notifications';
 import { openDocument } from '@/services/supabaseService';
 
 type Enrollment = {
@@ -153,22 +154,16 @@ function Documents({ doctor }: { doctor: string }) {
     }
     setDocuments(result.data);
   }
-  async function upload(event: React.FormEvent<HTMLFormElement>, document: PortalDocument) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const body = new FormData(form);
-    setBusy(document.id);
+  async function upload(documentId: string, file: File, options: DocumentUploadOptions) {
+    setBusy(documentId);
     setError('');
     try {
-      const response = await fetch('/api/portal/documents/' + encodeURIComponent(document.id), { method: 'POST', body });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
-      form.reset();
+      await sendMedicalDocument(documentId, file, options);
       await load();
-      if (result.scanning) notify.info('Documento enviado para verificação de segurança.');
-      else notify.success('Documento enviado.');
+      return true;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível enviar o documento.');
+      return false;
     } finally {
       setBusy('');
     }
@@ -187,10 +182,8 @@ function Documents({ doctor }: { doctor: string }) {
         </div>
         {item.review_note && <p className="text-sm">{item.review_note}</p>}
         {item.has_file && <button type="button" className="text-sm font-semibold text-primary underline" disabled={Boolean(downloading)} onClick={() => void download(item.id)}>{downloading === item.id ? 'Verificando arquivo…' : 'Baixar arquivo enviado'}</button>}
-        <form onSubmit={event => upload(event, item)} className="flex flex-wrap items-end gap-2">
-          <label className="nv-label min-w-0 max-w-full grow">PDF, JPEG ou PNG<input type="file" className="nv-input" name="file" accept=".pdf,.jpg,.jpeg,.png" required/></label>
-          <button className="nv-button-secondary" disabled={Boolean(busy)}>{busy === item.id ? 'Enviando…' : item.has_file ? 'Enviar nova versão' : 'Enviar arquivo'}</button>
-        </form>
+        <MedicalDocumentUpload name={item.name} replace={item.has_file} disabled={Boolean(busy)}
+          onUpload={(file, options) => upload(item.id, file, options)}/>
       </article>)}
     </div>
   </details>;
