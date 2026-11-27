@@ -29,7 +29,7 @@ const medicalDocuments=Array.from({length:1354},(_,index)=>({id:`document-${Stri
 const profileShifts=[{id:'profile-shift',organization_id:org.id,doctor_id:doctors[0].id,unit_id:'unit-1',date:'2026-11-01',start_time:'07:00',end_time:'19:00',type:'onsite',status:'confirmed'}];
 let preferences=null,bulkFailure=false,slowQuery='',rqeRevision='rqes-initial',listingFailure=false,emptyDirectory=false,rejectUnscopedDocuments=false,profileDocumentFailure=false;
 const calls=[],reads=[],readRequests=[],mutations=[];
-const workspace={enabled:false,slowCompany:'',slowDate:'',failCompany:'',sessionReady:true,denyOrg:''};
+const workspace={enabled:false,slowCompany:'',slowDate:'',failCompany:'',sessionReady:true,denyOrg:'',documentsSummaryFailure:false};
 const workspaceToday=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const workspaceUnits=doctors[0].units.map(unit=>({...unit,organization_id:org.id,city:'Cidade fictícia',state:'SP',type:'hospital',status:'active'}));
 const workspaceOtherDoctor={...doctors[0],id:'doctor-company-b',organization_id:otherOrg.id,name:'Médica Fictícia Empresa B',linked_units:['unit-b']};
@@ -54,11 +54,12 @@ const mock=http.createServer(async(request,response)=>{
    return send(directoryFixture(emptyDirectory?[]:doctors,args,{permissions}));
   }
   if(name==='nv_account_preferences')return send(preferences);
+  if(name==='nv_operational_counts')return send({today:workspaceToday,enrollments:0,exchanges:0,applications:0,checkins_pending:0});
   if(name==='nv_save_account_preferences'){preferences={theme:'light',sidebarCollapsed:true,density:'comfortable',scheduleView:'calendar',homePage:'',documentAlerts:true,applicationAlerts:true,doctorListing:{pageSize:25,sort:'name',descending:false,columns:['crm','specialty','contract','units','status','documents']},...preferences,...args.changes};return send(preferences);}
   if(name==='nv_session_ready')return send(workspace.sessionReady);
   if(name==='nv_can_action')return send(args.org!==workspace.denyOrg);
   if(name==='nv_workspace_documents'){
-   if(profileDocumentFailure&&args.target)return send({code:'XX000',message:'private internal database error'},500);
+   if(profileDocumentFailure&&args.target||workspace.documentsSummaryFailure&&!args.target)return send({code:'XX000',message:'private internal database error'},500);
    return send(medicalDocuments.filter(d=>d.organization_id===args.org&&(!args.target||d.doctor_id===args.target)&&(!args.after_id||d.id>args.after_id)).slice(0,args.page_limit||500));
   }
   if(name==='nv_workspace_document_audit')return send([]);

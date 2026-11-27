@@ -12,10 +12,11 @@ import { coverageSaveMessage } from '@/lib/fractionalCoverage';
 import { doctorStatusActions } from '@/lib/doctorStatus';
 import { sendMedicalDocument, type DocumentUploadOptions } from '@/lib/medicalUpload';
 import type { OrganizationCounts } from '@/lib/workspaceScope';
+import type { StaffBootstrapData } from '@/lib/staffBootstrap';
 
 const anonymous: UserAccount = { id: '', name: '', email: '', type: 'tenant_user', organizationId: null, role: '', status: 'inactive', createdAt: '' };
 const emptyData = { organizations: [] as Organization[], doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[], documents: [] as MedicalDocument[], documentAudits: [] as DocumentAuditEntry[], shifts: [] as Shift[], users: [] as UserAccount[] };
-type CloudData = Awaited<ReturnType<typeof cloud.fetchInitialDataFromSupabase>>;
+type CloudData = StaffBootstrapData;
 type SaveFeedback = { success?: string | false | (() => string); description?: string; inlineError?: boolean; withinDialog?: boolean; progress?: boolean };
 
 interface NVMedState {
@@ -70,6 +71,7 @@ interface NVMedState {
   accountPreferencesStatus: 'loading' | 'ready' | 'error';
   hasSavedAccountPreferences: boolean;
   loadAccountPreferences: () => Promise<void>;
+  syncAccountPreferences: (preferences: AccountPreferences | null, error?: boolean) => void;
   saveAccountPreferences: (changes: Partial<AccountPreferences>, quiet?: boolean) => Promise<boolean>;
   updateProfile: (form: FormData) => Promise<boolean>;
 }
@@ -112,6 +114,13 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     activeOrganizationId: '', currentUser: anonymous, isSimulating: false, simulatedOrganizationId: null,
     saving: false, error: null, theme: 'light', sidebarCollapsed: true, doctorDirectorySummary: null,
     accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false,
+    syncAccountPreferences(preferences, error = false) {
+      const accountPreferences: AccountPreferences = preferences
+        ? { ...defaultAccountPreferences, ...preferences }
+        : { ...defaultAccountPreferences, theme: get().theme, sidebarCollapsed: get().sidebarCollapsed };
+      set({ accountPreferences, theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed,
+        accountPreferencesStatus: error ? 'error' : 'ready', hasSavedAccountPreferences: Boolean(preferences) });
+    },
     async loadAccountPreferences() {
       const owner = get().currentUser.id;
       if (!owner) return;
@@ -120,11 +129,7 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
         const result = await createClient()?.rpc('nv_account_preferences');
         if (!result || result.error) throw new Error();
         if (get().currentUser.id !== owner) return;
-        const accountPreferences: AccountPreferences = result.data
-          ? { ...defaultAccountPreferences, ...result.data }
-          : { ...defaultAccountPreferences, theme: get().theme, sidebarCollapsed: get().sidebarCollapsed };
-        set({ accountPreferences, theme: accountPreferences.theme, sidebarCollapsed: accountPreferences.sidebarCollapsed,
-          accountPreferencesStatus: 'ready', hasSavedAccountPreferences: Boolean(result.data) });
+        get().syncAccountPreferences(result.data);
       } catch {
         if (get().currentUser.id === owner) set({ accountPreferencesStatus: 'error' });
       }
@@ -166,7 +171,8 @@ export const useStore = create<NVMedState>()(persist((set, get) => {
     clearSession: () => set({ ...emptyData, dataScope: 'directory', organizationCounts: {}, workspaceRevision: 0, doctorDirectorySummary: null, currentUser: anonymous, activeOrganizationId: '', isSimulating: false, simulatedOrganizationId: null, error: null,
       theme: defaultAccountPreferences.theme, sidebarCollapsed: defaultAccountPreferences.sidebarCollapsed,
       accountPreferences: defaultAccountPreferences, accountPreferencesStatus: 'loading', hasSavedAccountPreferences: false }),
-    syncWithCloud: data => set(state => ({ ...data, activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
+    syncWithCloud: data => set(state => ({ ...emptyData, ...data, dataScope: 'directory', organizationCounts: {}, workspaceRevision: 0,
+      activeOrganizationId: data.currentUser.type === 'tenant_user' ? data.currentUser.organizationId || '' : (data.organizations.some(o => o.id === state.activeOrganizationId) ? state.activeOrganizationId : data.organizations[0]?.id || '') })),
     setActiveOrganizationId: id => { if (get().currentUser.type === 'saas_admin' && get().organizations.some(o => o.id === id)) set({ activeOrganizationId: id }); },
     async addDoctor(input, banking) {
       const id = crypto.randomUUID();

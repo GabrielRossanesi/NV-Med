@@ -1,14 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { fetchInitialDataFromSupabase } from '@/services/supabaseService';
+import type { StaffBootstrap } from '@/lib/staffBootstrap';
 import { createClient } from '@/lib/supabase/client';
 import { useResolvedTheme } from '@/components/account/useResolvedTheme';
 
-export default function StoreHydrator({ children }: { children: React.ReactNode }) {
+export default function StoreHydrator({ children, initial }: { children: React.ReactNode; initial: StaffBootstrap }) {
+  const bootstrap = useRef(initial);
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initial.error || '');
   const theme = useResolvedTheme();
   useEffect(() => {
     let active = true;
@@ -18,10 +19,11 @@ export default function StoreHydrator({ children }: { children: React.ReactNode 
         await useStore.persist.rehydrate();
         localStorage.removeItem('nv-med-storage');
         if (!active) return;
-        const data = await fetchInitialDataFromSupabase();
+        const { data, error, preferences, preferencesError } = bootstrap.current;
+        if (!data || error) throw new Error(error || 'Não foi possível carregar sua sessão. Tente novamente.');
         if (active) {
           useStore.getState().syncWithCloud(data);
-          await useStore.getState().loadAccountPreferences();
+          useStore.getState().syncAccountPreferences(preferences, preferencesError);
           if (active) setLoaded(true);
         }
       } catch (e) { if (active) { useStore.getState().clearSession(); setError(e instanceof Error ? e.message : 'Falha ao carregar dados.'); } }

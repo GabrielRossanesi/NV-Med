@@ -7,6 +7,7 @@ import DashboardChrome from '@/components/DashboardChrome';
 import WorkspaceDataBoundary from '@/components/WorkspaceDataBoundary';
 import WorkspaceOverviewProvider from '@/components/WorkspaceOverviewProvider';
 import type { Viewport } from 'next';
+import { loadStaffBootstrap } from '@/lib/supabase/staffBootstrap';
 
 export const viewport: Viewport = { viewportFit: 'cover' };
 
@@ -16,14 +17,10 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const client = await createClient();
-  if (!client) redirect('/login');
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) redirect('/login');
-  if (user.app_metadata?.must_change_password === true) redirect('/definir-senha?required=1');
-  const { data: staff } = await client.from('user_accounts').select('id').eq('auth_user_id', user.id).maybeSingle();
-  if (!staff) redirect('/portal');
+  const initial = await loadStaffBootstrap(client);
+  if ('redirect' in initial) redirect(initial.redirect);
   return (
-    <StoreHydrator><WorkspaceOverviewProvider>
+    <StoreHydrator initial={initial}><WorkspaceOverviewProvider>
       <div className="nv-app-shell text-text-primary">
         <Sidebar />
 

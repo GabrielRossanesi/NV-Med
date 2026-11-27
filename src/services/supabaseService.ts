@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
 import { withAbortTimeout } from '@/lib/requestTimeout';
-import { isSupabaseConfigured } from '@/lib/supabase/isConfigured';
 import type { DoctorBanking } from '@/lib/doctorBanking';
 import { doctorNameInvalidError, doctorNameNumberError } from '@/lib/doctorName';
 import { doctorStatusError, logDoctorStatusError } from '@/lib/doctorStatus';
@@ -36,7 +35,7 @@ import {
 // MAPEAMENTO: DATABASE (snake_case) -> APP (camelCase)
 // ==============================================================================
 
-interface DbOrganization {
+export interface DbOrganization {
   id: string;
   name: string;
   razao_social?: string;
@@ -176,7 +175,7 @@ interface DbShift {
   created_at?: string;
 }
 
-interface DbUserAccount {
+export interface DbUserAccount {
   id: string;
   auth_user_id?: string;
   name: string;
@@ -195,7 +194,7 @@ interface DbUserAccount {
   updated_at?: string;
 }
 
-function mapOrgFromDb(row: DbOrganization): Organization {
+export function mapOrgFromDb(row: DbOrganization): Organization {
   return {
     id: row.id,
     name: row.name,
@@ -372,43 +371,11 @@ export function mapUserFromDb(row: DbUserAccount): UserAccount {
 // OPERAÇÕES DE LEITURA (BOOTSTRAP & REFRESH)
 // ==============================================================================
 
-export async function fetchInitialDataFromSupabase() {
-  const supabase = createClient();
-  if (!supabase || !isSupabaseConfigured()) throw new Error('Conexão não configurada. Contate o administrador.');
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth.user) throw new Error('Sua sessão expirou. Entre novamente.');
-  const { data: profile, error: profileError } = await supabase.from('user_accounts').select('*').eq('auth_user_id', auth.user.id).eq('status', 'active').single();
-  if (profileError || !profile) throw new Error('Seu acesso ainda não foi liberado. Contate o administrador.');
-  const currentUser = mapUserFromDb(profile);
-  currentUser.email = auth.user.email || currentUser.email;
-  if (currentUser.avatar) {
-    const { data: avatar } = await supabase.storage.from('profile-avatars').createSignedUrl(currentUser.avatar, 3600);
-    if (avatar?.signedUrl) currentUser.avatar = avatar.signedUrl;
-  }
-  async function rows<Row>(table: string, columns = '*') {
-    const result: Row[] = [];
-    for (let offset = 0; ; offset += 500) {
-      let query = supabase!.from(table).select(columns).order('id').range(offset, offset + 499);
-      if (currentUser.type !== 'saas_admin') {
-        if (!currentUser.organizationId) throw new Error('Usuário sem empresa vinculada.');
-        query = query.eq(table === 'organizations' ? 'id' : 'organization_id', currentUser.organizationId);
-      }
-      const { data, error } = await query.overrideTypes<Row[], { merge: false }>();
-      if (error) throw new Error('Não foi possível carregar ' + table + '. Tente novamente.');
-      result.push(...data);
-      if (data.length < 500) return result;
-    }
-  }
-  const orgs = await rows<DbOrganization>('organizations');
-  return { currentUser, organizations: orgs.map(mapOrgFromDb), doctors: [] as Doctor[], units: [] as Unit[], sectors: [] as Sector[],
-    documents: [] as MedicalDocument[], shifts: [] as Shift[], users: [] as UserAccount[], documentAudits: [] as DocumentAuditEntry[], dataScope: 'directory' as const };
-}
-
 export async function fetchWorkspaceData(plan: WorkspacePlan, user: UserAccount, signal?: AbortSignal) {
   const client = createClient();
   if (!client) throw new Error('Conexão indisponível.');
   if(!plan.organizationId&&!plan.adminSummary&&plan.users!=='global')return {doctors:[] as Doctor[],units:[] as Unit[],sectors:[] as Sector[],documents:[] as MedicalDocument[],shifts:[] as Shift[],users:[] as UserAccount[],documentAudits:[] as DocumentAuditEntry[],organizationCounts:{} as Record<string,OrganizationCounts>};
-  async function read<Row>(table: string, columns = '*', options: { global?: boolean; id?: string; dates?: WorkspacePlan['shifts']; links?: boolean } = {}) {
+  async function read<Row>(table: string, columns = '*', options: { global?: boolean; id?: string; dates?: WorkspacePlan['shifts'] } = {}) {
     const result: Row[] = [];
     for (let offset=0;;offset+=500) {
       let query=client!.from(table).select(columns).order('id').range(offset,offset+499);
@@ -428,8 +395,10 @@ export async function fetchWorkspaceData(plan: WorkspacePlan, user: UserAccount,
       result.push(...data); if(data.length<500)return result;
     }
   }
-  const doctors=plan.doctors ? await read<DbDoctor>('doctors','id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units') : [];
-  const hasDoctor=!plan.doctorId||doctors.some(doctor=>doctor.id===plan.doctorId);
+  const doctorsRequest=plan.doctors ? read<DbDoctor>('doctors','id,organization_id,name,crm,crm_uf,rqe,specialty,status,contract_model,contract_signed,linked_units') : Promise.resolve([] as DbDoctor[]);
+  // Only an individual folder needs to verify the doctor before dependent reads.
+  const folderDoctors=plan.doctorId ? await doctorsRequest : null;
+  const hasDoctor=!plan.doctorId||folderDoctors!.some(doctor=>doctor.id===plan.doctorId);
   const documents=async()=>{
     if(!plan.documents||!hasDoctor||!canViewPermission(user,'documentos'))return [] as DbMedicalDocument[];
     return workspaceDocuments<DbMedicalDocument>(client,plan.organizationId,plan.doctorId||null,signal);
@@ -444,7 +413,8 @@ export async function fetchWorkspaceData(plan: WorkspacePlan, user: UserAccount,
     let request=client.rpc('nv_workspace_organization_counts');if(signal)request=request.abortSignal(signal);
     const result=await request;if(result.error)throw new Error('Não foi possível carregar os indicadores das empresas.');return result.data as Record<string,OrganizationCounts>;
   };
-  const [units,sectors,docs,shifts,users,documentAudits,organizationCounts]=await Promise.all([
+  const [doctors,units,sectors,docs,shifts,users,documentAudits,organizationCounts]=await Promise.all([
+    doctorsRequest,
     plan.units&&hasDoctor?read<DbUnit>('units'):[],plan.sectors?read<DbSector>('sectors'):[],documents(),
     plan.shifts&&hasDoctor?read<DbShift>('nv_staff_shifts','*',{dates:plan.shifts}):[],
     plan.users?read<DbUserAccount>('user_accounts','*',{global:plan.users==='global'}):[],audit(),counts(),

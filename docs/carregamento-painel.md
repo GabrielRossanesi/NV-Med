@@ -6,7 +6,7 @@ O bootstrap administrativo consultava médicos, documentos, plantões e usuário
 
 No diagnóstico de produção anterior à correção, três consultas a `medical_documents` acumularam cerca de 18,2 segundos no PostgreSQL. Esse valor é tempo acumulado das consultas observadas, não uma medição de ponta a ponta. A resposta HTML pública não apresentou a mesma demora.
 
-`StoreHydrator` agora carrega sessão, empresas autorizadas e preferências. A navegação fica disponível enquanto `WorkspaceDataBoundary` consulta as coleções da tela. Erros têm recuperação explícita; dados incompletos não são apresentados como totais zerados.
+O layout prepara a sessão, as empresas autorizadas e as preferências no servidor. `StoreHydrator` aplica esse resultado no navegador, sem repetir essas consultas. A navegação fica disponível enquanto `WorkspaceDataBoundary` consulta as coleções da tela. Erros têm recuperação explícita; dados incompletos não são apresentados como totais zerados.
 
 | Tela | Recorte operacional |
 | --- | --- |
@@ -28,6 +28,24 @@ Controles de período registram seus recortes com `useWorkspacePeriod`. Durante 
 `WorkspaceOverviewProvider` compartilha os resumos entre cabeçalho, painel e escala, em memória, por usuário/empresa/revisão. Não há persistência de dados clínicos em armazenamento local nem polling.
 
 `GET /api/workspace/overview` usa a sessão autenticada, verificação de sessão ativa e permissões efetivas. As respostas são `private, no-store`. Não utiliza service role.
+
+### Segunda otimização — 27/11/2026
+
+- `loadStaffBootstrap` reaproveita as verificações do servidor, confirma a sessão viva e o perfil ativo, mantém os redirecionamentos de login/portal/troca obrigatória de senha e prepara os dados da própria conta. Empresas, preferências e assinatura do avatar são consultadas em paralelo. Credenciais e tokens não integram o DTO passado ao navegador.
+- `StoreHydrator` hidrata uma única vez a partir desse resultado, preservando a empresa selecionada quando autorizada. O store continua persistindo somente o identificador da empresa, sem cadastros médicos ou resumos. A recuperação das preferências pela Minha conta continua disponível.
+- Catálogos e plantões de uma tela começam em paralelo. Pastas individuais continuam verificando primeiro a existência e o acesso ao médico antes de consultar seus recursos dependentes.
+- O painel usa `part=all` para obter documentação e financeiro em uma requisição autenticada. A verificação de Auth e as permissões são iniciadas em paralelo; nenhuma leitura operacional começa antes de ambas serem aprovadas. O leitor compartilha uma única paginação histórica dos plantões entre os dois resumos. Uma falha documental pode retornar um erro nessa seção e preservar o financeiro válido.
+- Documentos são indexados por médico antes da avaliação documental das escalas, preservando os mesmos helpers de negócio e a ordem dos registros.
+- As filas operacionais são antecipadas pelo provider compartilhado, sem esperar a montagem do corpo do painel. Atualizações continuam invalidando os resumos por revisão; empresa, usuário, permissões e data fazem parte do contexto. Requisições substituídas são canceladas, sem polling.
+- A implantação anterior usava `iad1` (EUA). `vercel.json` passa a escolher somente `gru1` (São Paulo), próximo ao Supabase existente. A seleção de uma única região está disponível no plano Hobby, sem novo serviço, VM ou worker. Referências: [configuração de regiões](https://vercel.com/docs/functions/configuring-functions/region), [regiões e limites de configuração](https://vercel.com/docs/project-configuration/vercel-json), [localização de gru1](https://vercel.com/docs/regions).
+
+Essa segunda otimização **não exige nova migration**. A migration 60 permanece como pré-requisito já instalado; não deve ser reaplicada em produção.
+
+Os testes adicionais executam os leitores reais com uma fronteira Supabase fictícia: conta sem sessão, sessão revogada, perfil inativo, troca obrigatória de senha, escopo por empresa, ausência de credenciais no DTO, concorrência das consultas, pastas inexistentes, saldos antigos, requisitos por unidade, minimização financeira por permissão e sucesso parcial. O navegador também verifica que o bootstrap não repete consultas no cliente, que as filas começam antes do fim da carga da tela e que a falha documental permite recuperar a seção sem perder o resumo financeiro.
+
+Resultado local desta etapa: 208 testes automatizados, 69 verificações de navegador (13 de carregamento, 26 de listagem/perfil, 21 de perfil/status e 9 de cobertura), lint, typecheck, build Webpack e laboratório SQL até a migration 60 aprovados. A regressão de perfil/status foi executada isoladamente após uma falha transitória de manifesto no Next de desenvolvimento. A revisão unslop-ui dos componentes de carregamento manteve o resultado 0 antes/0 depois, sem alterações decorativas.
+
+As medições anteriores estão em `Import/_initial-loading/medicao-producao-2026-11-27.*`; os testes e as novas evidências de publicação ficam em `Import/_loading-v2/`. Comparar com o mesmo viewport e método, distinguindo o tempo observado da automação de métricas internas do navegador. A primeira abertura autenticada usa o cache HTTP já existente; celular significa emulação de viewport na mesma máquina e conexão, sem representar um aparelho físico.
 
 - O financeiro mantém os saldos antigos em aberto. O servidor reaproveita `dashboardPayments` e entrega apenas totais; limitar os plantões visíveis ao mês não elimina dívidas anteriores do resumo.
 - A documentação mantém as unidades efetivamente atendidas no histórico e reaproveita `doctorsWithDocumentIssues` e `doctorScheduleCompliance`. As regras existentes de aviso/bloqueio continuam separadas.

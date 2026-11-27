@@ -1,36 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, CalendarX2, ClipboardCheck, Repeat2, UserRoundPlus, type LucideIcon } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-
-type Counts = {
-  today: string;
-  enrollments: number | null;
-  exchanges: number | null;
-  applications: number | null;
-  checkins_pending: number | null;
-};
+import { useWorkspaceOverview } from '@/components/WorkspaceOverviewProvider';
+import { useStore } from '@/store/useStore';
 
 export function useOperationalCounts(organization: string, enabled: boolean) {
-  const [result, setResult] = useState<{ counts: Counts | null; error: boolean } | null>(null);
-  useEffect(() => {
-    if (!organization || !enabled) return;
-    const client = createClient();
-    let active = true;
-    void (async () => {
-      try {
-        const response = await client?.rpc('nv_operational_counts', { org: organization });
-        if (!response || response.error || !response.data) throw new Error();
-        if (active) setResult({ counts: response.data, error: false });
-      } catch {
-        if (active) setResult({ counts: null, error: true });
-      }
-    })();
-    return () => { active = false; };
-  }, [organization, enabled]);
-  return enabled ? result : null;
+  const overview = useWorkspaceOverview();
+  const activeOrganization = useStore(state => state.activeOrganizationId);
+  if (!enabled || organization !== activeOrganization) return null;
+  if (overview.operational.error) return { counts: null, error: true };
+  return overview.operational.data ? { counts: overview.operational.data, error: false } : null;
 }
 
 type Metric = {
